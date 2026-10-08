@@ -588,9 +588,7 @@ export const paginate = async <
         where: [uniqueWhere],
       }) || {};
     if (uniqueWhere.field !== "_id" && !index) {
-      throw new Error(
-        `No index found for ${args.model}.${uniqueWhere.field}`
-      );
+      throw new Error(`No index found for ${args.model}.${uniqueWhere.field}`);
     }
     const doc =
       uniqueWhere.field === "_id"
@@ -633,11 +631,33 @@ export const paginate = async <
     if (!Array.isArray(inWhere.value)) {
       throw new Error("in clause value must be an array");
     }
-    // For ids, just use asyncMap + .get()
-    if (inWhere.field === "_id") {
-      const docs = await asyncMap(inWhere.value as any[], async (value) =>
-        getDocById(ctx, args.model as T, value)
-      );
+    // Ids and unique fields match at most one document per value, so look
+    // each value up directly and apply the other clauses as static filters.
+    // Streaming per value would need an index covering every other clause
+    // (eg. multi-session's token "in" + expiresAt "gt"), or scan the table.
+    // Unique fields without an index, or with null values (which several
+    // documents can share), fall back to streaming below.
+    const { index: uniqueIndex } =
+      (inWhere.field !== "_id" &&
+        inWhere.value.every((value) => value !== null) &&
+        isUniqueField(betterAuthSchema, args.model, inWhere.field) &&
+        findIndex(schema, {
+          model: args.model,
+          where: [{ ...inWhere, operator: "eq" }],
+        })) ||
+      {};
+    if (inWhere.field === "_id" || uniqueIndex) {
+      const docs = await asyncMap(inWhere.value as any[], async (value) => {
+        if (uniqueIndex) {
+          return await ctx.db
+            .query(args.model as any)
+            .withIndex(uniqueIndex.indexDescriptor as any, (q) =>
+              q.eq(uniqueIndex.fields[0], value)
+            )
+            .unique();
+        }
+        return getDocById(ctx, args.model as T, value);
+      });
       const filteredDocs = docs
         .flatMap((doc) => (doc ? [doc] : []))
         .filter((doc) => filterByWhere(doc, args.where, (w) => w !== inWhere));
@@ -666,6 +686,7 @@ export const paginate = async <
             }
             return 0;
           })
+          .slice(0, args.limit)
           .map((doc) => selectFields(doc, args.select))
           .flatMap((doc) => (doc ? [doc] : [])) as Doc[],
         isDone: true,
