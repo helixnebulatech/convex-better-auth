@@ -784,6 +784,79 @@ export const convexCustomTestSuite = createTestSuite(
       ).rejects.toThrow(/mode: "insensitive"/);
     },
 
+    "should match unset optional fields against eq null and ne null":
+      async () => {
+        const now = Date.now();
+        // Convex omits optional fields that were never written. Every other
+        // adapter matches those against eq null (SQL IS NULL, Mongo
+        // { field: null }), and Better Auth's atomic fallbacks guard on it.
+        const unset = await adapter.create({
+          model: "account",
+          data: {
+            accountId: `null-eq-${now}-unset`,
+            providerId: "null-eq-provider",
+            userId: `null-eq-user-${now}`,
+            createdAt: now,
+            updatedAt: now,
+          },
+        });
+        const explicitNull = await adapter.create({
+          model: "account",
+          data: {
+            accountId: `null-eq-${now}-null`,
+            providerId: "null-eq-provider",
+            userId: `null-eq-user-${now}`,
+            accessTokenExpiresAt: null,
+            createdAt: now,
+            updatedAt: now,
+          },
+        });
+        const nonNull = await adapter.create({
+          model: "account",
+          data: {
+            accountId: `null-eq-${now}-non-null`,
+            providerId: "null-eq-provider",
+            userId: `null-eq-user-${now}`,
+            accessTokenExpiresAt: now + 1_000,
+            createdAt: now,
+            updatedAt: now,
+          },
+        });
+        const find = (id: string, operator: "eq" | "ne") =>
+          adapter.findOne({
+            model: "account",
+            where: [
+              { field: "id", value: id },
+              { field: "accessTokenExpiresAt", operator, value: null },
+            ],
+          });
+        expect(await find(unset.id, "eq")).toEqual(unset);
+        expect(await find(explicitNull.id, "eq")).toEqual(explicitNull);
+        expect(await find(nonNull.id, "eq")).toEqual(null);
+        expect(await find(unset.id, "ne")).toEqual(null);
+        expect(await find(explicitNull.id, "ne")).toEqual(null);
+        expect(await find(nonNull.id, "ne")).toEqual(nonNull);
+        // Static filter path (no unique or indexed clause)
+        const ids = async (operator: "eq" | "ne") =>
+          (
+            await adapter.findMany<{ id: string }>({
+              model: "account",
+              where: [
+                {
+                  field: "providerId",
+                  operator: "starts_with",
+                  value: "null-eq-provider",
+                },
+                { field: "accessTokenExpiresAt", operator, value: null },
+              ],
+            })
+          )
+            .map((a) => a.id)
+            .sort();
+        expect(await ids("eq")).toEqual([unset.id, explicitNull.id].sort());
+        expect(await ids("ne")).toEqual([nonNull.id]);
+      },
+
     "should not match an id from a different model": async () => {
       const user = await adapter.create({
         model: "user",
