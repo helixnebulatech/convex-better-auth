@@ -64,6 +64,15 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Attach SLSA provenance to GitHub Releases
+        if:
+          inputs.snapshot != true && steps.changesets.outputs.published ==
+          'true'
+        run: node .github/scripts/upload-provenance.mjs
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PUBLISHED_PACKAGES: ${{ steps.changesets.outputs.published-packages }}
+
       # Snapshot release path
       - name: Version Packages (snapshot)
         if: inputs.snapshot == true
