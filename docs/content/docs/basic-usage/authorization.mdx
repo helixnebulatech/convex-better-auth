@@ -75,7 +75,8 @@ export const getCurrentUser = query({
 
 // You can also just get the authenticated user id as you
 // normally would from ctx.auth.getUserIdentity. Note that
-// this does not validate the session.
+// this does not validate the session: the identity stays
+// valid after sign-out or a ban until the JWT expires.
 export const getForCurrentUser = query({
   args: {},
   handler: async (ctx) => {
