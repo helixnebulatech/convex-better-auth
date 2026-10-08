@@ -333,8 +333,8 @@ export const convexAdapter = <
           ...data
         }): Promise<any[]> => {
           // The component paginates by cursor only, so fetch offset + limit
-          // rows and drop the first offset here. Deep offsets read every
-          // skipped row.
+          // rows (the component limits some lookups itself) and drop the first
+          // offset here. Deep offsets read every skipped row.
           const limit =
             data.limit !== undefined ? data.limit + offset : undefined;
 
@@ -348,6 +348,7 @@ export const convexAdapter = <
                 async ({ paginationOpts }) => {
                   return await ctx.runQuery(api.adapter.findMany, {
                     ...queryData,
+                    limit,
                     model: data.model as TableNames,
                     where: parseWhere(where),
                     paginationOpts,
@@ -371,6 +372,7 @@ export const convexAdapter = <
             async ({ paginationOpts }) => {
               return await ctx.runQuery(api.adapter.findMany, {
                 ...data,
+                limit,
                 model: data.model as TableNames,
                 where: parseWhere(data.where),
                 paginationOpts,

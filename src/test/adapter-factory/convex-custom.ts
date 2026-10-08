@@ -1013,6 +1013,25 @@ export const convexCustomTestSuite = createTestSuite(
           offset: 1,
         }),
       ).toEqual([users[2], users[1]]);
+      // "in" on ids and unique fields is looked up per value and limited in
+      // the component, which must see offset + limit rows
+      for (const field of ["id", "email"] as const) {
+        expect(
+          await adapter.findMany({
+            model: "user",
+            where: [
+              {
+                field,
+                operator: "in",
+                value: users.map((user: any) => user[field]),
+              },
+            ],
+            sortBy: { field: "email", direction: "asc" },
+            limit: 2,
+            offset: 2,
+          }),
+        ).toEqual([users[2], users[3]]);
+      }
     },
 
     "should not match an id from a different model": async () => {
