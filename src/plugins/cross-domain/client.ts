@@ -70,6 +70,37 @@ export function getCookie(cookie: string) {
     .join("; ");
 }
 
+const generateVerifier = () => {
+  const bytes = new Uint8Array(32);
+  crypto.getRandomValues(bytes);
+  return Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join(
+    ""
+  );
+};
+
+// Better Auth sets the OAuth state cookie on the sign-in response, which this
+// client can't receive. Start the redirect with a form POST through the auth
+// server instead, which sets it in the browser, so the flow is tied to this
+// browser as in Better Auth.
+const startOAuthRedirect = (
+  startUrl: string,
+  fields: Record<string, string>
+) => {
+  const form = document.createElement("form");
+  form.method = "POST";
+  form.action = startUrl;
+  form.style.display = "none";
+  for (const [name, value] of Object.entries(fields)) {
+    const input = document.createElement("input");
+    input.type = "hidden";
+    input.name = name;
+    input.value = value;
+    form.appendChild(input);
+  }
+  document.body.appendChild(form);
+  form.submit();
+};
+
 export const crossDomainClient = (
   opts: {
     storage?: {
@@ -83,6 +114,7 @@ export const crossDomainClient = (
   let store: ClientStore | null = null;
   const cookieName = `${opts?.storagePrefix || "better-auth"}_cookie`;
   const localCacheName = `${opts?.storagePrefix || "better-auth"}_session_data`;
+  const oauthVerifierName = `${opts?.storagePrefix || "better-auth"}_oauth_verifier`;
   const storage =
     opts?.storage || (typeof window !== "undefined" ? localStorage : undefined);
 
@@ -158,6 +190,54 @@ export const crossDomainClient = (
         id: "cross-domain",
         name: "Cross Domain",
         hooks: {
+          async onResponse(context) {
+            const path = new URL(context.request.url.toString()).pathname;
+            if (
+              !storage ||
+              typeof document === "undefined" ||
+              !context.response.ok ||
+              !(
+                path.endsWith("/sign-in/social") ||
+                path.endsWith("/link-social")
+              )
+            ) {
+              return;
+            }
+            const data = await context.response
+              .clone()
+              .json()
+              .catch(() => null);
+            if (!data?.url || !data.redirect) {
+              return;
+            }
+            let state: string | null = null;
+            try {
+              state = new URL(data.url).searchParams.get("state");
+            } catch {
+              // noop
+            }
+            if (!state) {
+              return;
+            }
+            const verifier = generateVerifier();
+            await storage.setItem(oauthVerifierName, verifier);
+            startOAuthRedirect(
+              context.request.url
+                .toString()
+                .replace(
+                  /\/(sign-in\/social|link-social)(\?.*)?$/,
+                  "/cross-domain/oauth/start"
+                ),
+              { state, verifier }
+            );
+            // The form POST navigates away, don't let Better Auth's redirect
+            // plugin navigate to the provider directly.
+            return new Response(JSON.stringify({ ...data, redirect: false }), {
+              status: context.response.status,
+              statusText: context.response.statusText,
+              headers: context.response.headers,
+            });
+          },
           async onSuccess(context) {
             if (!storage) {
               return;
@@ -247,6 +327,19 @@ export const crossDomainClient = (
             ...options.headers,
             "Better-Auth-Cookie": cookie,
           };
+          // Prove an OAuth one-time token is redeemed by the browser that
+          // started the flow
+          if (url.includes("/cross-domain/one-time-token/verify")) {
+            const verifier = await storage.getItem(oauthVerifierName);
+            if (verifier) {
+              const body =
+                typeof options.body === "string"
+                  ? JSON.parse(options.body)
+                  : (options.body ?? {});
+              options.body = { ...body, verifier };
+              await storage.setItem(oauthVerifierName, "");
+            }
+          }
           if (url.includes("/sign-out")) {
             await storage.setItem(cookieName, "{}");
             store?.atoms.session?.set({
