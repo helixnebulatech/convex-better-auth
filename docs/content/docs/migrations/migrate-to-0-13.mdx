@@ -91,8 +91,8 @@ joins yet, so it continues to set this option to `false`.
 Be sure to review the
 [Better Auth 1.7 release post](https://better-auth.com/blog/1-7) for other
 breaking changes that can have an effect on your app. For example,
-`twoFactor.enable` now returns a `method` field. Check that `method` is
-`"totp"` before you read `totpURI` and `backupCodes`.
+`twoFactor.enable` now returns a `method` field. Check that `method` is `"totp"`
+before you read `totpURI` and `backupCodes`.
 
   </div>
 
@@ -119,3 +119,23 @@ npx auth generate
   </div>
 
 </div>
+
+## Upgrading to 0.13.2
+
+0.13.2 adds indexes to the component schema. Apps using the default install get
+them on their next deploy. Apps using [Local Install](/local-install) need to
+regenerate their schema and deploy to get them:
+
+- `rateLimit.lastRequest`, used when Better Auth deletes expired rate limit
+  rows.
+- Indexes for the unique constraints Better Auth declares at the table level,
+  such as `deviceCode` and `userCode` for the device authorization plugin.
+
+```npm
+cd convex/betterAuth
+npx auth generate
+```
+
+Without the new indexes everything keeps working, but these queries scan the
+whole table, and unique checks without an index log a warning asking you to
+regenerate the schema.
