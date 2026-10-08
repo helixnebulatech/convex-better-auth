@@ -95,11 +95,21 @@ const SENSITIVE_HEADERS = new Set([
   "set-better-auth-cookie",
   "set-auth-token",
   "set-auth-jwt",
+  "x-api-key",
 ]);
+// Redirects carry one-time tokens, OAuth codes and state in the query string
+const redactLocation = (value: string) => {
+  const queryStart = value.indexOf("?");
+  return queryStart === -1 ? value : `${value.slice(0, queryStart)}?[redacted]`;
+};
 const redactHeaders = (headers: Headers) =>
   Array.from(headers.entries()).map(([name, value]) => [
     name,
-    SENSITIVE_HEADERS.has(name.toLowerCase()) ? "[redacted]" : value,
+    SENSITIVE_HEADERS.has(name.toLowerCase())
+      ? "[redacted]"
+      : name.toLowerCase() === "location"
+        ? redactLocation(value)
+        : value,
   ]);
 
 const restoreOriginalForwardedHeaders = (request: Request) => {

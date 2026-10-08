@@ -145,7 +145,9 @@ describe("createClient route registration", () => {
 
     const forwardedRequest = handler.mock.calls[0]?.[0];
     expect(forwardedRequest).toBeInstanceOf(Request);
-    expect(forwardedRequest.headers.get("x-forwarded-host")).toBe("app.example.com");
+    expect(forwardedRequest.headers.get("x-forwarded-host")).toBe(
+      "app.example.com"
+    );
     expect(forwardedRequest.headers.get("x-forwarded-proto")).toBe("https");
   });
 
@@ -193,6 +195,7 @@ describe("createClient verbose logging", () => {
     cookie: "better-auth.session_token=cookie-secret",
     authorization: "Bearer authorization-secret",
     "better-auth-cookie": "better-auth.session_token=cross-domain-secret",
+    "x-api-key": "api-key-secret",
   };
   const makeAuth = () => ({
     handler: async () => {
@@ -200,6 +203,7 @@ describe("createClient verbose logging", () => {
         "set-better-auth-cookie": "set-better-auth-cookie-secret",
         "set-auth-token": "set-auth-token-secret",
         "set-auth-jwt": "set-auth-jwt-secret",
+        location: "https://app.example.com/dashboard?ott=location-secret",
       });
       headers.append("set-cookie", "a=set-cookie-secret; Path=/");
       return new Response("ok", { headers });
@@ -241,6 +245,10 @@ describe("createClient verbose logging", () => {
         expect(logged).toContain("request headers");
         expect(logged).toContain("response headers");
         expect(logged).toContain("[redacted]");
+        // Redirect targets stay visible, without their query string
+        expect(logged).toContain(
+          "https://app.example.com/dashboard?[redacted]"
+        );
         for (const secret of [
           "cookie-secret",
           "authorization-secret",
@@ -248,6 +256,8 @@ describe("createClient verbose logging", () => {
           "set-cookie-secret",
           "set-better-auth-cookie-secret",
           "set-auth-token-secret",
+          "api-key-secret",
+          "location-secret",
           "set-auth-jwt-secret",
         ]) {
           expect(logged).not.toContain(secret);
