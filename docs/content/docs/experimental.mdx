@@ -94,11 +94,11 @@ once every 30 seconds; until then a fresh token is fetched instead.
 | `jwks`                       | -               | Static JWKS, the same value passed to the Convex plugin. Verifies without fetching the JWKS.    |
 | `issuer`                     | `convexSiteUrl` | Expected `iss`. Set this if `convexSiteUrl` differs from `CONVEX_SITE_URL` in your deployment.  |
 
-With JWT caching, `isAuthenticated()` returns `true` for a valid, unexpired JWT
-without checking the session. Like `ctx.auth.getUserIdentity()` in Convex, it
-can stay `true` after sign-out or session revocation until the JWT expires (15
-minutes by default). Use a session-checked query, such as
-`authComponent.getAuthUser`, where that matters.
+`isAuthenticated()` always checks the session with the server, like Better
+Auth's `getSession`, so it doesn't use the cached JWT. Calls to Convex do: like
+`ctx.auth.getUserIdentity()` in Convex, a cached JWT stays valid after sign-out
+or session revocation until it expires (15 minutes by default). Use a
+session-checked query, such as `authComponent.getAuthUser`, where that matters.
 
 ## Static JWKS
 

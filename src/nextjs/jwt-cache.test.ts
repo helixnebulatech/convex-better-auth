@@ -182,9 +182,19 @@ describe("convexBetterAuthNextJs isAuthenticated with jwtCache", () => {
     expect(await setup().isAuthenticated()).toBe(false);
   });
 
-  it("is true for a signed cookie JWT, without a token request", async () => {
+  it("checks the session on the server even with a valid cookie JWT, like getSession", async () => {
     withCookie(cookieJwt);
+    // The session was revoked: the token endpoint answers 401
+    expect(await setup().isAuthenticated()).toBe(false);
+    expect(tokenFetch).toHaveBeenCalledTimes(1);
+
+    tokenFetch.mockImplementation(
+      async () =>
+        new Response(JSON.stringify({ token: cookieJwt }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        })
+    );
     expect(await setup().isAuthenticated()).toBe(true);
-    expect(tokenFetch).not.toHaveBeenCalled();
   });
 });
