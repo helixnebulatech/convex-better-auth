@@ -80,6 +80,12 @@ should be updated to use `_id` instead.
     export const getUserById = query({
       args: { authId: v.string() },
       handler: async (ctx, args) => {
+        // Public queries can be called by anyone: only let signed in users
+        // read their own user document.
+        const authUser = await authComponent.safeGetAuthUser(ctx);
+        if (!authUser || authUser._id !== args.authId) {
+          return null;
+        }
         const user = await ctx.runQuery(components.betterAuth.adapter.findOne, {
           model: "user",
           where: [{ field: "id", value: args.authId }], // [!code --]
