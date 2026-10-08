@@ -783,5 +783,46 @@ export const convexCustomTestSuite = createTestSuite(
         }),
       ).rejects.toThrow(/mode: "insensitive"/);
     },
+
+    "should not match an id from a different model": async () => {
+      const user = await adapter.create({
+        model: "user",
+        data: {
+          name: "cross-model",
+          email: "cross@model.com",
+        },
+      });
+      // user.id is a valid id, but of the user table. A lookup scoped to
+      // another model must treat it as no match.
+      expect(
+        await adapter.findOne({
+          model: "session",
+          where: [{ field: "id", value: user.id }],
+        }),
+      ).toEqual(null);
+      expect(
+        await adapter.findMany({
+          model: "session",
+          where: [{ field: "id", operator: "in", value: [user.id] }],
+        }),
+      ).toEqual([]);
+      expect(
+        await adapter.update({
+          model: "session",
+          where: [{ field: "id", value: user.id }],
+          update: { token: "hijacked" },
+        }),
+      ).toEqual(null);
+      await adapter.delete({
+        model: "session",
+        where: [{ field: "id", value: user.id }],
+      });
+      expect(
+        await adapter.findOne({
+          model: "user",
+          where: [{ field: "id", value: user.id }],
+        }),
+      ).toEqual(user);
+    },
   }),
 );

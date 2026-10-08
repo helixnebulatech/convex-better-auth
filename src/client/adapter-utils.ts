@@ -1,6 +1,6 @@
 import { asyncMap } from "convex-helpers";
 import { v } from "convex/values";
-import type { GenericId, Infer } from "convex/values";
+import type { Infer } from "convex/values";
 import type {
   DocumentByName,
   GenericDataModel,
@@ -463,6 +463,20 @@ const generateQuery = (
   return filteredQuery;
 };
 
+// Resolve an _id where value within the requested model. normalizeId returns
+// null for ids of other tables and for strings that aren't Convex ids at all
+// (better-auth's adapter tests pass UUIDs), and both mean "no match". A bare
+// ctx.db.get(id) would return a document from whatever table the id is in.
+const getDocById = async <T extends TableNamesInDataModel<GenericDataModel>>(
+  ctx: GenericQueryCtx<GenericDataModel>,
+  model: T,
+  value: unknown
+) => {
+  const id =
+    typeof value === "string" ? ctx.db.normalizeId(model, value) : null;
+  return id ? await ctx.db.get(model, id) : null;
+};
+
 // This is the core function for reading from the database, it parses and
 // validates where conditions, selects indexes, and allows the caller to
 // optionally paginate as needed. Every response is a pagination result.
@@ -524,9 +538,7 @@ export const paginate = async <
     }
     const doc =
       uniqueWhere.field === "_id"
-        ? // Unfortunately this is one place where tests pass in UUIDs as values and convex-test doesn't support them
-          // eslint-disable-next-line @convex-dev/explicit-table-ids
-          await ctx.db.get(uniqueWhere.value as GenericId<T>)
+        ? await getDocById(ctx, args.model as T, uniqueWhere.value)
         : await ctx.db
             .query(args.model as any)
             .withIndex(index?.indexDescriptor as any, (q) =>
@@ -567,9 +579,9 @@ export const paginate = async <
     }
     // For ids, just use asyncMap + .get()
     if (inWhere.field === "_id") {
-      const docs = await asyncMap(inWhere.value as any[], async (value) => {
-        return ctx.db.get(args.model, value as GenericId<T>);
-      });
+      const docs = await asyncMap(inWhere.value as any[], async (value) =>
+        getDocById(ctx, args.model as T, value)
+      );
       const filteredDocs = docs
         .flatMap((doc) => (doc ? [doc] : []))
         .filter((doc) => filterByWhere(doc, args.where, (w) => w !== inWhere));
