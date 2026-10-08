@@ -88,9 +88,12 @@ type OptionalArgs<FuncRef extends FunctionReference<any, any>> =
 
 const getArgsAndOptions = <FuncRef extends FunctionReference<any, any>>(
   args: OptionalArgs<FuncRef>,
-  token?: string
-): ArgsAndOptions<FuncRef, { token?: string }> => {
-  return [args[0], { token }];
+  token: string | undefined,
+  url: string | undefined
+): ArgsAndOptions<FuncRef, { token?: string; url?: string }> => {
+  // Passing `url: undefined` makes convex/nextjs log a warning, so only set
+  // it when configured; otherwise it falls back to NEXT_PUBLIC_CONVEX_URL.
+  return [args[0], url ? { token, url } : { token }];
 };
 
 export const convexBetterAuthNextJs = (
@@ -146,7 +149,7 @@ export const convexBetterAuthNextJs = (
       ...args: OptionalArgs<Query>
     ): Promise<Preloaded<Query>> => {
       return callWithToken((token?: string) => {
-        const argsAndOptions = getArgsAndOptions(args, token);
+        const argsAndOptions = getArgsAndOptions(args, token, opts.convexUrl);
         return preloadQuery(query, ...argsAndOptions);
       });
     },
@@ -155,7 +158,7 @@ export const convexBetterAuthNextJs = (
       ...args: OptionalArgs<Query>
     ): Promise<FunctionReturnType<Query>> => {
       return callWithToken((token?: string) => {
-        const argsAndOptions = getArgsAndOptions(args, token);
+        const argsAndOptions = getArgsAndOptions(args, token, opts.convexUrl);
         return fetchQuery(query, ...argsAndOptions);
       });
     },
@@ -164,7 +167,7 @@ export const convexBetterAuthNextJs = (
       ...args: OptionalArgs<Mutation>
     ): Promise<FunctionReturnType<Mutation>> => {
       return callWithToken((token?: string) => {
-        const argsAndOptions = getArgsAndOptions(args, token);
+        const argsAndOptions = getArgsAndOptions(args, token, opts.convexUrl);
         return fetchMutation(mutation, ...argsAndOptions);
       });
     },
@@ -173,7 +176,7 @@ export const convexBetterAuthNextJs = (
       ...args: OptionalArgs<Action>
     ): Promise<FunctionReturnType<Action>> => {
       return callWithToken((token?: string) => {
-        const argsAndOptions = getArgsAndOptions(args, token);
+        const argsAndOptions = getArgsAndOptions(args, token, opts.convexUrl);
         return fetchAction(action, ...argsAndOptions);
       });
     },

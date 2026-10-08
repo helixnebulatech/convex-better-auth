@@ -1,6 +1,17 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { convexBetterAuthNextJs } from "./index.js";
 
+const convexNextJs = vi.hoisted(() => ({
+  fetchAction: vi.fn(async () => "action"),
+  fetchMutation: vi.fn(async () => "mutation"),
+  fetchQuery: vi.fn(async () => "query"),
+  preloadQuery: vi.fn(async () => "preloaded"),
+}));
+vi.mock("convex/nextjs", () => convexNextJs);
+vi.mock("next/headers.js", () => ({
+  headers: async () => new Headers({ cookie: "session=1" }),
+}));
+
 const SITE_URL = "https://test.convex.site";
 const CONVEX_URL = "https://test.convex.cloud";
 
@@ -151,5 +162,61 @@ describe("convexBetterAuthNextJs handler", () => {
     });
     await handler.POST(request);
     expect(initOf(fetchSpy).body).toBeUndefined();
+  });
+});
+
+describe("convexBetterAuthNextJs Convex helpers", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.clearAllMocks();
+    vi.unstubAllEnvs();
+  });
+
+  const mockTokenEndpoint = () =>
+    vi.spyOn(globalThis, "fetch").mockImplementation(
+      async () =>
+        new Response(JSON.stringify({ token: "jwt" }), {
+          headers: { "content-type": "application/json" },
+        })
+    );
+
+  // get-convex/better-auth#359: `convexUrl` was accepted but never passed on,
+  // so convex/nextjs fell back to NEXT_PUBLIC_CONVEX_URL.
+  it("passes convexUrl to the convex/nextjs helpers", async () => {
+    vi.stubEnv("NEXT_PUBLIC_CONVEX_URL", "https://other.convex.cloud");
+    mockTokenEndpoint();
+    const auth = convexBetterAuthNextJs({
+      convexUrl: CONVEX_URL,
+      convexSiteUrl: SITE_URL,
+    });
+    const fn = "users:get" as any;
+    const args = { id: "1" };
+
+    await auth.preloadAuthQuery(fn, args);
+    await auth.fetchAuthQuery(fn, args);
+    await auth.fetchAuthMutation(fn, args);
+    await auth.fetchAuthAction(fn, args);
+
+    const expected = [fn, args, { token: "jwt", url: CONVEX_URL }];
+    expect(convexNextJs.preloadQuery).toHaveBeenCalledWith(...expected);
+    expect(convexNextJs.fetchQuery).toHaveBeenCalledWith(...expected);
+    expect(convexNextJs.fetchMutation).toHaveBeenCalledWith(...expected);
+    expect(convexNextJs.fetchAction).toHaveBeenCalledWith(...expected);
+  });
+
+  it("omits url when convexUrl is not set so convex/nextjs uses its default", async () => {
+    mockTokenEndpoint();
+    const auth = convexBetterAuthNextJs({
+      convexUrl: undefined as unknown as string,
+      convexSiteUrl: SITE_URL,
+    });
+
+    await auth.fetchAuthQuery("users:get" as any, {});
+
+    const options = (
+      convexNextJs.fetchQuery.mock.calls[0] as unknown[] | undefined
+    )?.[2];
+    expect(options).toEqual({ token: "jwt" });
+    expect(options).not.toHaveProperty("url");
   });
 });
