@@ -23,6 +23,14 @@ const getJwksAlg = (authProvider: AuthProvider) => {
   return isCustomJwt ? authProvider.algorithm : "EdDSA";
 };
 
+// JWKS rows from the Convex adapter, and so from a static JWKS, hold dates as
+// epoch millis, Better Auth's jwt plugin expects Date objects
+const parseJwkDates = (key: Jwk): Jwk => ({
+  ...key,
+  createdAt: new Date(key.createdAt),
+  ...(key.expiresAt != null ? { expiresAt: new Date(key.expiresAt) } : {}),
+});
+
 const parseAuthConfig = (authConfig: AuthConfig, opts: { jwks?: string }) => {
   const providerConfigs = authConfig.providers.filter(
     (provider) => provider.applicationID === "convex"
@@ -181,7 +189,9 @@ export const convex = (opts: {
       },
     },
   } satisfies JwtOptions;
-  const jwks = opts.jwks ? JSON.parse(opts.jwks) : undefined;
+  const jwks: Jwk[] | undefined = opts.jwks
+    ? JSON.parse(opts.jwks).map(parseJwkDates)
+    : undefined;
   const jwt = jwtPlugin({
     ...jwtOptions,
     adapter: {
@@ -210,11 +220,7 @@ export const convex = (opts: {
             direction: "desc",
           },
         });
-        return keys.map((key) => ({
-          ...key,
-          createdAt: new Date(key.createdAt),
-          ...(key.expiresAt ? { expiresAt: new Date(key.expiresAt) } : {}),
-        }));
+        return keys.map(parseJwkDates);
       },
     },
   });
