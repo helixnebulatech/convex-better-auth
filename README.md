@@ -1,5 +1,11 @@
 # Convex + Better Auth
 
+> [!NOTE] This is the Helix Nebula fork of
+> [`get-convex/better-auth`](https://github.com/get-convex/better-auth),
+> published as `@helixnebulatech/convex-better-auth`. It tracks the latest
+> Better Auth release. See [FORK.md](./FORK.md) for usage and how to sync
+> upstream.
+
 <!-- START: Include on https://convex.dev/components -->
 
 Use [Better Auth](https://better-auth.com) with

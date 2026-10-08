@@ -1,13 +1,16 @@
 {
-  "name": "@convex-dev/better-auth",
-  "description": "A Better Auth component for Convex.",
-  "repository": "github:get-convex/better-auth",
-  "homepage": "https://github.com/get-convex/better-auth#readme",
+  "name": "@helixnebulatech/convex-better-auth",
+  "description": "Fork of @convex-dev/better-auth that tracks the latest Better Auth release.",
+  "repository": "github:helixnebulatech/better-auth",
+  "homepage": "https://github.com/helixnebulatech/better-auth#readme",
   "bugs": {
-    "url": "https://github.com/get-convex/better-auth/issues"
+    "url": "https://github.com/helixnebulatech/better-auth/issues"
   },
-  "version": "0.12.5",
+  "version": "0.13.0",
   "license": "Apache-2.0",
+  "publishConfig": {
+    "access": "public"
+  },
   "keywords": [
     "convex",
     "component",
