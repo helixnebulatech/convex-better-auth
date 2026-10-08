@@ -1,13 +1,10 @@
+// @vitest-environment happy-dom
 import type { Preloaded } from "convex/react";
 import type { FunctionReference } from "convex/server";
 import { convexToJson } from "convex/values";
-import { act, create } from "react-test-renderer";
+import { renderHook } from "@testing-library/react";
 import { afterEach, describe, expect, expectTypeOf, it, vi } from "vitest";
 import { usePreloadedAuthQuery } from "./client.js";
-
-(
-  globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }
-).IS_REACT_ACT_ENVIRONMENT = true;
 
 const { convexState } = vi.hoisted(() => ({
   convexState: {
@@ -37,21 +34,14 @@ const preloaded = {
   _valueJSON: convexToJson([{ text: "from server" }]),
 } as unknown as Preloaded<TodosQuery>;
 
-const renderHook = () => {
+const renderPreloadedAuthQuery = () => {
   const results: unknown[] = [];
-  const Probe = () => {
-    results.push(usePreloadedAuthQuery(preloaded));
-    return null;
-  };
-  let renderer!: ReturnType<typeof create>;
-  act(() => {
-    renderer = create(<Probe />);
+  const hook = renderHook(() => {
+    const result = usePreloadedAuthQuery(preloaded);
+    results.push(result);
+    return result;
   });
-  return {
-    results,
-    rerender: () => act(() => renderer.update(<Probe />)),
-    unmount: () => act(() => renderer.unmount()),
-  };
+  return { results, rerender: () => hook.rerender(), unmount: hook.unmount };
 };
 
 describe("usePreloadedAuthQuery", () => {
@@ -71,7 +61,7 @@ describe("usePreloadedAuthQuery", () => {
   });
 
   it("returns undefined, not null, once auth settles as unauthenticated", () => {
-    const { results, rerender, unmount } = renderHook();
+    const { results, rerender, unmount } = renderPreloadedAuthQuery();
     expect(results[results.length - 1]).toEqual([{ text: "from server" }]);
 
     convexState.auth = {

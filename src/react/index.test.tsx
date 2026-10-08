@@ -1,11 +1,8 @@
+// @vitest-environment happy-dom
 import { useConvexAuth } from "convex/react";
-import { act, create } from "react-test-renderer";
+import { act, render } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { AuthClient } from "./index.js";
-
-(
-  globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }
-).IS_REACT_ACT_ENVIRONMENT = true;
 
 type FetchToken = (args: {
   forceRefreshToken: boolean;
@@ -91,15 +88,15 @@ const setup = async ({
       <Probe />
     </ConvexBetterAuthProvider>
   );
-  let renderer!: ReturnType<typeof create>;
+  let renderer!: ReturnType<typeof render>;
   await act(async () => {
-    renderer = create(tree());
+    renderer = render(tree());
   });
   await flush();
   const setSession = async (next: SessionState) => {
     state.session = next;
     await act(async () => {
-      renderer.update(tree());
+      renderer.rerender(tree());
     });
     await flush();
   };
