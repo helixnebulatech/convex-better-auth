@@ -311,14 +311,14 @@ export const convex = (opts: {
           matcher: (ctx) => {
             return Boolean(
               ctx.path?.startsWith("/sign-in") ||
-                ctx.path?.startsWith("/sign-up") ||
-                ctx.path?.startsWith("/callback") ||
-                ctx.path?.startsWith("/magic-link/verify") ||
-                ctx.path?.startsWith("/email-otp/verify-email") ||
-                ctx.path?.startsWith("/phone-number/verify") ||
-                ctx.path?.startsWith("/siwe/verify") ||
-                ctx.path?.startsWith("/update-session") ||
-                (ctx.path?.startsWith("/get-session") && ctx.context.session)
+              ctx.path?.startsWith("/sign-up") ||
+              ctx.path?.startsWith("/callback") ||
+              ctx.path?.startsWith("/magic-link/verify") ||
+              ctx.path?.startsWith("/email-otp/verify-email") ||
+              ctx.path?.startsWith("/phone-number/verify") ||
+              ctx.path?.startsWith("/siwe/verify") ||
+              ctx.path?.startsWith("/update-session") ||
+              (ctx.path?.startsWith("/get-session") && ctx.context.session)
             );
           },
           handler: createAuthMiddleware(async (ctx) => {
@@ -362,8 +362,8 @@ export const convex = (opts: {
           matcher: (ctx) => {
             return Boolean(
               ctx.path?.startsWith("/sign-out") ||
-                ctx.path?.startsWith("/delete-user") ||
-                (ctx.path?.startsWith("/get-session") && !ctx.context.session)
+              ctx.path?.startsWith("/delete-user") ||
+              (ctx.path?.startsWith("/get-session") && !ctx.context.session)
             );
           },
           handler: createAuthMiddleware(async (ctx) => {

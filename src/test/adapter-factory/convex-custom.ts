@@ -23,7 +23,7 @@ export const convexCustomTestSuite = createTestSuite(
               value: "a",
             },
           ],
-        }),
+        })
       ).toEqual([]);
       expect(
         await adapter.findMany({
@@ -35,7 +35,7 @@ export const convexCustomTestSuite = createTestSuite(
               value: "a",
             },
           ],
-        }),
+        })
       ).toEqual([]);
       expect(
         await adapter.findMany({
@@ -47,7 +47,7 @@ export const convexCustomTestSuite = createTestSuite(
               value: "a",
             },
           ],
-        }),
+        })
       ).toEqual([user]);
       expect(
         await adapter.findMany({
@@ -59,7 +59,7 @@ export const convexCustomTestSuite = createTestSuite(
               value: "ab",
             },
           ],
-        }),
+        })
       ).toEqual([user]);
     },
 
@@ -84,7 +84,7 @@ export const convexCustomTestSuite = createTestSuite(
               value: "wrong name",
             },
           ],
-        }),
+        })
       ).toEqual(null);
       expect(
         await adapter.findOne({
@@ -99,7 +99,7 @@ export const convexCustomTestSuite = createTestSuite(
               value: "foo",
             },
           ],
-        }),
+        })
       ).toEqual(user);
       expect(
         await adapter.findOne({
@@ -115,7 +115,7 @@ export const convexCustomTestSuite = createTestSuite(
               operator: "lt",
             },
           ],
-        }),
+        })
       ).toEqual(null);
       expect(
         await adapter.findOne({
@@ -131,7 +131,7 @@ export const convexCustomTestSuite = createTestSuite(
               operator: "lte",
             },
           ],
-        }),
+        })
       ).toEqual(user);
       expect(
         await adapter.findOne({
@@ -147,7 +147,7 @@ export const convexCustomTestSuite = createTestSuite(
               operator: "gt",
             },
           ],
-        }),
+        })
       ).toEqual(null);
       expect(
         await adapter.findOne({
@@ -163,7 +163,7 @@ export const convexCustomTestSuite = createTestSuite(
               operator: "gte",
             },
           ],
-        }),
+        })
       ).toEqual(user);
       expect(
         await adapter.findOne({
@@ -179,7 +179,7 @@ export const convexCustomTestSuite = createTestSuite(
               value: ["wrong", "name"],
             },
           ],
-        }),
+        })
       ).toEqual(null);
       expect(
         await adapter.findOne({
@@ -195,7 +195,7 @@ export const convexCustomTestSuite = createTestSuite(
               value: ["foo"],
             },
           ],
-        }),
+        })
       ).toEqual(user);
     },
 
@@ -270,7 +270,7 @@ export const convexCustomTestSuite = createTestSuite(
       expect(
         await adapter.findMany({
           model: "user",
-        }),
+        })
       ).toHaveLength(100);
 
       // Pagination has a hardcoded numItems max of 200, this tests that it can handle
@@ -279,13 +279,13 @@ export const convexCustomTestSuite = createTestSuite(
         await adapter.findMany({
           model: "user",
           limit: 250,
-        }),
+        })
       ).toHaveLength(250);
       expect(
         await adapter.findMany({
           model: "user",
           limit: 350,
-        }),
+        })
       ).toHaveLength(300);
     },
 
@@ -321,7 +321,7 @@ export const convexCustomTestSuite = createTestSuite(
             { field: "name", value: "bar", connector: "OR" },
             { field: "name", value: "foo", connector: "OR" },
           ],
-        }),
+        })
       ).toEqual(user);
     },
 
@@ -355,7 +355,7 @@ export const convexCustomTestSuite = createTestSuite(
             { field: "name", value: "foo", connector: "OR" },
           ],
           sortBy: { field: "name", direction: "asc" },
-        }),
+        })
       ).toEqual([barUser, fooUser]);
       expect(
         await adapter.findMany({
@@ -365,7 +365,7 @@ export const convexCustomTestSuite = createTestSuite(
             { field: "name", value: "foo", connector: "OR" },
           ],
           sortBy: { field: "name", direction: "desc" },
-        }),
+        })
       ).toEqual([fooUser, barUser]);
     },
 
@@ -441,13 +441,13 @@ export const convexCustomTestSuite = createTestSuite(
             model: "user",
             where: [],
             update: { name: "bar" },
-          }),
+          })
         ).toBeNull();
         expect(
           await adapter.findOne({
             model: "user",
             where: [{ field: "id", value: user.id }],
-          }),
+          })
         ).toEqual(user);
       },
 
@@ -485,13 +485,13 @@ export const convexCustomTestSuite = createTestSuite(
           await adapter.findOne({
             model: "user",
             where: [{ field: "id", value: foo.id }],
-          }),
+          })
         ).toMatchObject({ emailVerified: true });
         expect(
           await adapter.findOne({
             model: "user",
             where: [{ field: "id", value: foobar.id }],
-          }),
+          })
         ).toMatchObject({ emailVerified: true });
       },
 
@@ -557,7 +557,7 @@ export const convexCustomTestSuite = createTestSuite(
         await adapter.count({
           model: "user",
           where: [{ field: "name", value: "foo" }],
-        }),
+        })
       ).toEqual(1);
     },
 
@@ -574,13 +574,13 @@ export const convexCustomTestSuite = createTestSuite(
         await adapter.findOne({
           model: "user",
           where: [{ field: "emailVerified", value: true }],
-        }),
+        })
       ).toEqual(user);
       expect(
         await adapter.findOne({
           model: "user",
           where: [{ field: "emailVerified", value: false }],
-        }),
+        })
       ).toEqual(null);
     },
 
@@ -614,7 +614,7 @@ export const convexCustomTestSuite = createTestSuite(
                 value: null,
               },
             ],
-          }),
+          })
         ).toEqual(null);
       },
 
@@ -667,7 +667,7 @@ export const convexCustomTestSuite = createTestSuite(
               value: nullRangeAccountId,
             },
           ],
-        }),
+        })
       ).toEqual(null);
 
       expect(
@@ -687,7 +687,7 @@ export const convexCustomTestSuite = createTestSuite(
               value: nullRangeAccountId,
             },
           ],
-        }),
+        })
       ).toEqual(null);
 
       expect(
@@ -707,7 +707,7 @@ export const convexCustomTestSuite = createTestSuite(
               value: nonNullRangeAccountId,
             },
           ],
-        }),
+        })
       ).toEqual(null);
 
       expect(
@@ -727,7 +727,7 @@ export const convexCustomTestSuite = createTestSuite(
               value: nonNullRangeAccountId,
             },
           ],
-        }),
+        })
       ).toEqual(null);
     },
 
@@ -741,7 +741,7 @@ export const convexCustomTestSuite = createTestSuite(
           adapter.create({
             model: "user",
             data: { name: "foo", email: "foo@bar.com" },
-          }),
+          })
         ).rejects.toThrow("user email already exists");
       },
 
@@ -759,7 +759,7 @@ export const convexCustomTestSuite = createTestSuite(
         await adapter.findOne({
           model: "user",
           where: [{ field: "createdAt", value: now }],
-        }),
+        })
       ).toEqual(user);
       expect(typeof user.createdAt).toBe("number");
     },
@@ -783,7 +783,7 @@ export const convexCustomTestSuite = createTestSuite(
               mode: "insensitive",
             },
           ],
-        }),
+        })
       ).rejects.toThrow(/mode: "insensitive"/);
     },
 
@@ -888,7 +888,7 @@ export const convexCustomTestSuite = createTestSuite(
           model: "user",
           where,
           sortBy: { field: "name", direction: "asc" },
-        }),
+        })
       ).toEqual([alice, bob]);
       expect(await adapter.count({ model: "user", where })).toEqual(2);
       expect(
@@ -903,7 +903,7 @@ export const convexCustomTestSuite = createTestSuite(
               value: "@or-and.test",
             },
           ],
-        }),
+        })
       ).toEqual(bob);
       expect(
         await adapter.findOne({
@@ -913,7 +913,7 @@ export const convexCustomTestSuite = createTestSuite(
             { field: "name", value: "Alice", connector: "OR" },
             { field: "email", value: "nobody@or-and.test" },
           ],
-        }),
+        })
       ).toEqual(null);
     },
 
@@ -925,7 +925,7 @@ export const convexCustomTestSuite = createTestSuite(
             { field: "name", value: "missing-one", connector: "OR" },
             { field: "name", value: "missing-two", connector: "OR" },
           ],
-        }),
+        })
       ).toEqual(null);
     },
 
@@ -953,26 +953,26 @@ export const convexCustomTestSuite = createTestSuite(
             model: "user",
             where,
             update: { image: "updated" },
-          }),
+          })
         ).toEqual(1);
         expect(
           await adapter.findOne({
             model: "user",
             where: [{ field: "id", value: excluded.id }],
-          }),
+          })
         ).toEqual(excluded);
         expect(await adapter.deleteMany({ model: "user", where })).toEqual(1);
         expect(
           await adapter.findOne({
             model: "user",
             where: [{ field: "id", value: target.id }],
-          }),
+          })
         ).toEqual(null);
         expect(
           await adapter.findOne({
             model: "user",
             where: [{ field: "id", value: excluded.id }],
-          }),
+          })
         ).toEqual(excluded);
       },
 
@@ -983,7 +983,7 @@ export const convexCustomTestSuite = createTestSuite(
           await adapter.create({
             model: "user",
             data: { name: "offset-user", email: `${letter}@offset.test` },
-          }),
+          })
         );
       }
       expect(
@@ -993,14 +993,14 @@ export const convexCustomTestSuite = createTestSuite(
           sortBy: { field: "email", direction: "asc" },
           limit: 2,
           offset: 1,
-        }),
+        })
       ).toEqual([users[1], users[2]]);
       expect(
         await adapter.findMany({
           model: "user",
           where: [{ field: "name", value: "offset-user" }],
           offset: 3,
-        }),
+        })
       ).toEqual([users[3], users[4]]);
       // (email = a OR name = offset-user) AND email != e, sorted desc
       expect(
@@ -1014,7 +1014,7 @@ export const convexCustomTestSuite = createTestSuite(
           sortBy: { field: "email", direction: "desc" },
           limit: 2,
           offset: 1,
-        }),
+        })
       ).toEqual([users[2], users[1]]);
       // "in" on ids and unique fields is looked up per value and limited in
       // the component, which must see offset + limit rows
@@ -1032,7 +1032,7 @@ export const convexCustomTestSuite = createTestSuite(
             sortBy: { field: "email", direction: "asc" },
             limit: 2,
             offset: 2,
-          }),
+          })
         ).toEqual([users[2], users[3]]);
       }
     },
@@ -1051,20 +1051,20 @@ export const convexCustomTestSuite = createTestSuite(
         await adapter.findOne({
           model: "session",
           where: [{ field: "id", value: user.id }],
-        }),
+        })
       ).toEqual(null);
       expect(
         await adapter.findMany({
           model: "session",
           where: [{ field: "id", operator: "in", value: [user.id] }],
-        }),
+        })
       ).toEqual([]);
       expect(
         await adapter.update({
           model: "session",
           where: [{ field: "id", value: user.id }],
           update: { token: "hijacked" },
-        }),
+        })
       ).toEqual(null);
       await adapter.delete({
         model: "session",
@@ -1074,8 +1074,8 @@ export const convexCustomTestSuite = createTestSuite(
         await adapter.findOne({
           model: "user",
           where: [{ field: "id", value: user.id }],
-        }),
+        })
       ).toEqual(user);
     },
-  }),
+  })
 );

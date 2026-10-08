@@ -58,7 +58,10 @@ const handler = async (request: Request, siteUrl: string) => {
   headers.set("host", new URL(siteUrl).host);
   headers.set("x-forwarded-proto", requestUrl.protocol.replace(/:$/, ""));
   headers.set("x-better-auth-forwarded-host", requestUrl.host);
-  headers.set("x-better-auth-forwarded-proto", requestUrl.protocol.replace(/:$/, ""));
+  headers.set(
+    "x-better-auth-forwarded-proto",
+    requestUrl.protocol.replace(/:$/, "")
+  );
 
   const init: RequestInit = {
     headers,

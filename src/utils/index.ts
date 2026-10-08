@@ -20,8 +20,7 @@ export type TrustedOriginsOption =
   | ((
       request?: Request
     ) =>
-      | (string | null | undefined)[]
-      | Promise<(string | null | undefined)[]>);
+      (string | null | undefined)[] | Promise<(string | null | undefined)[]>);
 
 type RegisterableAuth = {
   handler: (request: Request) => Promise<Response>;
@@ -56,8 +55,7 @@ export type GenericCtx<DataModel extends GenericDataModel = GenericDataModel> =
   | GenericActionCtx<DataModel>;
 
 export type RunMutationCtx<DataModel extends GenericDataModel> = (
-  | GenericMutationCtx<DataModel>
-  | GenericActionCtx<DataModel>
+  GenericMutationCtx<DataModel> | GenericActionCtx<DataModel>
 ) & {
   runMutation: GenericActionCtx<DataModel>["runMutation"];
 };
