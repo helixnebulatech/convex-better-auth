@@ -10,7 +10,13 @@ export const authClient = createAuthClient({
   plugins: [
     magicLinkClient(),
     emailOTPClient(),
-    crossDomainClient(),
+    crossDomainClient({
+      // e2e only: lets tests opt in to setReferrerPolicy
+      setReferrerPolicy:
+        import.meta.env.VITE_MOCK_OAUTH === "true" &&
+        (globalThis as { __E2E_SET_REFERRER_POLICY?: boolean })
+          .__E2E_SET_REFERRER_POLICY === true,
+    }),
     convexClient(),
   ],
 });

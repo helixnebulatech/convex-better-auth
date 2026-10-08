@@ -173,6 +173,23 @@ describe("cross domain OAuth", () => {
     const { auth } = build();
     const state = await signInSocial(auth);
     expect((await startOAuth(auth, state, { origin: "" })).status).toBe(403);
+    // A null Origin (strict referrer policy) is rejected like Better Auth
+    // does, on its error page since the browser navigated here
+    const nullOrigin = await startOAuth(auth, state, { origin: "null" });
+    expect(nullOrigin.status).toBe(302);
+    expect(nullOrigin.headers.get("location")).toBe(
+      `${BASE}/error?error=missing_or_null_origin`
+    );
+    expect(nullOrigin.headers.getSetCookie()).toEqual([]);
+    // Or to the app's errorCallbackURL, as Better Auth does for OAuth errors
+    const withErrorURL = await signInSocial(auth, {
+      errorCallbackURL: "/auth-error",
+    });
+    expect(
+      (await startOAuth(auth, withErrorURL, { origin: "null" })).headers.get(
+        "location"
+      )
+    ).toBe(`${SITE}/auth-error?error=missing_or_null_origin`);
     expect(
       (await startOAuth(auth, state, { origin: "https://evil.example.com" }))
         .status
@@ -312,7 +329,10 @@ describe("cross domain OAuth", () => {
 
 // A crossDomainClient talking to the test server, with a minimal DOM that
 // records the form it submits and the referrer policy in effect at the time
-const setupClient = (auth: Auth) => {
+const setupClient = (
+  auth: Auth,
+  options: { setReferrerPolicy?: boolean } = {}
+) => {
   const items = new Map<string, string>();
   const storage = {
     getItem: (key: string) => items.get(key) ?? null,
@@ -322,7 +342,7 @@ const setupClient = (auth: Auth) => {
   };
   const client = createAuthClient({
     baseURL: BASE,
-    plugins: [crossDomainClient({ storage })],
+    plugins: [crossDomainClient({ storage, ...options })],
     fetchOptions: {
       customFetchImpl: (input, init) => {
         const headers = new Headers(init?.headers);
@@ -336,7 +356,7 @@ const setupClient = (auth: Auth) => {
     fields: Record<string, string>;
     referrerPolicy?: string;
   }[] = [];
-  // The app's own policy, eg. helmet's default
+  // The app's own policy set with a meta tag, eg. helmet's default
   let referrerPolicy = "no-referrer";
   const createElement = (tag: string) => {
     const element: any = { tag, children: [] as any[], style: {} };
@@ -353,6 +373,10 @@ const setupClient = (auth: Auth) => {
   };
   const document = {
     createElement,
+    querySelector: (selector: string) =>
+      selector === 'meta[name="referrer"]'
+        ? { getAttribute: () => referrerPolicy }
+        : null,
     body: { appendChild() {} },
     head: {
       appendChild(element: any) {
@@ -395,9 +419,8 @@ describe("crossDomainClient OAuth", () => {
     expect(submitted).toHaveLength(1);
     const [form] = submitted as [(typeof submitted)[0]];
     expect(form.action).toBe(`${BASE}/cross-domain/oauth/start`);
-    // Sent with a policy that includes the app's Origin, even though the app
-    // uses no-referrer, which would send `Origin: null`
-    expect(form.referrerPolicy).toBe("strict-origin-when-cross-origin");
+    // The app's policy is left alone by default
+    expect(form.referrerPolicy).toBe("no-referrer");
 
     const ott = ottOf(await completeFlow(form))!;
     // Another browser (no stored verifier) can't redeem it
@@ -407,6 +430,33 @@ describe("crossDomainClient OAuth", () => {
     ).crossDomain.oneTimeToken.verify({ token: ott });
     expect(error).toBeNull();
     expect(verified.user.email).toBe("a@example.com");
+  });
+
+  it("only changes the page's referrer policy when the app opts in", async () => {
+    const { auth } = build();
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      for (const setReferrerPolicy of [false, true]) {
+        const { client, submitted, document } = setupClient(auth, {
+          setReferrerPolicy,
+        });
+        vi.stubGlobal("document", document);
+        await client.$fetch("/sign-in/social", {
+          method: "POST",
+          body: { provider: "mock", callbackURL: SITE },
+        });
+        // Under no-referrer browsers send `Origin: null`, opting in sends the
+        // app's origin
+        expect(submitted[0]!.referrerPolicy).toBe(
+          setReferrerPolicy ? "strict-origin-when-cross-origin" : "no-referrer"
+        );
+      }
+      // Without the option, the developer is told why sign-in will fail
+      expect(warn).toHaveBeenCalledTimes(1);
+      expect(String(warn.mock.calls[0]![0])).toContain("setReferrerPolicy");
+    } finally {
+      warn.mockRestore();
+    }
   });
 
   it("starts the redirect with startOAuthRedirect after disableRedirect, as Better Auth allows", async () => {

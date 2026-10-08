@@ -83,9 +83,14 @@ const generateVerifier = () => {
 // client can't receive. Start the redirect with a form POST through the auth
 // server instead, which sets it in the browser, so the flow is tied to this
 // browser as in Better Auth.
+// Referrer policies under which browsers send `Origin: null` on the
+// cross-origin form POST that starts OAuth
+const NULL_ORIGIN_POLICIES = new Set(["no-referrer", "same-origin"]);
+
 const startOAuthRedirect = (
   startUrl: string,
-  fields: Record<string, string>
+  fields: Record<string, string>,
+  setReferrerPolicy: boolean
 ) => {
   const form = document.createElement("form");
   form.method = "POST";
@@ -99,13 +104,27 @@ const startOAuthRedirect = (
     form.appendChild(input);
   }
   document.body.appendChild(form);
-  // The auth server checks the Origin of this POST. Browsers send
-  // `Origin: null` under a strict referrer policy (eg. no-referrer), so use
-  // the browser default for this navigation, which sends the app's origin.
-  const referrer = document.createElement("meta");
-  referrer.name = "referrer";
-  referrer.content = "strict-origin-when-cross-origin";
-  document.head.appendChild(referrer);
+  // The auth server checks the Origin of this POST, like Better Auth does, and
+  // browsers send `Origin: null` under a strict referrer policy such as
+  // no-referrer. Only change the page's policy if the app opted in.
+  if (setReferrerPolicy) {
+    const referrer = document.createElement("meta");
+    referrer.name = "referrer";
+    referrer.content = "strict-origin-when-cross-origin";
+    document.head.appendChild(referrer);
+  } else {
+    const metaPolicy = document
+      .querySelector?.('meta[name="referrer"]')
+      ?.getAttribute("content")
+      ?.trim()
+      .toLowerCase();
+    if (metaPolicy !== undefined && NULL_ORIGIN_POLICIES.has(metaPolicy)) {
+      // eslint-disable-next-line no-console
+      console.warn(
+        `The page's referrer policy "${metaPolicy}" makes the browser send \`Origin: null\` when starting OAuth sign-in, which the auth server rejects. Use a policy that sends the origin, such as "strict-origin-when-cross-origin", or pass \`setReferrerPolicy: true\` to crossDomainClient.`
+      );
+    }
+  }
   form.submit();
 };
 
@@ -117,6 +136,17 @@ export const crossDomainClient = (
     };
     storagePrefix?: string;
     disableCache?: boolean;
+    /**
+     * Set the page's referrer policy to `strict-origin-when-cross-origin`
+     * right before starting an OAuth redirect. The auth server only starts
+     * OAuth for requests from your app's origin, and browsers send
+     * `Origin: null` under policies such as `no-referrer`. Enable this if you
+     * can't change your app's policy. The page keeps the new policy if the
+     * user comes back to it from the browser's back/forward cache.
+     *
+     * @default false
+     */
+    setReferrerPolicy?: boolean;
   } = {}
 ): CrossDomainClientPlugin => {
   let store: ClientStore | null = null;
@@ -143,10 +173,11 @@ export const crossDomainClient = (
     }
     const verifier = generateVerifier();
     await storage.setItem(oauthVerifierName, verifier);
-    startOAuthRedirect(`${baseURL}/cross-domain/oauth/start`, {
-      state,
-      verifier,
-    });
+    startOAuthRedirect(
+      `${baseURL}/cross-domain/oauth/start`,
+      { state, verifier },
+      opts.setReferrerPolicy ?? false
+    );
     return true;
   };
   const storage =

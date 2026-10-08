@@ -15,6 +15,8 @@ const oauthVerifierIdentifier = (state: string) =>
 const ottVerifierIdentifier = (token: string) =>
   `cross-domain-ott-verifier:${token}`;
 
+type PendingOAuthStart = { url: string; errorCallbackURL?: string };
+
 const sha256 = async (value: string) => {
   const digest = await crypto.subtle.digest(
     "SHA-256",
@@ -177,9 +179,14 @@ export const crossDomain = ({ siteUrl }: { siteUrl: string }) => {
             if (!returned?.url || !state) {
               return;
             }
+            const pending: PendingOAuthStart = {
+              url: returned.url,
+              // Already validated against trustedOrigins by Better Auth
+              errorCallbackURL: ctx.body?.errorCallbackURL,
+            };
             await ctx.context.internalAdapter.createVerificationValue({
               identifier: oauthStartIdentifier(state),
-              value: returned.url,
+              value: JSON.stringify(pending),
               expiresAt: new Date(Date.now() + 5 * 60 * 1000),
             });
           }),
@@ -299,17 +306,38 @@ export const crossDomain = ({ siteUrl }: { siteUrl: string }) => {
           },
         },
         async (ctx) => {
-          // Only the app may start a flow, so a link or a form on another
-          // site can't put someone else's state cookie in this browser.
-          if (ctx.request?.headers.get("origin") !== siteOrigin) {
-            throw ctx.error("FORBIDDEN", { message: "Invalid origin" });
-          }
           const { state, verifier } = ctx.body;
-          const pending =
+          const pendingRow =
             await ctx.context.internalAdapter.findVerificationValue(
               oauthStartIdentifier(state)
             );
-          if (!pending || pending.expiresAt < new Date()) {
+          const pending =
+            pendingRow && pendingRow.expiresAt >= new Date()
+              ? (JSON.parse(pendingRow.value) as PendingOAuthStart)
+              : null;
+          // Only the app may start a flow, so a link or a form on another
+          // site can't put someone else's state cookie in this browser.
+          const origin = ctx.request?.headers.get("origin");
+          if (origin === "null") {
+            // Better Auth rejects a null Origin too. This is a top-level
+            // navigation, so redirect to the error callback URL like Better
+            // Auth does for OAuth errors, or to its error page.
+            ctx.context.logger.error(
+              `OAuth sign-in was started with \`Origin: null\`, which happens when ${siteOrigin} sets a strict referrer policy such as no-referrer. Use a policy that sends the origin, such as strict-origin-when-cross-origin, or pass \`setReferrerPolicy: true\` to crossDomainClient.`
+            );
+            const url = new URL(
+              pending?.errorCallbackURL ??
+                ctx.context.options.onAPIError?.errorURL ??
+                `${ctx.context.baseURL}/error`,
+              ctx.context.baseURL
+            );
+            url.searchParams.set("error", "missing_or_null_origin");
+            throw ctx.redirect(url.toString());
+          }
+          if (origin !== siteOrigin) {
+            throw ctx.error("FORBIDDEN", { message: "Invalid origin" });
+          }
+          if (!pending) {
             throw ctx.error("BAD_REQUEST", { message: "Invalid state" });
           }
           await ctx.context.internalAdapter.deleteVerificationByIdentifier(
@@ -330,7 +358,7 @@ export const crossDomain = ({ siteUrl }: { siteUrl: string }) => {
             ctx.context.secret,
             stateCookie.attributes
           );
-          throw ctx.redirect(pending.value);
+          throw ctx.redirect(pending.url);
         }
       ),
       verifyOneTimeToken: createAuthEndpoint(

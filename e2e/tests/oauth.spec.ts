@@ -60,32 +60,67 @@ async function expectSignedIn(page: Page) {
 }
 
 // helmet and many apps use no-referrer, under which browsers send
-// `Origin: null` on a cross-origin form POST
+// `Origin: null` on the cross-origin form POST that starts OAuth
+async function useNoReferrer(page: Page, via: "header" | "meta tag") {
+  if (via === "header") {
+    await page.route("http://localhost:5176/**", async (route: Route) => {
+      if (route.request().resourceType() !== "document") {
+        return route.fallback();
+      }
+      const response = await route.fetch();
+      await route.fulfill({
+        response,
+        headers: { ...response.headers(), "referrer-policy": "no-referrer" },
+      });
+    });
+  } else {
+    await page.addInitScript(() => {
+      document.addEventListener("DOMContentLoaded", () => {
+        const meta = document.createElement("meta");
+        meta.name = "referrer";
+        meta.content = "no-referrer";
+        document.head.prepend(meta);
+      });
+    });
+  }
+}
+
+async function clickSignInWithMock(page: Page) {
+  await page.goto("/");
+  await expect(page.getByTestId("auth-unauthenticated")).toBeVisible({
+    timeout: 30_000,
+  });
+  await page.getByRole("button", { name: "Sign in with Mock" }).click();
+}
+
 for (const via of ["header", "meta tag"] as const) {
-  test(`OAuth sign-in works when the app sets a no-referrer policy (${via})`, async ({
+  test(`OAuth sign-in is rejected like Better Auth under a no-referrer policy (${via})`, async ({
     page,
   }) => {
-    if (via === "header") {
-      await page.route("http://localhost:5176/**", async (route: Route) => {
-        if (route.request().resourceType() !== "document") {
-          return route.fallback();
-        }
-        const response = await route.fetch();
-        await route.fulfill({
-          response,
-          headers: { ...response.headers(), "referrer-policy": "no-referrer" },
-        });
-      });
-    } else {
-      await page.addInitScript(() => {
-        document.addEventListener("DOMContentLoaded", () => {
-          const meta = document.createElement("meta");
-          meta.name = "referrer";
-          meta.content = "no-referrer";
-          document.head.prepend(meta);
-        });
-      });
+    await useNoReferrer(page, via);
+    const warnings: string[] = [];
+    page.on("console", (message) => {
+      if (message.type() === "warning") warnings.push(message.text());
+    });
+    await clickSignInWithMock(page);
+    await page.waitForURL(/\/api\/auth\/error\?error=missing_or_null_origin/, {
+      timeout: 30_000,
+    });
+    // The developer is told why, when the policy comes from a meta tag
+    if (via === "meta tag") {
+      expect(warnings.join("\n")).toContain("setReferrerPolicy");
     }
+  });
+
+  test(`OAuth sign-in works under a no-referrer policy with setReferrerPolicy (${via})`, async ({
+    page,
+  }) => {
+    await useNoReferrer(page, via);
+    await page.addInitScript(() => {
+      (
+        globalThis as { __E2E_SET_REFERRER_POLICY?: boolean }
+      ).__E2E_SET_REFERRER_POLICY = true;
+    });
     await startMockSignIn(page);
     await page.locator("#continue").click();
     await expectSignedIn(page);
