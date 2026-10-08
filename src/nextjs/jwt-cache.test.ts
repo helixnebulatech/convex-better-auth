@@ -74,8 +74,8 @@ describe("convexBetterAuthNextJs jwtCache retry", () => {
     await expect(setup().fetchAuthQuery(queryRef, {})).resolves.toEqual(["ok"]);
 
     expect(mockFetchQuery.mock.calls).toEqual([
-      [queryRef, {}, { token: cookieJwt }],
-      [queryRef, {}, { token: "fresh-token" }],
+      [queryRef, {}, { token: cookieJwt, url: CONVEX_URL }],
+      [queryRef, {}, { token: "fresh-token", url: CONVEX_URL }],
     ]);
     expect(tokenFetch).toHaveBeenCalledTimes(1);
     expect(String(tokenFetch.mock.calls[0]?.[0])).toBe(
