@@ -35,9 +35,17 @@ describe("null semantics of where clauses", () => {
     t.run(async (ctx) => {
       const base = { privateKey: "p", createdAt: 1 };
       await ctx.db.insert("jwks", { ...base, publicKey: "unset" });
-      await ctx.db.insert("jwks", { ...base, publicKey: "null", expiresAt: null });
+      await ctx.db.insert("jwks", {
+        ...base,
+        publicKey: "null",
+        expiresAt: null,
+      });
       await ctx.db.insert("jwks", { ...base, publicKey: "low", expiresAt: 5 });
-      await ctx.db.insert("jwks", { ...base, publicKey: "high", expiresAt: 500 });
+      await ctx.db.insert("jwks", {
+        ...base,
+        publicKey: "high",
+        expiresAt: 500,
+      });
     });
   const keys = (page: any[]) => page.map((doc) => doc.publicKey).sort();
 
@@ -54,16 +62,13 @@ describe("null semantics of where clauses", () => {
     ["ne", null, ["high", "low"]],
     ["eq", null, ["null", "unset"]],
     ["not_in", [5], ["high"]],
-  ] as const)(
-    "static filter: %s %j",
-    async (operator, value, expected) => {
-      const t = setup();
-      await seedJwks(t);
-      expect(
-        keys(await findMany(t, "jwks", [{ field: "expiresAt", operator, value }]))
-      ).toEqual(expected);
-    }
-  );
+  ] as const)("static filter: %s %j", async (operator, value, expected) => {
+    const t = setup();
+    await seedJwks(t);
+    expect(
+      keys(await findMany(t, "jwks", [{ field: "expiresAt", operator, value }]))
+    ).toEqual(expected);
+  });
 
   // user.userId is optional and indexed: range clauses use an index range.
   const seedUsers = (t: ReturnType<typeof setup>) =>

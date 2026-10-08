@@ -37,7 +37,7 @@ const escapeHtml = (value) =>
     (c) =>
       ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[
         c
-      ],
+      ]
   );
 
 const json = (res, status, body) => {
