@@ -316,11 +316,17 @@ export const AuthBoundary = ({
   isAuthError: (error: unknown) => boolean;
 }>) => {
   const { isAuthenticated, isLoading } = useConvexAuth();
+  // onUnauth is usually an inline function, so keep the latest props in refs
+  // and handleUnauth stable, or the effect below would rerun every render.
+  const latestRef = useRef({ authClient, onUnauth });
+  useEffect(() => {
+    latestRef.current = { authClient, onUnauth };
+  }, [authClient, onUnauth]);
   const handleUnauth = useCallback(async () => {
     // Auth request that will clear cookies if session is invalid
-    await authClient.getSession();
-    await onUnauth();
-  }, [onUnauth]);
+    await latestRef.current.authClient.getSession();
+    await latestRef.current.onUnauth();
+  }, []);
 
   useEffect(() => {
     void (async () => {
@@ -328,7 +334,7 @@ export const AuthBoundary = ({
         await handleUnauth();
       }
     })();
-  }, [isLoading, isAuthenticated]);
+  }, [isLoading, isAuthenticated, handleUnauth]);
 
   return (
     <ErrorBoundary
