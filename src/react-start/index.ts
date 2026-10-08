@@ -6,6 +6,7 @@ import type {
 } from "convex/server";
 import { ConvexHttpClient } from "convex/browser";
 import { getToken } from "../utils/index.js";
+import { toProxyResponse } from "../utils/proxy.js";
 import type { GetTokenOptions } from "../utils/index.js";
 import React from "react";
 
@@ -59,7 +60,7 @@ const parseConvexSiteUrl = (url: string) => {
   return url;
 };
 
-const handler = (request: Request, opts: { convexSiteUrl: string }) => {
+const handler = async (request: Request, opts: { convexSiteUrl: string }) => {
   const requestUrl = new URL(request.url);
   const nextUrl = `${opts.convexSiteUrl}${requestUrl.pathname}${requestUrl.search}`;
   const headers = new Headers(request.headers);
@@ -68,13 +69,16 @@ const handler = (request: Request, opts: { convexSiteUrl: string }) => {
   headers.delete("transfer-encoding");
   headers.delete("content-length");
   headers.delete("connection");
+  // Convex's edge resolves the deployment from `x-forwarded-host`, so the app
+  // host there 404s; the component restores it from
+  // `x-better-auth-forwarded-host` before calling Better Auth.
+  headers.delete("x-forwarded-host");
   headers.set("accept-encoding", "application/json");
   headers.set("host", new URL(opts.convexSiteUrl).host);
-  headers.set("x-forwarded-host", requestUrl.host);
   headers.set("x-forwarded-proto", requestUrl.protocol.replace(/:$/, ""));
   headers.set("x-better-auth-forwarded-host", requestUrl.host);
   headers.set("x-better-auth-forwarded-proto", requestUrl.protocol.replace(/:$/, ""));
-  return fetch(nextUrl, {
+  const response = await fetch(nextUrl, {
     method: request.method,
     headers,
     redirect: "manual",
@@ -82,6 +86,7 @@ const handler = (request: Request, opts: { convexSiteUrl: string }) => {
     // @ts-expect-error - duplex is required for streaming request bodies in modern fetch
     duplex: "half",
   });
+  return toProxyResponse(response);
 };
 
 export const convexBetterAuthReactStart = (
