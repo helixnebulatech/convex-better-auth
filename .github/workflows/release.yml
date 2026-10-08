@@ -73,7 +73,7 @@ jobs:
 
       - name: Build
         if: inputs.snapshot == true
-        run: rm -rf dist *.tsbuildinfo && pnpm run build
+        run: rm -rf dist ./*.tsbuildinfo && pnpm run build
 
       - name: Publish Snapshot Release
         if: inputs.snapshot == true
