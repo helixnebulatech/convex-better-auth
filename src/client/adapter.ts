@@ -288,7 +288,8 @@ export const convexAdapter = <
             onCreateHandle: onCreateHandle,
           });
         },
-        findOne: async (data): Promise<any> => {
+        // Better Auth 1.7.6+ passes modelKey, which the component validators reject
+        findOne: async ({ modelKey: _modelKey, ...data }): Promise<any> => {
           if (data.where?.every((w) => w.connector === "OR")) {
             for (const w of data.where) {
               const result = await ctx.runQuery(api.adapter.findOne, {
@@ -307,7 +308,7 @@ export const convexAdapter = <
             where: parseWhere(data.where),
           });
         },
-        findMany: async (data): Promise<any[]> => {
+        findMany: async ({ modelKey: _modelKey, ...data }): Promise<any[]> => {
           if (data.offset) {
             throw new Error("offset not supported");
           }
@@ -355,7 +356,7 @@ export const convexAdapter = <
           );
           return result.docs;
         },
-        count: async (data) => {
+        count: async ({ modelKey: _modelKey, ...data }) => {
           // Yes, count is just findMany returning a number.
           if (data.where?.some((w) => w.connector === "OR")) {
             const results = await asyncMap(data.where, async (w) =>
@@ -429,7 +430,33 @@ export const convexAdapter = <
             onDeleteHandle: onDeleteHandle,
           });
         },
-        deleteMany: async (data) => {
+        // deleteOne finds and deletes in a single mutation, which is atomic.
+        // Better Auth's fallback guards on every row field, including
+        // _creationTime, which the component where validators reject.
+        consumeOne: async (data): Promise<any> => {
+          if (!("runMutation" in ctx)) {
+            throw new Error("ctx is not a mutation ctx");
+          }
+          if (data.where.some((w) => w.connector === "OR")) {
+            throw new Error("where clause not supported");
+          }
+          const onDeleteHandle =
+            config.authFunctions?.onDelete &&
+            config.triggers?.[data.model]?.onDelete
+              ? ((await createFunctionHandle(
+                  config.authFunctions.onDelete
+                )) as FunctionHandle<"mutation">)
+              : undefined;
+          const doc = await ctx.runMutation(api.adapter.deleteOne, {
+            input: {
+              model: data.model as TableNames,
+              where: parseWhere(data.where),
+            },
+            onDeleteHandle: onDeleteHandle,
+          });
+          return doc ?? null;
+        },
+        deleteMany: async ({ modelKey: _modelKey, ...data }) => {
           if (!("runMutation" in ctx)) {
             throw new Error("ctx is not a mutation ctx");
           }
@@ -469,7 +496,7 @@ export const convexAdapter = <
           });
           return result.count;
         },
-        updateMany: async (data) => {
+        updateMany: async ({ modelKey: _modelKey, ...data }) => {
           if (!("runMutation" in ctx)) {
             throw new Error("ctx is not a mutation ctx");
           }

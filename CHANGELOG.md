@@ -5,6 +5,11 @@
 - feat!: update to better-auth 1.7.5, minimum 1.7.5 (see the
   [0.13 migration guide](./docs/content/docs/migrations/migrate-to-0-13.mdx))
 - fix relative `--output` path in generated schema header
+- support better-auth 1.7.6+: strip `modelKey` before calling component
+  functions
+- implement `consumeOne` natively, Better Auth's fallback broke verification
+  consumption (magic link, email OTP, one-time token, cross domain)
+- no-op `consumeOne` and `incrementOne` in query context
 
 ## 0.12.5
 

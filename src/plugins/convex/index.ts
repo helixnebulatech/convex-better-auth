@@ -285,6 +285,16 @@ export const convex = (opts: {
             ctx.context.adapter.updateMany = noopWrite("updateMany") as any;
             ctx.context.adapter.delete = noopWrite("delete") as any;
             ctx.context.adapter.deleteMany = noopWrite("deleteMany") as any;
+            // Atomic writes return the affected row, null means no match
+            const noopAtomicWrite = (method: string) => {
+              const warn = noopWrite(method);
+              return async (...args: any[]) => {
+                await warn(...args);
+                return null;
+              };
+            };
+            ctx.context.adapter.consumeOne = noopAtomicWrite("consumeOne");
+            ctx.context.adapter.incrementOne = noopAtomicWrite("incrementOne");
             return { context: ctx };
           }),
         },
