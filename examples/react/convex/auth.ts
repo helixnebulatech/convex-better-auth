@@ -6,6 +6,7 @@ import { query } from "./_generated/server";
 import { betterAuth, type BetterAuthOptions } from "better-auth/minimal";
 import { emailOTP } from "better-auth/plugins/email-otp";
 import { magicLink } from "better-auth/plugins/magic-link";
+import { genericOAuth } from "better-auth/plugins/generic-oauth";
 import { DataModel } from "./_generated/dataModel";
 import {
   sendEmailVerification,
@@ -16,6 +17,11 @@ import {
 import authConfig from "./auth.config";
 
 const siteUrl = process.env.SITE_URL!;
+
+// e2e only: a mock OAuth provider (e2e/mock-oauth-provider.mjs) to test the
+// cross-domain OAuth flow in real browsers.
+const mockOAuthUrl =
+  process.env.IS_TEST === "true" ? process.env.MOCK_OAUTH_URL : undefined;
 
 export const authComponent = createClient<DataModel>(components.betterAuth, {
   verbose: false,
@@ -86,6 +92,23 @@ export const createAuthOptions = (ctx: GenericCtx<DataModel>) =>
       }),
       crossDomain({ siteUrl }),
       convex({ authConfig }),
+      ...(mockOAuthUrl
+        ? [
+            genericOAuth({
+              config: [
+                {
+                  providerId: "mock",
+                  clientId: "e2e-client",
+                  clientSecret: "e2e-secret",
+                  authorizationUrl: `${mockOAuthUrl}/authorize`,
+                  tokenUrl: `${mockOAuthUrl}/token`,
+                  userInfoUrl: `${mockOAuthUrl}/userinfo`,
+                  scopes: ["profile", "email"],
+                },
+              ],
+            }),
+          ]
+        : []),
     ],
     account: {
       accountLinking: {

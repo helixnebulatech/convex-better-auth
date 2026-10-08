@@ -18,6 +18,7 @@ pushd "$EXAMPLE_DIR" > /dev/null
 echo "Setting environment variables on local backend..."
 pnpm exec convex env set SITE_URL "$SITE_URL" --url "$CONVEX_URL" --admin-key "$ADMIN_KEY"
 pnpm exec convex env set IS_TEST "true" --url "$CONVEX_URL" --admin-key "$ADMIN_KEY"
+pnpm exec convex env set MOCK_OAUTH_URL "$MOCK_OAUTH_URL" --url "$CONVEX_URL" --admin-key "$ADMIN_KEY"
 pnpm exec convex env set BETTER_AUTH_SECRET "e2e-test-secret-key-do-not-use-in-production" --url "$CONVEX_URL" --admin-key "$ADMIN_KEY"
 
 echo "Deploying functions to local backend..."

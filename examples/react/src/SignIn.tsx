@@ -101,6 +101,18 @@ export default function SignIn() {
     );
   };
 
+  // e2e only, see e2e/mock-oauth-provider.mjs
+  const handleMockSignIn = async () => {
+    await authClient.signIn.social(
+      { provider: "mock" },
+      {
+        onError: (ctx) => {
+          alert(ctx.error.message);
+        },
+      }
+    );
+  };
+
   const handleGoogleSignIn = async () => {
     await authClient.signIn.social(
       {
@@ -319,6 +331,17 @@ export default function SignIn() {
               </span>
             </div>
           </div>
+
+          {import.meta.env.VITE_MOCK_OAUTH === "true" && (
+            <Button
+              type="button"
+              variant="outline"
+              className="w-full gap-2"
+              onClick={handleMockSignIn}
+            >
+              Sign in with Mock
+            </Button>
+          )}
 
           <Button
             type="button"
