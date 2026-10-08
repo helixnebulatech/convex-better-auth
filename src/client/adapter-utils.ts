@@ -58,34 +58,48 @@ export const adapterArgsValidator = v.object({
   offset: v.optional(v.number()),
 });
 
+// Unique constraints of a model, as lists of database field names. Better Auth
+// declares them on fields (`unique: true`) and, since 1.7, as table-level
+// indexes (`indexes: [{ fields, unique: true }]`), which can be compound.
+const getUniqueConstraints = (
+  betterAuthSchema: BetterAuthDBSchema,
+  model: string
+) => {
+  const table = Object.values(betterAuthSchema).find(
+    (value) => value.modelName === model
+  );
+  if (!table) {
+    return [];
+  }
+  const fieldConstraints = Object.entries(table.fields)
+    .filter(([, value]) => value.unique)
+    .map(([key, value]) => [value.fieldName ?? key]);
+  const indexConstraints = (table.indexes ?? [])
+    .filter((index) => index.unique)
+    .map((index) =>
+      index.fields.map((field) => table.fields[field]?.fieldName ?? field)
+    );
+  return [...fieldConstraints, ...indexConstraints];
+};
 const isUniqueField = (
   betterAuthSchema: BetterAuthDBSchema,
   model: string,
   field: string
-) => {
-  const fields = Object.values(betterAuthSchema).find(
-    (value) => value.modelName === model
-  )?.fields;
-  if (!fields) {
-    return false;
-  }
-  return Object.entries(fields)
-    .filter(([, value]) => value.unique)
-    .map(([key]) => key)
-    .includes(field);
-};
+) =>
+  Object.entries(
+    Object.values(betterAuthSchema).find((value) => value.modelName === model)
+      ?.fields ?? {}
+  ).some(([key, value]) => value.unique && (value.fieldName ?? key) === field);
+// Whether the input sets every field of a unique constraint, so it can't be
+// written to more than one document.
 export const hasUniqueFields = (
   betterAuthSchema: BetterAuthDBSchema,
   model: string,
   input: Record<string, any>
-) => {
-  for (const field of Object.keys(input)) {
-    if (isUniqueField(betterAuthSchema, model, field)) {
-      return true;
-    }
-  }
-  return false;
-};
+) =>
+  getUniqueConstraints(betterAuthSchema, model).some((constraint) =>
+    constraint.every((field) => field in input)
+  );
 
 const findIndex = (
   schema: SchemaDefinition<any, any>,
@@ -246,31 +260,58 @@ export const checkUniqueFields = async <
   input: Record<string, any>,
   doc?: Record<string, any>
 ) => {
-  if (!hasUniqueFields(betterAuthSchema, table, input)) {
-    return;
-  }
-  for (const field of Object.keys(input)) {
-    if (!isUniqueField(betterAuthSchema, table, field)) {
+  // Check the document as it will be after the write, so updating one field
+  // of a compound constraint is checked together with the others.
+  const mergedDoc = { ...doc, ...input };
+  for (const constraint of getUniqueConstraints(betterAuthSchema, table)) {
+    if (
+      !constraint.some((field) => field in input) ||
+      constraint.some((field) => mergedDoc[field] === undefined)
+    ) {
       continue;
     }
-    const { index } =
+    const constraintName =
+      constraint.length === 1
+        ? constraint[0]
+        : `unique constraint ${constraint.join("+")}`;
+    const { index, values } =
       findIndex(schema, {
         model: table,
-        where: [
-          { field, operator: "eq", value: input[field as keyof typeof input] },
-        ],
+        where: constraint.map((field) => ({
+          field,
+          operator: "eq" as const,
+          value: mergedDoc[field],
+        })),
       }) || {};
-    if (!index) {
-      throw new Error(`No index found for ${table}${field}`);
+    const query = ctx.db.query(table as any);
+    let existingDocs;
+    if (index && values) {
+      existingDocs = await query
+        .withIndex(index.indexDescriptor, (q) =>
+          values.eq.reduce(
+            (q: any, value, idx) => q.eq(index.fields[idx], value),
+            q
+          )
+        )
+        .take(2);
+    } else {
+      // Schemas generated before table-level indexes were supported have no
+      // index for those constraints, scan rather than fail the write.
+      // eslint-disable-next-line no-console
+      console.warn(
+        `No index found for ${table} ${constraintName}, regenerate the Better Auth schema to add it.`
+      );
+      existingDocs = await query
+        // eslint-disable-next-line @convex-dev/no-filter-in-query
+        .filter((q) =>
+          q.and(
+            ...constraint.map((field) => q.eq(q.field(field), mergedDoc[field]))
+          )
+        )
+        .take(2);
     }
-    const existingDoc = await ctx.db
-      .query(table as any)
-      .withIndex(index.indexDescriptor, (q) =>
-        q.eq(field, input[field as keyof typeof input])
-      )
-      .unique();
-    if (existingDoc && existingDoc._id !== doc?._id) {
-      throw new Error(`${table} ${field} already exists`);
+    if (existingDocs.some((existingDoc) => existingDoc._id !== doc?._id)) {
+      throw new Error(`${table} ${constraintName} already exists`);
     }
   }
 };
