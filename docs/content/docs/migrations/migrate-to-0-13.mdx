@@ -160,6 +160,10 @@ Better Auth on a single domain.
   opening the URL yourself.
 - The session is only handed to your app at `siteUrl`. Callback URLs on other
   origins, even trusted ones, are redirected to without a session.
+- If your app sets a referrer policy such as `no-referrer` (the default of
+  `helmet`), OAuth sign-in fails with `missing_or_null_origin`. See
+  [Referrer policy](/framework-guides/react#referrer-policy) for the fix and the
+  `setReferrerPolicy` option.
 
 ### JWT caching
 

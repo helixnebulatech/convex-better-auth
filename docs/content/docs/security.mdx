@@ -27,6 +27,10 @@ redeems it automatically.
   their own account and send it to you, and opening it signs you in to their
   account. That's the same with Better Auth's magic links, so treat sign-in
   links you didn't request with suspicion.
+- Starting OAuth requires a request from your app's origin, as in Better Auth,
+  so a referrer policy such as `no-referrer` makes sign-in fail with
+  `missing_or_null_origin`. See
+  [Referrer policy](/framework-guides/react#referrer-policy).
 - One-time tokens are only handed to `siteUrl`. Callback URLs on other origins,
   even trusted ones such as a custom scheme or a wildcard domain, are redirected
   to without a session.

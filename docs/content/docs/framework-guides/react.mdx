@@ -265,15 +265,29 @@ state cookie is set in the browser and the flow is tied to it, as it is with
 Better Auth on a single domain. A sign-in started in one browser can't be
 finished in another.
 
-Two side effects of starting the redirect this way:
+`signIn.social` and `linkSocial` return `redirect: false`, since the client
+navigates itself instead of leaving it to Better Auth's redirect.
 
-- `signIn.social` and `linkSocial` return `redirect: false`, since the client
-  navigates itself instead of leaving it to Better Auth's redirect.
-- Right before navigating, the client sets the page's referrer policy to
-  `strict-origin-when-cross-origin`, the browser default, so the browser sends
-  your app's origin, which the Convex site checks. Under a stricter policy such
-  as `no-referrer` it would send `Origin: null`. The page is left with that
-  policy if the user comes back to it from the browser's back/forward cache.
+#### Referrer policy
+
+Like Better Auth, your Convex site only starts OAuth for requests that carry
+your app's origin. If your app sets a referrer policy that hides it, such as
+`no-referrer` (the default of `helmet`) or `same-origin`, the browser sends
+`Origin: null` and sign-in is rejected with the `missing_or_null_origin` error.
+The user is sent to your `errorCallbackURL`, or to Better Auth's error page, and
+the reason is logged in your Convex logs. If the policy comes from a
+`<meta name="referrer">` tag, the client also warns in the browser console.
+
+To fix it, use a policy that sends the origin, such as
+`strict-origin-when-cross-origin`, the browser default. If you can't, let the
+client change the page's policy right before it starts the redirect:
+
+```ts
+crossDomainClient({ setReferrerPolicy: true });
+```
+
+The page keeps that policy if the user comes back to it from the browser's
+back/forward cache.
 
 If you pass `disableRedirect: true`, start the redirect with
 `authClient.startOAuthRedirect(data.url)` instead of opening the URL yourself.
