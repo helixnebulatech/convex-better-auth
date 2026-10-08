@@ -1,5 +1,63 @@
 # Changelog
 
+## 0.13.3
+
+### Patch Changes
+
+- ebc196a: Cross domain: tie OAuth sign-in and account linking to the browser
+  that started them, as Better Auth does. `crossDomainClient` now starts the
+  redirect through the Convex site, which sets the OAuth state cookie, and the
+  callback checks it, as Better Auth does. The one-time token from an OAuth
+  sign-in can only be redeemed by the browser that started it, and one-time
+  tokens are only handed to `siteUrl`.
+
+  Deploy your Convex backend and your frontend together: an old client can't
+  complete an OAuth sign-in against the new server, and the other way round.
+  Users with the app already open need to reload it before signing in with an
+  OAuth provider. Email, magic link, OTP and existing sessions aren't affected.
+  If you pass `disableRedirect: true`, start the redirect with the new
+  `authClient.startOAuthRedirect(data.url)` instead of opening the URL yourself.
+
+  Like Better Auth, OAuth is only started for requests that carry your app's
+  origin. Apps with a referrer policy that hides it, such as `no-referrer` (the
+  default of `helmet`), get a `missing_or_null_origin` error: change the policy,
+  or pass the new `setReferrerPolicy: true` option to `crossDomainClient`. See
+  the React guide.
+
+- 0f6dcd6: `jwtCache.expirationToleranceSeconds` now refreshes the cookie JWT
+  that many seconds before it expires, as intended. It used to keep reusing a
+  JWT for up to that long after it had expired.
+- c877ca1: The Convex JWT set as a cookie on sign-in and sign-up no longer
+  includes user and session fields marked `returned: false`, matching the token
+  from `/convex/token` and Better Auth's `jwt` plugin.
+- a62606c: `verbose: true` no longer logs credentials from request and response
+  headers: `Cookie`, `Authorization`, `Set-Cookie`, `Better-Auth-Cookie`,
+  `Set-Better-Auth-Cookie`, `Set-Auth-Token`, `Set-Auth-JWT` and `X-Api-Key` are
+  redacted, redirect `Location` headers are logged without their query string,
+  which can carry one-time tokens, and the CORS router's debug output, which
+  logged raw headers, is no longer enabled. `verbose` still turns on Better
+  Auth's adapter `debugLogs`, which are unchanged and log full rows, as
+  documented on the Debugging page.
+- a00abbc: Compare null the way Better Auth's SQL adapters do. `lt`, `lte`,
+  `gt`, `gte`, `ne` and `not_in` no longer match documents where the field is
+  null or unset, and a range comparison against `null` matches nothing. Before,
+  Convex's ordering (null and unset below every value) made, for example,
+  `expiresAt lt now` also match documents without an `expiresAt`, so
+  `deleteMany` could delete them, and the two factor plugin's lock reset could
+  match an already cleared lock. `eq null` and `ne null` keep matching null and
+  unset fields (`IS NULL`, `IS NOT NULL`).
+- 0f6dcd6: With `jwtCache` enabled, server helpers (`getToken`,
+  `isAuthenticated`, `fetchAuth*`, `preloadAuthQuery`) now reuse the
+  `convex_jwt` cookie only if its signature verifies against the deployment's
+  JWKS, with the expected issuer and audience, and fetch a fresh token
+  otherwise. Previously the cookie was only decoded. The JWKS is cached per
+  server instance; the new `jwtCache.jwks` option verifies against a static JWKS
+  without fetching it, and `jwtCache.issuer` overrides the expected issuer.
+
+  In the Next.js helpers, `isAuthenticated()` no longer uses the cached JWT at
+  all: it checks the session with the server, like Better Auth's `getSession`,
+  so it turns `false` right after sign-out.
+
 ## 0.13.2
 
 ### Patch Changes
