@@ -98,3 +98,19 @@ If your Better Auth config uses the default `/api/auth` path, you can omit
 
 If you use CORS, pass `trustedOrigins` so the `OPTIONS` handler can respond
 without loading Better Auth.
+
+## Forwarded host headers
+
+The framework handlers (`@convex-dev/better-auth/nextjs`,
+`@convex-dev/better-auth/react-start`) send your app's host and protocol in
+`x-better-auth-forwarded-host` and `x-better-auth-forwarded-proto`. The routes
+registered by `registerRoutes()` and `registerRoutesLazy()` copy them to
+`x-forwarded-host` and `x-forwarded-proto` before calling Better Auth.
+
+Your Convex site URL is publicly reachable, so any client can set these headers.
+Better Auth ignores them unless `advanced.trustedProxyHeaders` is enabled. If
+you enable it, the host used for the base URL, and so for links in emails such
+as password reset and verification links, is chosen by the caller. Use a static
+`baseURL`, or a dynamic `baseURL` whose `allowedHosts` lists only exact hosts
+you control, without wildcards on shared platform domains such as
+`*.vercel.app`.
