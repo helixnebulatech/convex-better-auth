@@ -160,8 +160,10 @@ export const crossDomain = ({ siteUrl }: { siteUrl: string }) => {
           handler: createAuthMiddleware(async (ctx) => {
             // Mostly copied from the one-time-token plugin
             const session = ctx.context.newSession;
+            // No new session is expected on some callbacks, e.g. linkSocial
+            // (the user is already signed in) or error redirects. There is
+            // nothing to hand off, so keep Better Auth's redirect as is.
             if (!session) {
-              ctx.context.logger.error("No session found");
               return;
             }
             const token = generateRandomString(32);

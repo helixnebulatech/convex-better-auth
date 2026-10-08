@@ -12,6 +12,7 @@ const BASE_PATH = "/api/auth";
 
 describe("crossDomain plugin", async () => {
   let capturedMagicLinkUrl = "";
+  const loggedErrors: string[] = [];
 
   const db: MemoryDB = {
     user: [],
@@ -25,6 +26,13 @@ describe("crossDomain plugin", async () => {
     basePath: BASE_PATH,
     secret: "test-secret-at-least-thirty-two-characters-long",
     database: memoryAdapter(db),
+    logger: {
+      log: (level, message) => {
+        if (level === "error") {
+          loggedErrors.push(message);
+        }
+      },
+    },
     emailAndPassword: {
       enabled: true,
       requireEmailVerification: false,
@@ -140,6 +148,32 @@ describe("crossDomain plugin", async () => {
         password: "testpassword123",
       });
       expect(response.status).not.toBe(302);
+    });
+  });
+
+  describe("one-time-token handoff on callbacks", () => {
+    it("does not log an error when the callback creates no session", async () => {
+      loggedErrors.length = 0;
+      const response = await auth.handler(
+        new Request(
+          `${AUTH_BASE_URL}${BASE_PATH}/magic-link/verify?token=invalid&callbackURL=${encodeURIComponent(SITE_URL)}`
+        )
+      );
+      expect(response.status).toBe(302);
+      const location = new URL(response.headers.get("location")!);
+      expect(location.searchParams.get("error")).toBe("INVALID_TOKEN");
+      expect(location.searchParams.has("ott")).toBe(false);
+      expect(loggedErrors).not.toContain("No session found");
+    });
+
+    it("appends a one-time token when the callback creates a session", async () => {
+      capturedMagicLinkUrl = "";
+      await post("/sign-in/magic-link", { email: "test@example.com" });
+      const response = await auth.handler(new Request(capturedMagicLinkUrl));
+      expect(response.status).toBe(302);
+      const location = new URL(response.headers.get("location")!);
+      expect(location.origin).toBe(SITE_URL);
+      expect(location.searchParams.get("ott")).toMatch(/^.{32}$/);
     });
   });
 });
