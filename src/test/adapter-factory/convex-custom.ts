@@ -973,6 +973,48 @@ export const convexCustomTestSuite = createTestSuite(
         ).toEqual(excluded);
       },
 
+    "should apply offset after sorting, including OR unions": async () => {
+      const users = [];
+      for (const letter of ["a", "b", "c", "d", "e"]) {
+        users.push(
+          await adapter.create({
+            model: "user",
+            data: { name: "offset-user", email: `${letter}@offset.test` },
+          }),
+        );
+      }
+      expect(
+        await adapter.findMany({
+          model: "user",
+          where: [{ field: "name", value: "offset-user" }],
+          sortBy: { field: "email", direction: "asc" },
+          limit: 2,
+          offset: 1,
+        }),
+      ).toEqual([users[1], users[2]]);
+      expect(
+        await adapter.findMany({
+          model: "user",
+          where: [{ field: "name", value: "offset-user" }],
+          offset: 3,
+        }),
+      ).toEqual([users[3], users[4]]);
+      // (email = a OR name = offset-user) AND email != e, sorted desc
+      expect(
+        await adapter.findMany({
+          model: "user",
+          where: [
+            { field: "email", value: "a@offset.test", connector: "OR" },
+            { field: "name", value: "offset-user", connector: "OR" },
+            { field: "email", operator: "ne", value: "e@offset.test" },
+          ],
+          sortBy: { field: "email", direction: "desc" },
+          limit: 2,
+          offset: 1,
+        }),
+      ).toEqual([users[2], users[1]]);
+    },
+
     "should not match an id from a different model": async () => {
       const user = await adapter.create({
         model: "user",

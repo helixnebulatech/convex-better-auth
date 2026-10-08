@@ -327,10 +327,16 @@ export const convexAdapter = <
             where: parseWhere(data.where),
           });
         },
-        findMany: async ({ modelKey: _modelKey, ...data }): Promise<any[]> => {
-          if (data.offset) {
-            throw new Error("offset not supported");
-          }
+        findMany: async ({
+          modelKey: _modelKey,
+          offset = 0,
+          ...data
+        }): Promise<any[]> => {
+          // The component paginates by cursor only, so fetch offset + limit
+          // rows and drop the first offset here. Deep offsets read every
+          // skipped row.
+          const limit =
+            data.limit !== undefined ? data.limit + offset : undefined;
 
           const orWhere = splitOrWhere(data.where);
           if (orWhere) {
@@ -347,7 +353,7 @@ export const convexAdapter = <
                     paginationOpts,
                   });
                 },
-                { limit: data.limit }
+                { limit }
               )
             );
             let docs = dedupeDocsById(results.flatMap((r) => r.docs));
@@ -357,9 +363,7 @@ export const convexAdapter = <
                 data.sortBy.direction,
               ]);
             }
-            if (data.limit !== undefined) {
-              docs = docs.slice(0, data.limit);
-            }
+            docs = docs.slice(offset, limit);
             return docs.map((doc) => selectDocFields(doc, data.select));
           }
 
@@ -372,9 +376,9 @@ export const convexAdapter = <
                 paginationOpts,
               });
             },
-            { limit: data.limit }
+            { limit }
           );
-          return result.docs;
+          return offset ? result.docs.slice(offset) : result.docs;
         },
         count: async ({ modelKey: _modelKey, ...data }) => {
           // Yes, count is just findMany returning a number.
