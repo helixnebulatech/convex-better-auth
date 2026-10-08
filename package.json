@@ -1,10 +1,10 @@
 {
   "name": "@helixnebulatech/convex-better-auth",
   "description": "Fork of @convex-dev/better-auth that tracks the latest Better Auth release.",
-  "repository": "github:helixnebulatech/better-auth",
-  "homepage": "https://github.com/helixnebulatech/better-auth#readme",
+  "repository": "github:helixnebulatech/convex-better-auth",
+  "homepage": "https://github.com/helixnebulatech/convex-better-auth#readme",
   "bugs": {
-    "url": "https://github.com/helixnebulatech/better-auth/issues"
+    "url": "https://github.com/helixnebulatech/convex-better-auth/issues"
   },
   "version": "0.13.0",
   "license": "Apache-2.0",

@@ -50,8 +50,8 @@ upstream where they help.
 
 Anyone is welcome to use it. If you find a bug or need a newer Better Auth
 version, feel free to
-[open an issue](https://github.com/helixnebulatech/better-auth/issues) or a pull
-request. Issues that also affect the official component are best reported
+[open an issue](https://github.com/helixnebulatech/convex-better-auth/issues) or
+a pull request. Issues that also affect the official component are best reported
 [upstream](https://github.com/get-convex/better-auth/issues) as well.
 
 ### Thanks
