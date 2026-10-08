@@ -69,10 +69,32 @@ describe("convexBetterAuthNextJs handler", () => {
     await handler.POST(request);
     const headers = headersOf(fetchSpy);
     expect(headers.get("host")).toBe(new URL(SITE_URL).host);
-    expect(headers.get("x-forwarded-host")).toBe("app.example.com");
+    expect(headers.get("x-forwarded-host")).toBeNull();
     expect(headers.get("x-forwarded-proto")).toBe("https");
     expect(headers.get("x-better-auth-forwarded-host")).toBe("app.example.com");
     expect(headers.get("x-better-auth-forwarded-proto")).toBe("https");
+  });
+
+  // get-convex/better-auth#422: Convex's edge routes on x-forwarded-host, so
+  // an app domain there 404s before the component runs. The component
+  // restores it from x-better-auth-forwarded-host instead.
+  it("drops an inbound x-forwarded-host", async () => {
+    const { handler, fetchSpy } = setup();
+    const request = new Request(
+      "https://app.example.com/api/auth/sign-in/email",
+      {
+        method: "POST",
+        body: "{}",
+        headers: {
+          "x-forwarded-host": "proxy.internal.example.com",
+          "x-better-auth-forwarded-host": "spoofed.example.com",
+        },
+      }
+    );
+    await handler.POST(request);
+    const headers = headersOf(fetchSpy);
+    expect(headers.get("x-forwarded-host")).toBeNull();
+    expect(headers.get("x-better-auth-forwarded-host")).toBe("app.example.com");
   });
 
   it("buffers POST body and forwards as ArrayBuffer", async () => {
