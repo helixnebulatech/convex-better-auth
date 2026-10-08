@@ -3,6 +3,9 @@ import type { AuthConfig } from "convex/server";
 import { betterAuth } from "better-auth/minimal";
 import type { BetterAuthOptions } from "better-auth/minimal";
 import { memoryAdapter } from "better-auth/adapters/memory";
+import { admin } from "better-auth/plugins/admin";
+import { jwt as jwtPlugin } from "better-auth/plugins/jwt";
+import { decodeJwt } from "jose";
 import type { MemoryDB } from "better-auth/adapters/memory";
 import { getAuthConfigProvider } from "../../auth-config.js";
 import { convex } from "./index.js";
@@ -183,5 +186,124 @@ describe("convex plugin static JWKS", async () => {
     expect(res.status).toBe(200);
     const { keys } = (await res.json()) as { keys: { kid: string }[] };
     expect(keys.map((key) => key.kid)).toEqual([newer.id]);
+  });
+});
+
+describe("convex plugin default JWT payload", () => {
+  // Same user setup for Better Auth's own jwt plugin and ours: plugin fields,
+  // a returned additional field and a `returned: false` one.
+  const makeParityAuth = (plugins: BetterAuthOptions["plugins"]) => {
+    process.env.CONVEX_SITE_URL = baseURL;
+    const db: MemoryDB = {
+      user: [],
+      session: [],
+      account: [],
+      verification: [],
+      jwks: [],
+    };
+    return betterAuth({
+      baseURL,
+      secret: "test-secret-at-least-thirty-two-characters-long",
+      emailAndPassword: { enabled: true },
+      user: {
+        additionalFields: {
+          plan: { type: "string", required: false, defaultValue: "free" },
+          internalNote: {
+            type: "string",
+            required: false,
+            defaultValue: "hidden",
+            returned: false,
+          },
+        },
+      },
+      database: (options: BetterAuthOptions) => {
+        const adapter = memoryAdapter(db)(options);
+        return {
+          ...adapter,
+          options: { ...adapter.options, isRunMutationCtx: true },
+        };
+      },
+      plugins: [admin(), ...(plugins ?? [])],
+    });
+  };
+  type ParityAuth = ReturnType<typeof makeParityAuth>;
+
+  const credentials = {
+    email: "parity@example.com",
+    password: "testpassword123",
+    name: "Parity",
+    image: "https://example.com/avatar.png",
+  };
+  const post = (auth: ParityAuth, path: string, body: object) =>
+    auth.handler(
+      new Request(`${baseURL}/api/auth${path}`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(body),
+      })
+    );
+  const cookiesOf = (res: Response) =>
+    res.headers
+      .getSetCookie()
+      .map((c) => c.split(";")[0])
+      .join("; ");
+  const jwtCookieOf = (res: Response) =>
+    /better-auth\.convex_jwt=([^;]+)/.exec(cookiesOf(res))?.[1];
+  const claimNames = (token: string) => {
+    const {
+      iat: _iat,
+      exp: _exp,
+      iss: _iss,
+      aud: _aud,
+      sub: _sub,
+      ...claims
+    } = decodeJwt(token);
+    return Object.keys(claims).sort();
+  };
+
+  it("holds the same user fields as Better Auth's jwt plugin, minus id and image", async () => {
+    const native = makeParityAuth([jwtPlugin()]);
+    const nativeCookie = cookiesOf(
+      await post(native, "/sign-up/email", credentials)
+    );
+    const nativeToken = (
+      await (
+        await native.handler(
+          new Request(`${baseURL}/api/auth/token`, {
+            headers: { cookie: nativeCookie },
+          })
+        )
+      ).json()
+    ).token;
+    const nativeClaims = claimNames(nativeToken);
+    expect(nativeClaims).toContain("plan");
+    expect(nativeClaims).toContain("role");
+    expect(nativeClaims).not.toContain("internalNote");
+    const expected = nativeClaims
+      .filter((name) => name !== "id" && name !== "image")
+      .concat("sessionId")
+      .sort();
+
+    const ours = makeParityAuth([
+      convex({ authConfig: { providers: [getAuthConfigProvider()] } }),
+    ]);
+    const signUp = await post(ours, "/sign-up/email", credentials);
+    const signIn = await post(ours, "/sign-in/email", {
+      email: credentials.email,
+      password: credentials.password,
+    });
+    const tokenRes = await ours.handler(
+      new Request(`${baseURL}/api/auth/convex/token`, {
+        headers: { cookie: cookiesOf(signIn) },
+      })
+    );
+    const tokens = {
+      signUpCookie: jwtCookieOf(signUp)!,
+      signInCookie: jwtCookieOf(signIn)!,
+      tokenEndpoint: (await tokenRes.json()).token,
+    };
+    for (const token of Object.values(tokens)) {
+      expect(claimNames(token)).toEqual(expected);
+    }
   });
 });

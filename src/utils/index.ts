@@ -10,6 +10,7 @@ import type {
   GenericQueryCtx,
 } from "convex/server";
 import { JWT_COOKIE_NAME } from "../plugins/convex/index.js";
+import { createPublicJwks } from "../auth-config.js";
 import * as jose from "jose";
 import type { Jwk } from "better-auth/plugins/jwt";
 import type { BaseURLConfig } from "@better-auth/core";
@@ -127,9 +128,54 @@ export type GetTokenOptions = {
   cookiePrefix?: string;
   jwtCache?: {
     enabled: boolean;
+    /**
+     * A cached JWT is refreshed this many seconds before its `exp`.
+     * @default 60
+     */
     expirationToleranceSeconds?: number;
     isAuthError: (error: unknown) => boolean;
+    /**
+     * Expected `iss` of the cached JWT. Defaults to the Convex site URL, which
+     * is what the convex plugin signs with (`CONVEX_SITE_URL`).
+     */
+    issuer?: string;
+    /**
+     * Static JWKS, the same value passed to the convex plugin `jwks` option.
+     * Verifies the cached JWT locally instead of fetching the JWKS.
+     */
+    jwks?: string;
   };
+};
+
+// Audience and algorithms the convex plugin signs with (see getJwksAlg)
+const JWT_AUDIENCE = "convex";
+const JWT_ALGORITHMS = ["RS256", "ES256", "EdDSA"];
+
+// One key set per JWKS source and server instance. Remote sets are cached by
+// jose (10 min max age) and refetched on an unknown `kid`, so key rotation is
+// picked up, rate limited to one fetch per 30s.
+const verificationKeys = new Map<string, jose.JWTVerifyGetKey>();
+const getVerificationKeys = (jwksUrl: string, staticJwks?: string) => {
+  const cacheKey = staticJwks ? `static:${staticJwks}` : jwksUrl;
+  let keys = verificationKeys.get(cacheKey);
+  if (!keys) {
+    keys = staticJwks
+      ? jose.createLocalJWKSet(createPublicJwks(JSON.parse(staticJwks)))
+      : jose.createRemoteJWKSet(new URL(jwksUrl));
+    verificationKeys.set(cacheKey, keys);
+  }
+  return keys;
+};
+
+export const isCachedTokenUsable = (
+  claims: { exp?: number },
+  jwtCache?: GetTokenOptions["jwtCache"]
+) => {
+  if (!claims.exp) {
+    return false;
+  }
+  const now = Math.floor(Date.now() / 1000);
+  return claims.exp - now > (jwtCache?.expirationToleranceSeconds ?? 60);
 };
 
 export const getToken = async (
@@ -150,13 +196,13 @@ export const getToken = async (
     headers.set("x-better-auth-forwarded-proto", forwardedProto);
   }
   headers.delete("x-forwarded-host");
+  const basePath = opts?.basePath
+    ? (opts.basePath.startsWith("/")
+        ? opts.basePath
+        : `/${opts.basePath}`
+      ).replace(/\/+$/, "")
+    : "/api/auth";
   const fetchToken = async () => {
-    const basePath = opts?.basePath
-      ? (opts.basePath.startsWith("/")
-          ? opts.basePath
-          : `/${opts.basePath}`
-        ).replace(/\/+$/, "")
-      : "/api/auth";
     const { data } = await betterFetch<{ token: string }>(
       `${basePath}/convex/token`,
       {
@@ -176,19 +222,28 @@ export const getToken = async (
   if (!token) {
     return await fetchToken();
   }
+  // The cookie is client supplied: only reuse it if it verifies against the
+  // Convex JWKS, otherwise `isAuthenticated` would trust a forged token.
+  const normalizedSiteUrl = siteUrl.replace(/\/+$/, "");
   try {
-    const claims = jose.decodeJwt(token);
-    const exp = claims?.exp;
-    const now = Math.floor(new Date().getTime() / 1000);
-    const isExpired = exp
-      ? now > exp + (opts?.jwtCache?.expirationToleranceSeconds ?? 60)
-      : true;
-    if (!isExpired) {
+    const { payload } = await jose.jwtVerify(
+      token,
+      getVerificationKeys(
+        `${normalizedSiteUrl}${basePath}/convex/jwks`,
+        opts.jwtCache.jwks
+      ),
+      {
+        issuer: opts.jwtCache.issuer ?? normalizedSiteUrl,
+        audience: JWT_AUDIENCE,
+        algorithms: JWT_ALGORITHMS,
+      }
+    );
+    if (isCachedTokenUsable(payload, opts.jwtCache)) {
       return { isFresh: false, token };
     }
-  } catch (error) {
-    // eslint-disable-next-line no-console
-    console.error("Error decoding JWT", error);
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  } catch (_error) {
+    // Invalid, expired or unverifiable: fetch a fresh token instead
   }
   return await fetchToken();
 };

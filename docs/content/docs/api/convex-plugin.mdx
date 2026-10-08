@@ -53,7 +53,10 @@ Optional JWT configuration options.
 | `definePayload`     | `function` | See below          | Custom function to define JWT payload |
 
 The default `definePayload` function includes all user fields except `id` and
-`image`, plus the session ID and issued-at timestamp:
+`image`, plus the session ID and issued-at timestamp. User fields are the ones
+Better Auth returns for the session, so fields with `returned: false` are left
+out, as in Better Auth's `jwt` plugin. Plugin fields such as `role` and `banned`
+from the admin plugin, and your `additionalFields`, are included:
 
 ```ts
 definePayload: ({ user, session }) => ({
@@ -62,6 +65,20 @@ definePayload: ({ user, session }) => ({
   iat: Math.floor(new Date().getTime() / 1000),
 });
 ```
+
+<Callout type="warn">
+  The JWT is readable by the client: it is returned by the token endpoint and
+  stored in the `convex_jwt` cookie for SSR. Don't put secrets in the payload.
+
+Convex validates the JWT signature and expiration, not the session. After
+sign-out, session revocation or a ban, `ctx.auth.getUserIdentity()` keeps
+returning the identity until the JWT expires, and claims such as `role` or
+`banned` reflect the user when the token was issued. Use
+`authComponent.getAuthUser` or `authComponent.safeGetAuthUser`, which check the
+session, where that matters, and lower `expirationSeconds` to shorten the
+window.
+
+</Callout>
 
 **Example: Custom payload**
 

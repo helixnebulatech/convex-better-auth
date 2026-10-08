@@ -81,6 +81,25 @@ If a call made with the cookie JWT fails and `isAuthError` returns `true`, a
 fresh token is fetched and the call is retried once. Mutations and actions are
 retried too, so `isAuthError` should only match errors a fresh token can fix.
 
+The cookie JWT is only reused if its signature verifies against your
+deployment's JWKS, with the issuer set to the Convex site URL and the audience
+`convex`. Otherwise a fresh token is fetched. The JWKS is fetched from
+`<convexSiteUrl><basePath>/convex/jwks` once and cached per server instance. A
+JWT signed with a key the cache doesn't know yet causes a JWKS refetch, at most
+once every 30 seconds; until then a fresh token is fetched instead.
+
+| Option                       | Default         | Description                                                                                     |
+| ---------------------------- | --------------- | ----------------------------------------------------------------------------------------------- |
+| `expirationToleranceSeconds` | `60`            | A cookie JWT expiring within this many seconds is not reused, a fresh token is fetched instead. |
+| `jwks`                       | -               | Static JWKS, the same value passed to the Convex plugin. Verifies without fetching the JWKS.    |
+| `issuer`                     | `convexSiteUrl` | Expected `iss`. Set this if `convexSiteUrl` differs from `CONVEX_SITE_URL` in your deployment.  |
+
+`isAuthenticated()` always checks the session with the server, like Better
+Auth's `getSession`, so it doesn't use the cached JWT. Calls to Convex do: like
+`ctx.auth.getUserIdentity()` in Convex, a cached JWT stays valid after sign-out
+or session revocation until it expires (15 minutes by default). Use a
+session-checked query, such as `authComponent.getAuthUser`, where that matters.
+
 ## Static JWKS
 
 **Faster page loads, navigation, and client readiness by speeding up Convex

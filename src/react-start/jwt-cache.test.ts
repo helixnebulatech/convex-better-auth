@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import * as jose from "jose";
 import { makeFunctionReference } from "convex/server";
 import { convexBetterAuthReactStart } from "./index.js";
 
@@ -15,14 +16,24 @@ const CONVEX_URL = "https://test.convex.cloud";
 const queryRef = makeFunctionReference<"query">("tasks:list");
 const mutationRef = makeFunctionReference<"mutation">("tasks:add");
 
-// Unsigned JWT with an unexpired `exp`, as the convex plugin stores it in the
-// `better-auth.convex_jwt` cookie. getToken only decodes it.
-const cookieJwt = (() => {
-  const encode = (value: object) =>
-    Buffer.from(JSON.stringify(value)).toString("base64url");
-  const exp = Math.floor(Date.now() / 1000) + 600;
-  return `${encode({ alg: "none" })}.${encode({ sub: "user", exp })}.sig`;
-})();
+// Signed JWT with an unexpired `exp`, as the convex plugin stores it in the
+// `better-auth.convex_jwt` cookie. getToken verifies it against `jwks`.
+const { privateKey, publicKey } = await jose.generateKeyPair("RS256");
+const jwks = JSON.stringify([
+  {
+    id: "test-key",
+    alg: "RS256",
+    publicKey: JSON.stringify(await jose.exportJWK(publicKey)),
+    privateKey: "",
+    createdAt: 0,
+  },
+]);
+const cookieJwt = await new jose.SignJWT({ sub: "user" })
+  .setProtectedHeader({ alg: "RS256", kid: "test-key" })
+  .setIssuer(SITE_URL)
+  .setAudience("convex")
+  .setExpirationTime("10m")
+  .sign(privateKey);
 
 const isAuthError = (error: unknown) =>
   error instanceof Error && /auth/i.test(error.message);
@@ -31,7 +42,7 @@ const setup = () =>
   convexBetterAuthReactStart({
     convexUrl: CONVEX_URL,
     convexSiteUrl: SITE_URL,
-    jwtCache: { enabled: true, isAuthError },
+    jwtCache: { enabled: true, isAuthError, jwks },
   });
 
 const json = (body: unknown, status = 200) =>

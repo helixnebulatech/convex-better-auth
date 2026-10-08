@@ -177,6 +177,14 @@ description: Install and configure Convex + Better Auth for React.
     });
     ```
 
+    <Callout type="warn">
+      `crossDomainClient` stores the session cookie and the Convex JWT in
+      `localStorage`, where any script running on your site can read them. A
+      cross-site scripting (XSS) vulnerability can then expose the session,
+      not only the current page. Keep a strict Content Security Policy, or
+      pass your own store with the `storage` option.
+    </Callout>
+
   </div>
 
   <div className="fd-step">

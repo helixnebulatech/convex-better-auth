@@ -143,7 +143,9 @@ export const convexBetterAuthNextJs = (
     },
     handler: nextJsHandler(siteUrl),
     isAuthenticated: async () => {
-      const token = await cachedGetToken();
+      // Always check the session on the server, like Better Auth's
+      // getSession. A cached JWT stays valid after sign-out until it expires.
+      const token = await cachedGetToken({ forceRefresh: true });
       return !!token.token;
     },
     preloadAuthQuery: async <Query extends FunctionReference<"query">>(

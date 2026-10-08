@@ -5,6 +5,7 @@ import {
   createAuthMiddleware,
   sessionMiddleware,
 } from "better-auth/api";
+import { parseSessionOutput, parseUserOutput } from "better-auth/db";
 import { bearer as bearerPlugin } from "better-auth/plugins/bearer";
 import { jwt as jwtPlugin } from "better-auth/plugins/jwt";
 import type { JwtOptions, Jwk } from "better-auth/plugins/jwt";
@@ -324,8 +325,19 @@ export const convex = (opts: {
             // Set jwt cookie at login for authenticated ssr
             const originalSession = ctx.context.session;
             try {
+              // `newSession` holds raw rows. Filter them like getSession does,
+              // so the payload matches the /convex/token one and fields with
+              // `returned: false` stay out, as in Better Auth's jwt plugin.
+              const newSession = ctx.context.newSession;
               ctx.context.session =
-                ctx.context.session ?? ctx.context.newSession;
+                ctx.context.session ??
+                (newSession && {
+                  session: parseSessionOutput(
+                    ctx.context.options,
+                    newSession.session
+                  ),
+                  user: parseUserOutput(ctx.context.options, newSession.user),
+                });
               const { token } = await jwt.endpoints.getToken({
                 ...ctx,
                 headers: {},

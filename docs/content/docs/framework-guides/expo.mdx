@@ -359,6 +359,12 @@ Finally, add the cross-domain client plugin to the Better Auth client instance.
   included in the client instance at the same time.
 </Callout>
 
+<Callout type="warn">
+  On web, `crossDomainClient` stores the session cookie and the Convex JWT in
+  `localStorage`, where any script running on the page can read them. Pass your
+  own store with the `storage` option to change this.
+</Callout>
+
 ```ts title="src/lib/auth-client.ts"
 import { expoClient } from "@better-auth/expo/client";
 import {
