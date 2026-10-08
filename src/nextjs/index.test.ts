@@ -98,6 +98,30 @@ describe("convexBetterAuthNextJs handler", () => {
     expect(initOf(fetchSpy).body).toBeUndefined();
   });
 
+  it("strips hop-by-hop headers from the upstream response", async () => {
+    const { handler, fetchSpy } = setup();
+    fetchSpy.mockResolvedValue(
+      new Response(JSON.stringify({ ok: true }), {
+        headers: {
+          "content-type": "application/json",
+          "set-cookie": "a=1; Path=/",
+          connection: "keep-alive",
+          "keep-alive": "timeout=5",
+          "transfer-encoding": "chunked",
+        },
+      })
+    );
+    const response = await handler.GET(
+      new Request("https://app.example.com/api/auth/ok")
+    );
+    expect(response.status).toBe(200);
+    expect(response.headers.get("set-cookie")).toBe("a=1; Path=/");
+    expect(response.headers.get("connection")).toBeNull();
+    expect(response.headers.get("keep-alive")).toBeNull();
+    expect(response.headers.get("transfer-encoding")).toBeNull();
+    await expect(response.json()).resolves.toEqual({ ok: true });
+  });
+
   it("does not set body for empty POST", async () => {
     const { handler, fetchSpy } = setup();
     const request = new Request("https://app.example.com/api/auth/sign-out", {

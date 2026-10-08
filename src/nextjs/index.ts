@@ -13,6 +13,7 @@ import type {
 } from "convex/server";
 import React from "react";
 import { getToken } from "../utils/index.js";
+import { toProxyResponse } from "../utils/proxy.js";
 import type { GetTokenOptions } from "../utils/index.js";
 import type { EmptyObject } from "convex-helpers";
 
@@ -69,7 +70,7 @@ const handler = async (request: Request, siteUrl: string) => {
     }
   }
 
-  return fetch(nextUrl, init);
+  return toProxyResponse(await fetch(nextUrl, init));
 };
 
 const nextJsHandler = (siteUrl: string) => ({
