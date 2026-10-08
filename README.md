@@ -30,11 +30,14 @@ production for our own projects, and we run this fork in all of them.
 
 ### Use it
 
-Install it with an npm alias, so your existing `@convex-dev/better-auth` imports
-keep working:
+Install it with a package alias, so your existing `@convex-dev/better-auth`
+imports keep working:
 
 ```sh
+# npm
 npm install @convex-dev/better-auth@npm:@helixnebulatech/convex-better-auth@^0.13.0 better-auth@~1.7.7
+# pnpm
+pnpm add @convex-dev/better-auth@npm:@helixnebulatech/convex-better-auth@^0.13.0 better-auth@~1.7.7
 ```
 
 Then follow the

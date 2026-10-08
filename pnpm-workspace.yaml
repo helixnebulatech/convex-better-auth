@@ -1,0 +1,12 @@
+packages:
+  - examples/*
+  - e2e
+  - docs
+
+# Do not install dependency versions published less than 7 days ago. To pull an
+# urgent fix earlier, add the package to minimumReleaseAgeExclude.
+minimumReleaseAge: 10080
+
+allowBuilds:
+  esbuild: true
+  unrs-resolver: true

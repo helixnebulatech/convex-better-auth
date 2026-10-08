@@ -16,14 +16,14 @@ EXAMPLE_DIR="$SCRIPT_DIR/../examples/react"
 pushd "$EXAMPLE_DIR" > /dev/null
 
 echo "Setting environment variables on local backend..."
-npx convex env set SITE_URL "$SITE_URL" --url "$CONVEX_URL" --admin-key "$ADMIN_KEY"
-npx convex env set IS_TEST "true" --url "$CONVEX_URL" --admin-key "$ADMIN_KEY"
-npx convex env set BETTER_AUTH_SECRET "e2e-test-secret-key-do-not-use-in-production" --url "$CONVEX_URL" --admin-key "$ADMIN_KEY"
+pnpm exec convex env set SITE_URL "$SITE_URL" --url "$CONVEX_URL" --admin-key "$ADMIN_KEY"
+pnpm exec convex env set IS_TEST "true" --url "$CONVEX_URL" --admin-key "$ADMIN_KEY"
+pnpm exec convex env set BETTER_AUTH_SECRET "e2e-test-secret-key-do-not-use-in-production" --url "$CONVEX_URL" --admin-key "$ADMIN_KEY"
 
 echo "Deploying functions to local backend..."
-npx convex deploy --url "$CONVEX_URL" --admin-key "$ADMIN_KEY" -y
+pnpm exec convex deploy --url "$CONVEX_URL" --admin-key "$ADMIN_KEY" -y
 
 popd > /dev/null
 
 echo "Running Playwright tests..."
-npx playwright test --config "$SCRIPT_DIR/playwright.config.ts"
+pnpm exec playwright test --config "$SCRIPT_DIR/playwright.config.ts"

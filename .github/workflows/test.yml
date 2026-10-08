@@ -22,35 +22,30 @@ jobs:
         with:
           persist-credentials: false
 
+      # Reads the pnpm version from packageManager in package.json
+      - name: pnpm setup
+        uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+
       - name: Node setup
         uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
         with:
-          cache-dependency-path: package.json
           node-version: "24.x"
-          cache: "npm"
+          cache: "pnpm"
 
       - name: Install and build
         run: |
-          npm i --min-release-age=0
-          npm run build
-      - name: Install example dependencies
-        run: |
-          cd examples/next && npm i &
-          cd examples/react && npm i &
-          cd examples/tanstack && npm i &
-          wait
+          pnpm install --frozen-lockfile
+          pnpm run build
       - name: Publish package for testing branch
         run:
-          npx pkg-pr-new publish || echo "Have you set up pkg-pr-new for this
-          repo?"
+          pnpm exec pkg-pr-new publish || echo "Have you set up pkg-pr-new for
+          this repo?"
       - name: Test
         run: |
-          npm run test
-          npm run typecheck
-          npm run lint
-      - name: Install e2e dependencies
-        run: cd e2e && npm i
+          pnpm run test
+          pnpm run typecheck
+          pnpm run lint
       - name: Install Playwright browsers
-        run: cd e2e && npx playwright install --with-deps chromium
+        run: cd e2e && pnpm exec playwright install --with-deps chromium
       - name: Run e2e tests
-        run: cd e2e && npm run test
+        run: cd e2e && pnpm run test

@@ -10,10 +10,13 @@ the latest Better Auth without waiting for upstream releases.
 
 ## Use it in an app
 
-Install it under the upstream name with an npm alias, so no imports change:
+Install it under the upstream name with a package alias, so no imports change:
 
 ```sh
+# npm
 npm install @convex-dev/better-auth@npm:@helixnebulatech/convex-better-auth@^0.13.0 better-auth@~1.7.7
+# pnpm
+pnpm add @convex-dev/better-auth@npm:@helixnebulatech/convex-better-auth@^0.13.0 better-auth@~1.7.7
 ```
 
 Then follow the
@@ -43,13 +46,34 @@ Keep `name`, `repository`, `homepage`, `bugs` and `publishConfig` in
 supports the Better Auth line we need, consider moving apps back to
 `@convex-dev/better-auth`.
 
+## Development
+
+The repo uses pnpm, pinned in `packageManager`. The examples, `e2e` and `docs`
+are workspace packages that share one `pnpm-lock.yaml`, so a single
+`pnpm install` at the root sets everything up. See
+[CONTRIBUTING.md](./CONTRIBUTING.md).
+
 ## Update Better Auth
 
+Set the new version in the root `package.json` (`better-auth`,
+`@better-auth/core`, `@better-auth/test-utils`) and in each example's
+`package.json`, then:
+
 ```sh
-npm install -E better-auth@<version> @better-auth/core@<version> @better-auth/test-utils@<version>
-npx auth generate --output src/component/schema.ts
-npm run build:codegen  # needs a Convex deployment (CONVEX_DEPLOYMENT)
-npm test && npm run typecheck && npm run lint
+pnpm install
+pnpm dlx auth@<version> generate --output src/component/schema.ts
+pnpm run build:codegen  # needs a Convex deployment (CONVEX_DEPLOYMENT)
+pnpm test && pnpm run typecheck && pnpm run lint
+```
+
+`pnpm-workspace.yaml` blocks versions published less than 7 days ago. To use a
+newer Better Auth release before that, add its packages to
+`minimumReleaseAgeExclude`:
+
+```yaml
+minimumReleaseAgeExclude:
+  - better-auth
+  - "@better-auth/*"
 ```
 
 Check the Better Auth changelog for new adapter methods or arguments. The
@@ -58,10 +82,12 @@ calls until the adapter strips or handles it.
 
 ## Release
 
+Publish with pnpm, not npm. pnpm replaces `workspace:` versions on publish.
+
 ```sh
-npm version <patch|minor> --no-git-tag-version
+pnpm version <patch|minor> --no-git-tag-version
 node scripts/sync-version.mjs
-rm -rf dist *.tsbuildinfo && npm run build && npm test
-npm publish
+rm -rf dist *.tsbuildinfo && pnpm run build && pnpm test
+pnpm publish
 git commit -am "<version>" && git tag v<version> && git push --follow-tags
 ```

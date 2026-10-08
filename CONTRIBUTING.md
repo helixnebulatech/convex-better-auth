@@ -1,23 +1,27 @@
 # Developing guide
 
+This repo uses [pnpm](https://pnpm.io). The version is pinned in the
+`packageManager` field of `package.json`, and pnpm switches to it on its own
+inside the repo.
+
 ## Running locally
 
+The examples, `e2e` and `docs` are pnpm workspace packages, so one install at
+the root covers all of them.
+
 ```sh
-npm i
-cd example
-npm i
-npx convex dev
+pnpm install
+cd examples/react
+pnpm exec convex dev
 ```
 
 ## Testing
 
 ```sh
-rm -rf dist/ && npm run build
-npm run typecheck
-npm run test
-cd example
-npm run lint
-cd ..
+rm -rf dist/ && pnpm run build
+pnpm run typecheck
+pnpm run test
+pnpm run lint
 ```
 
 ## Deploying
@@ -25,17 +29,17 @@ cd ..
 ### Building a one-off package
 
 ```sh
-rm -rf dist/ && npm run build
-npm pack
+rm -rf dist/ && pnpm run build
+pnpm pack
 ```
 
 ### Deploying a new version
 
 ```sh
 # this will change the version and commit it (if you run it in the root directory)
-npm version patch
-npm publish --dry-run
+pnpm version patch
+pnpm publish --dry-run
 # sanity check files being included
-npm publish
+pnpm publish
 git push --tags
 ```
