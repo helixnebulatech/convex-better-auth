@@ -13,6 +13,7 @@ import type {
 } from "convex/server";
 import React from "react";
 import { getToken } from "../utils/index.js";
+import { toProxyResponse } from "../utils/proxy.js";
 import type { GetTokenOptions } from "../utils/index.js";
 import type { EmptyObject } from "convex-helpers";
 
@@ -49,9 +50,12 @@ const handler = async (request: Request, siteUrl: string) => {
   headers.delete("transfer-encoding");
   headers.delete("content-length");
   headers.delete("connection");
+  // Convex's edge resolves the deployment from `x-forwarded-host`, so the app
+  // host there 404s; the component restores it from
+  // `x-better-auth-forwarded-host` before calling Better Auth.
+  headers.delete("x-forwarded-host");
   headers.set("accept-encoding", "application/json");
   headers.set("host", new URL(siteUrl).host);
-  headers.set("x-forwarded-host", requestUrl.host);
   headers.set("x-forwarded-proto", requestUrl.protocol.replace(/:$/, ""));
   headers.set("x-better-auth-forwarded-host", requestUrl.host);
   headers.set("x-better-auth-forwarded-proto", requestUrl.protocol.replace(/:$/, ""));
@@ -69,7 +73,7 @@ const handler = async (request: Request, siteUrl: string) => {
     }
   }
 
-  return fetch(nextUrl, init);
+  return toProxyResponse(await fetch(nextUrl, init));
 };
 
 const nextJsHandler = (siteUrl: string) => ({
@@ -84,9 +88,12 @@ type OptionalArgs<FuncRef extends FunctionReference<any, any>> =
 
 const getArgsAndOptions = <FuncRef extends FunctionReference<any, any>>(
   args: OptionalArgs<FuncRef>,
-  token?: string
-): ArgsAndOptions<FuncRef, { token?: string }> => {
-  return [args[0], { token }];
+  token: string | undefined,
+  url: string | undefined
+): ArgsAndOptions<FuncRef, { token?: string; url?: string }> => {
+  // Passing `url: undefined` makes convex/nextjs log a warning, so only set
+  // it when configured; otherwise it falls back to NEXT_PUBLIC_CONVEX_URL.
+  return [args[0], url ? { token, url } : { token }];
 };
 
 export const convexBetterAuthNextJs = (
@@ -115,10 +122,12 @@ export const convexBetterAuthNextJs = (
     try {
       return await fn(token?.token);
     } catch (error) {
+      // Only a cached cookie JWT rejected with an auth error is worth a fresh
+      // token and a retry. Anything else would re-run the function for nothing.
       if (
         !opts?.jwtCache?.enabled ||
         token.isFresh ||
-        opts.jwtCache.isAuthError(error)
+        !opts.jwtCache.isAuthError(error)
       ) {
         throw error;
       }
@@ -142,7 +151,7 @@ export const convexBetterAuthNextJs = (
       ...args: OptionalArgs<Query>
     ): Promise<Preloaded<Query>> => {
       return callWithToken((token?: string) => {
-        const argsAndOptions = getArgsAndOptions(args, token);
+        const argsAndOptions = getArgsAndOptions(args, token, opts.convexUrl);
         return preloadQuery(query, ...argsAndOptions);
       });
     },
@@ -151,7 +160,7 @@ export const convexBetterAuthNextJs = (
       ...args: OptionalArgs<Query>
     ): Promise<FunctionReturnType<Query>> => {
       return callWithToken((token?: string) => {
-        const argsAndOptions = getArgsAndOptions(args, token);
+        const argsAndOptions = getArgsAndOptions(args, token, opts.convexUrl);
         return fetchQuery(query, ...argsAndOptions);
       });
     },
@@ -160,7 +169,7 @@ export const convexBetterAuthNextJs = (
       ...args: OptionalArgs<Mutation>
     ): Promise<FunctionReturnType<Mutation>> => {
       return callWithToken((token?: string) => {
-        const argsAndOptions = getArgsAndOptions(args, token);
+        const argsAndOptions = getArgsAndOptions(args, token, opts.convexUrl);
         return fetchMutation(mutation, ...argsAndOptions);
       });
     },
@@ -169,7 +178,7 @@ export const convexBetterAuthNextJs = (
       ...args: OptionalArgs<Action>
     ): Promise<FunctionReturnType<Action>> => {
       return callWithToken((token?: string) => {
-        const argsAndOptions = getArgsAndOptions(args, token);
+        const argsAndOptions = getArgsAndOptions(args, token, opts.convexUrl);
         return fetchAction(action, ...argsAndOptions);
       });
     },

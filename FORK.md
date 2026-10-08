@@ -32,6 +32,9 @@ Then follow the
   domain sign in all failed.
 - `consumeOne`/`incrementOne` are no-ops in query context, from upstream PR
   #430.
+- Fixes audited and ported (some reworked) from open upstream PRs: #314, #359,
+  #404, #406, #411, #415, #417, #423, #425, #428, #430 (unique constraints),
+  #431, #436, #440 and #441. Each has a changeset.
 
 ## Sync with upstream
 

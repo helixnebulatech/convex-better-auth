@@ -8,7 +8,7 @@ import { useEffect, useMemo, useState } from "react";
 const useConvexPreloadedQuery = <Query extends FunctionReference<"query">>(
   preloadedQuery: Preloaded<Query>,
   { requireAuth = true }: { requireAuth?: boolean } = {}
-): Query["_returnType"] => {
+): Query["_returnType"] | undefined => {
   const { isLoading, isAuthenticated } = useConvexAuth();
   const [preloadExpired, setPreloadExpired] = useState(false);
   useEffect(() => {
@@ -39,9 +39,11 @@ const useConvexPreloadedQuery = <Query extends FunctionReference<"query">>(
   return result === undefined ? preloadedResult : result;
 };
 
+// Like `useQuery`, returns `undefined` when there is no result to show, eg.
+// once auth settles as unauthenticated and the preloaded value is dropped.
 export const usePreloadedAuthQuery = <Query extends FunctionReference<"query">>(
   preloadedQuery: Preloaded<Query>
-): Query["_returnType"] | null => {
+): Query["_returnType"] | undefined => {
   const { isLoading } = useConvexAuth();
   const latestData = useConvexPreloadedQuery(preloadedQuery);
   const [data, setData] = useState(latestData);

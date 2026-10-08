@@ -1,6 +1,6 @@
 import { asyncMap } from "convex-helpers";
 import { v } from "convex/values";
-import type { GenericId, Infer } from "convex/values";
+import type { Infer } from "convex/values";
 import type {
   DocumentByName,
   GenericDataModel,
@@ -58,34 +58,48 @@ export const adapterArgsValidator = v.object({
   offset: v.optional(v.number()),
 });
 
+// Unique constraints of a model, as lists of database field names. Better Auth
+// declares them on fields (`unique: true`) and, since 1.7, as table-level
+// indexes (`indexes: [{ fields, unique: true }]`), which can be compound.
+const getUniqueConstraints = (
+  betterAuthSchema: BetterAuthDBSchema,
+  model: string
+) => {
+  const table = Object.values(betterAuthSchema).find(
+    (value) => value.modelName === model
+  );
+  if (!table) {
+    return [];
+  }
+  const fieldConstraints = Object.entries(table.fields)
+    .filter(([, value]) => value.unique)
+    .map(([key, value]) => [value.fieldName ?? key]);
+  const indexConstraints = (table.indexes ?? [])
+    .filter((index) => index.unique)
+    .map((index) =>
+      index.fields.map((field) => table.fields[field]?.fieldName ?? field)
+    );
+  return [...fieldConstraints, ...indexConstraints];
+};
 const isUniqueField = (
   betterAuthSchema: BetterAuthDBSchema,
   model: string,
   field: string
-) => {
-  const fields = Object.values(betterAuthSchema).find(
-    (value) => value.modelName === model
-  )?.fields;
-  if (!fields) {
-    return false;
-  }
-  return Object.entries(fields)
-    .filter(([, value]) => value.unique)
-    .map(([key]) => key)
-    .includes(field);
-};
+) =>
+  Object.entries(
+    Object.values(betterAuthSchema).find((value) => value.modelName === model)
+      ?.fields ?? {}
+  ).some(([key, value]) => value.unique && (value.fieldName ?? key) === field);
+// Whether the input sets every field of a unique constraint, so it can't be
+// written to more than one document.
 export const hasUniqueFields = (
   betterAuthSchema: BetterAuthDBSchema,
   model: string,
   input: Record<string, any>
-) => {
-  for (const field of Object.keys(input)) {
-    if (isUniqueField(betterAuthSchema, model, field)) {
-      return true;
-    }
-  }
-  return false;
-};
+) =>
+  getUniqueConstraints(betterAuthSchema, model).some((constraint) =>
+    constraint.every((field) => field in input)
+  );
 
 const findIndex = (
   schema: SchemaDefinition<any, any>,
@@ -246,31 +260,58 @@ export const checkUniqueFields = async <
   input: Record<string, any>,
   doc?: Record<string, any>
 ) => {
-  if (!hasUniqueFields(betterAuthSchema, table, input)) {
-    return;
-  }
-  for (const field of Object.keys(input)) {
-    if (!isUniqueField(betterAuthSchema, table, field)) {
+  // Check the document as it will be after the write, so updating one field
+  // of a compound constraint is checked together with the others.
+  const mergedDoc = { ...doc, ...input };
+  for (const constraint of getUniqueConstraints(betterAuthSchema, table)) {
+    if (
+      !constraint.some((field) => field in input) ||
+      constraint.some((field) => mergedDoc[field] === undefined)
+    ) {
       continue;
     }
-    const { index } =
+    const constraintName =
+      constraint.length === 1
+        ? constraint[0]
+        : `unique constraint ${constraint.join("+")}`;
+    const { index, values } =
       findIndex(schema, {
         model: table,
-        where: [
-          { field, operator: "eq", value: input[field as keyof typeof input] },
-        ],
+        where: constraint.map((field) => ({
+          field,
+          operator: "eq" as const,
+          value: mergedDoc[field],
+        })),
       }) || {};
-    if (!index) {
-      throw new Error(`No index found for ${table}${field}`);
+    const query = ctx.db.query(table as any);
+    let existingDocs;
+    if (index && values) {
+      existingDocs = await query
+        .withIndex(index.indexDescriptor, (q) =>
+          values.eq.reduce(
+            (q: any, value, idx) => q.eq(index.fields[idx], value),
+            q
+          )
+        )
+        .take(2);
+    } else {
+      // Schemas generated before table-level indexes were supported have no
+      // index for those constraints, scan rather than fail the write.
+      // eslint-disable-next-line no-console
+      console.warn(
+        `No index found for ${table} ${constraintName}, regenerate the Better Auth schema to add it.`
+      );
+      existingDocs = await query
+        // eslint-disable-next-line @convex-dev/no-filter-in-query
+        .filter((q) =>
+          q.and(
+            ...constraint.map((field) => q.eq(q.field(field), mergedDoc[field]))
+          )
+        )
+        .take(2);
     }
-    const existingDoc = await ctx.db
-      .query(table as any)
-      .withIndex(index.indexDescriptor, (q) =>
-        q.eq(field, input[field as keyof typeof input])
-      )
-      .unique();
-    if (existingDoc && existingDoc._id !== doc?._id) {
-      throw new Error(`${table} ${field} already exists`);
+    if (existingDocs.some((existingDoc) => existingDoc._id !== doc?._id)) {
+      throw new Error(`${table} ${constraintName} already exists`);
     }
   }
 };
@@ -339,11 +380,14 @@ const filterByWhere = <
       }
       return val > wVal;
     };
+    // Convex omits optional fields that were never written, so an unset
+    // field reads as undefined. Match it against null like SQL IS NULL.
+    const isNullish = (val: typeof value) => val === undefined || val === null;
     const filter = (w: Infer<typeof adapterWhereValidator>) => {
       switch (w.operator) {
         case undefined:
         case "eq": {
-          return value === w.value;
+          return w.value === null ? isNullish(value) : value === w.value;
         }
         case "in": {
           return Array.isArray(w.value) && (w.value as any[]).includes(value);
@@ -366,7 +410,7 @@ const filterByWhere = <
           return value === w.value || isGreaterThan(value, w.value);
         }
         case "ne": {
-          return value !== w.value;
+          return w.value === null ? !isNullish(value) : value !== w.value;
         }
         case "contains": {
           return typeof value === "string" && value.includes(w.value as string);
@@ -388,13 +432,22 @@ const filterByWhere = <
   return true;
 };
 
+// An index range on eq null only matches explicit nulls, not documents where
+// the optional field was never written, so these clauses are applied
+// statically instead (see filterByWhere).
+const isEqNull = (w: Infer<typeof adapterWhereValidator>) =>
+  (!w.operator || w.operator === "eq") && w.value === null;
+
 const generateQuery = (
   ctx: GenericQueryCtx<GenericDataModel>,
   schema: SchemaDefinition<any, any>,
   args: Infer<typeof adapterArgsValidator>
 ) => {
   const { index, values, boundField, indexFields } =
-    findIndex(schema, args) ?? {};
+    findIndex(schema, {
+      ...args,
+      where: args.where?.filter((w) => !isEqNull(w)),
+    }) ?? {};
   const usableIndex =
     index?.indexDescriptor === "by_creation_time" ? undefined : index;
   const query = stream(ctx.db as any, schema).query(args.model as any);
@@ -454,13 +507,28 @@ const generateQuery = (
       // Index used for all eq and range clauses, apply remaining clauses
       // incompatible with Convex statically.
       (w) =>
-        w.operator &&
-        ["contains", "starts_with", "ends_with", "ne", "not_in"].includes(
-          w.operator
-        )
+        isEqNull(w) ||
+        (w.operator &&
+          ["contains", "starts_with", "ends_with", "ne", "not_in"].includes(
+            w.operator
+          ))
     );
   });
   return filteredQuery;
+};
+
+// Resolve an _id where value within the requested model. normalizeId returns
+// null for ids of other tables and for strings that aren't Convex ids at all
+// (better-auth's adapter tests pass UUIDs), and both mean "no match". A bare
+// ctx.db.get(id) would return a document from whatever table the id is in.
+const getDocById = async <T extends TableNamesInDataModel<GenericDataModel>>(
+  ctx: GenericQueryCtx<GenericDataModel>,
+  model: T,
+  value: unknown
+) => {
+  const id =
+    typeof value === "string" ? ctx.db.normalizeId(model, value) : null;
+  return id ? await ctx.db.get(model, id) : null;
 };
 
 // This is the core function for reading from the database, it parses and
@@ -504,12 +572,14 @@ export const paginate = async <
   }
   // If any where clause is "eq" (or missing operator) on a unique field,
   // we can only return a single document, so we get it and use any other
-  // where clauses as static filters.
+  // where clauses as static filters. Several documents can have a null or
+  // unset unique field, so eq null isn't a unique lookup.
   const uniqueWhere = args.where?.find(
     (w) =>
       (!w.operator || w.operator === "eq") &&
-      (isUniqueField(betterAuthSchema, args.model, w.field) ||
-        w.field === "_id")
+      (w.field === "_id" ||
+        (w.value !== null &&
+          isUniqueField(betterAuthSchema, args.model, w.field)))
   );
   if (uniqueWhere) {
     const { index } =
@@ -518,15 +588,11 @@ export const paginate = async <
         where: [uniqueWhere],
       }) || {};
     if (uniqueWhere.field !== "_id" && !index) {
-      throw new Error(
-        `No index found for ${args.model}.${uniqueWhere.field}`
-      );
+      throw new Error(`No index found for ${args.model}.${uniqueWhere.field}`);
     }
     const doc =
       uniqueWhere.field === "_id"
-        ? // Unfortunately this is one place where tests pass in UUIDs as values and convex-test doesn't support them
-          // eslint-disable-next-line @convex-dev/explicit-table-ids
-          await ctx.db.get(uniqueWhere.value as GenericId<T>)
+        ? await getDocById(ctx, args.model as T, uniqueWhere.value)
         : await ctx.db
             .query(args.model as any)
             .withIndex(index?.indexDescriptor as any, (q) =>
@@ -565,10 +631,32 @@ export const paginate = async <
     if (!Array.isArray(inWhere.value)) {
       throw new Error("in clause value must be an array");
     }
-    // For ids, just use asyncMap + .get()
-    if (inWhere.field === "_id") {
+    // Ids and unique fields match at most one document per value, so look
+    // each value up directly and apply the other clauses as static filters.
+    // Streaming per value would need an index covering every other clause
+    // (eg. multi-session's token "in" + expiresAt "gt"), or scan the table.
+    // Unique fields without an index, or with null values (which several
+    // documents can share), fall back to streaming below.
+    const { index: uniqueIndex } =
+      (inWhere.field !== "_id" &&
+        inWhere.value.every((value) => value !== null) &&
+        isUniqueField(betterAuthSchema, args.model, inWhere.field) &&
+        findIndex(schema, {
+          model: args.model,
+          where: [{ ...inWhere, operator: "eq" }],
+        })) ||
+      {};
+    if (inWhere.field === "_id" || uniqueIndex) {
       const docs = await asyncMap(inWhere.value as any[], async (value) => {
-        return ctx.db.get(args.model, value as GenericId<T>);
+        if (uniqueIndex) {
+          return await ctx.db
+            .query(args.model as any)
+            .withIndex(uniqueIndex.indexDescriptor as any, (q) =>
+              q.eq(uniqueIndex.fields[0], value)
+            )
+            .unique();
+        }
+        return getDocById(ctx, args.model as T, value);
       });
       const filteredDocs = docs
         .flatMap((doc) => (doc ? [doc] : []))
@@ -598,6 +686,7 @@ export const paginate = async <
             }
             return 0;
           })
+          .slice(0, args.limit)
           .map((doc) => selectFields(doc, args.select))
           .flatMap((doc) => (doc ? [doc] : [])) as Doc[],
         isDone: true,

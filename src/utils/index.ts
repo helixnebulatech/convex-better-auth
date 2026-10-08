@@ -138,6 +138,18 @@ export const getToken = async (
   opts?: GetTokenOptions
 ) => {
   headers.set("host", new URL(siteUrl).host);
+  // Callers pass the inbound request headers, where hosting platforms put the
+  // app host in `x-forwarded-host`. Convex's edge routes on that header and
+  // 404s, so move it (and the proto) to the headers the component restores.
+  const forwardedHost = headers.get("x-forwarded-host");
+  const forwardedProto = headers.get("x-forwarded-proto");
+  if (forwardedHost && !headers.has("x-better-auth-forwarded-host")) {
+    headers.set("x-better-auth-forwarded-host", forwardedHost);
+  }
+  if (forwardedProto && !headers.has("x-better-auth-forwarded-proto")) {
+    headers.set("x-better-auth-forwarded-proto", forwardedProto);
+  }
+  headers.delete("x-forwarded-host");
   const fetchToken = async () => {
     const basePath = opts?.basePath
       ? (opts.basePath.startsWith("/")

@@ -783,5 +783,296 @@ export const convexCustomTestSuite = createTestSuite(
         }),
       ).rejects.toThrow(/mode: "insensitive"/);
     },
+
+    "should match unset optional fields against eq null and ne null":
+      async () => {
+        const now = Date.now();
+        // Convex omits optional fields that were never written. Every other
+        // adapter matches those against eq null (SQL IS NULL, Mongo
+        // { field: null }), and Better Auth's atomic fallbacks guard on it.
+        const unset = await adapter.create({
+          model: "account",
+          data: {
+            accountId: `null-eq-${now}-unset`,
+            providerId: "null-eq-provider",
+            userId: `null-eq-user-${now}`,
+            createdAt: now,
+            updatedAt: now,
+          },
+        });
+        const explicitNull = await adapter.create({
+          model: "account",
+          data: {
+            accountId: `null-eq-${now}-null`,
+            providerId: "null-eq-provider",
+            userId: `null-eq-user-${now}`,
+            accessTokenExpiresAt: null,
+            createdAt: now,
+            updatedAt: now,
+          },
+        });
+        const nonNull = await adapter.create({
+          model: "account",
+          data: {
+            accountId: `null-eq-${now}-non-null`,
+            providerId: "null-eq-provider",
+            userId: `null-eq-user-${now}`,
+            accessTokenExpiresAt: now + 1_000,
+            createdAt: now,
+            updatedAt: now,
+          },
+        });
+        const find = (id: string, operator: "eq" | "ne") =>
+          adapter.findOne({
+            model: "account",
+            where: [
+              { field: "id", value: id },
+              { field: "accessTokenExpiresAt", operator, value: null },
+            ],
+          });
+        expect(await find(unset.id, "eq")).toEqual(unset);
+        expect(await find(explicitNull.id, "eq")).toEqual(explicitNull);
+        expect(await find(nonNull.id, "eq")).toEqual(null);
+        expect(await find(unset.id, "ne")).toEqual(null);
+        expect(await find(explicitNull.id, "ne")).toEqual(null);
+        expect(await find(nonNull.id, "ne")).toEqual(nonNull);
+        // Static filter path (no unique or indexed clause)
+        const ids = async (operator: "eq" | "ne") =>
+          (
+            await adapter.findMany<{ id: string }>({
+              model: "account",
+              where: [
+                {
+                  field: "providerId",
+                  operator: "starts_with",
+                  value: "null-eq-provider",
+                },
+                { field: "accessTokenExpiresAt", operator, value: null },
+              ],
+            })
+          )
+            .map((a) => a.id)
+            .sort();
+        expect(await ids("eq")).toEqual([unset.id, explicitNull.id].sort());
+        expect(await ids("ne")).toEqual([nonNull.id]);
+      },
+
+    "should AND the OR group with the remaining where clauses": async () => {
+      const alice = await adapter.create({
+        model: "user",
+        data: { name: "Alice", email: "alice@or-and.test" },
+      });
+      const bob = await adapter.create({
+        model: "user",
+        data: { name: "Bob", email: "bob@or-and.test" },
+      });
+      await adapter.create({
+        model: "user",
+        data: { name: "Alice", email: "alice@elsewhere.test" },
+      });
+      // (name = Alice OR name = Bob) AND email ends_with @or-and.test
+      const where = [
+        { field: "name", value: "Alice", connector: "OR" as const },
+        { field: "name", value: "Bob", connector: "OR" as const },
+        {
+          field: "email",
+          operator: "ends_with" as const,
+          value: "@or-and.test",
+        },
+      ];
+      expect(
+        await adapter.findMany({
+          model: "user",
+          where,
+          sortBy: { field: "name", direction: "asc" },
+        }),
+      ).toEqual([alice, bob]);
+      expect(await adapter.count({ model: "user", where })).toEqual(2);
+      expect(
+        await adapter.findOne({
+          model: "user",
+          where: [
+            { field: "name", value: "Nobody", connector: "OR" },
+            { field: "name", value: "Bob", connector: "OR" },
+            {
+              field: "email",
+              operator: "ends_with",
+              value: "@or-and.test",
+            },
+          ],
+        }),
+      ).toEqual(bob);
+      expect(
+        await adapter.findOne({
+          model: "user",
+          where: [
+            { field: "name", value: "Nobody", connector: "OR" },
+            { field: "name", value: "Alice", connector: "OR" },
+            { field: "email", value: "nobody@or-and.test" },
+          ],
+        }),
+      ).toEqual(null);
+    },
+
+    "should return null from findOne when no OR clause matches": async () => {
+      expect(
+        await adapter.findOne({
+          model: "user",
+          where: [
+            { field: "name", value: "missing-one", connector: "OR" },
+            { field: "name", value: "missing-two", connector: "OR" },
+          ],
+        }),
+      ).toEqual(null);
+    },
+
+    "should only update and delete rows matching both the OR group and AND clauses":
+      async () => {
+        const target = await adapter.create({
+          model: "user",
+          data: { name: "mixed-write", email: "target@mixed-write.test" },
+        });
+        const excluded = await adapter.create({
+          model: "user",
+          data: { name: "mixed-write", email: "excluded@elsewhere.test" },
+        });
+        const where = [
+          { field: "name", value: "mixed-write", connector: "OR" as const },
+          { field: "name", value: "also-mixed", connector: "OR" as const },
+          {
+            field: "email",
+            operator: "ends_with" as const,
+            value: "@mixed-write.test",
+          },
+        ];
+        expect(
+          await adapter.updateMany({
+            model: "user",
+            where,
+            update: { image: "updated" },
+          }),
+        ).toEqual(1);
+        expect(
+          await adapter.findOne({
+            model: "user",
+            where: [{ field: "id", value: excluded.id }],
+          }),
+        ).toEqual(excluded);
+        expect(await adapter.deleteMany({ model: "user", where })).toEqual(1);
+        expect(
+          await adapter.findOne({
+            model: "user",
+            where: [{ field: "id", value: target.id }],
+          }),
+        ).toEqual(null);
+        expect(
+          await adapter.findOne({
+            model: "user",
+            where: [{ field: "id", value: excluded.id }],
+          }),
+        ).toEqual(excluded);
+      },
+
+    "should apply offset after sorting, including OR unions": async () => {
+      const users = [];
+      for (const letter of ["a", "b", "c", "d", "e"]) {
+        users.push(
+          await adapter.create({
+            model: "user",
+            data: { name: "offset-user", email: `${letter}@offset.test` },
+          }),
+        );
+      }
+      expect(
+        await adapter.findMany({
+          model: "user",
+          where: [{ field: "name", value: "offset-user" }],
+          sortBy: { field: "email", direction: "asc" },
+          limit: 2,
+          offset: 1,
+        }),
+      ).toEqual([users[1], users[2]]);
+      expect(
+        await adapter.findMany({
+          model: "user",
+          where: [{ field: "name", value: "offset-user" }],
+          offset: 3,
+        }),
+      ).toEqual([users[3], users[4]]);
+      // (email = a OR name = offset-user) AND email != e, sorted desc
+      expect(
+        await adapter.findMany({
+          model: "user",
+          where: [
+            { field: "email", value: "a@offset.test", connector: "OR" },
+            { field: "name", value: "offset-user", connector: "OR" },
+            { field: "email", operator: "ne", value: "e@offset.test" },
+          ],
+          sortBy: { field: "email", direction: "desc" },
+          limit: 2,
+          offset: 1,
+        }),
+      ).toEqual([users[2], users[1]]);
+      // "in" on ids and unique fields is looked up per value and limited in
+      // the component, which must see offset + limit rows
+      for (const field of ["id", "email"] as const) {
+        expect(
+          await adapter.findMany({
+            model: "user",
+            where: [
+              {
+                field,
+                operator: "in",
+                value: users.map((user: any) => user[field]),
+              },
+            ],
+            sortBy: { field: "email", direction: "asc" },
+            limit: 2,
+            offset: 2,
+          }),
+        ).toEqual([users[2], users[3]]);
+      }
+    },
+
+    "should not match an id from a different model": async () => {
+      const user = await adapter.create({
+        model: "user",
+        data: {
+          name: "cross-model",
+          email: "cross@model.com",
+        },
+      });
+      // user.id is a valid id, but of the user table. A lookup scoped to
+      // another model must treat it as no match.
+      expect(
+        await adapter.findOne({
+          model: "session",
+          where: [{ field: "id", value: user.id }],
+        }),
+      ).toEqual(null);
+      expect(
+        await adapter.findMany({
+          model: "session",
+          where: [{ field: "id", operator: "in", value: [user.id] }],
+        }),
+      ).toEqual([]);
+      expect(
+        await adapter.update({
+          model: "session",
+          where: [{ field: "id", value: user.id }],
+          update: { token: "hijacked" },
+        }),
+      ).toEqual(null);
+      await adapter.delete({
+        model: "session",
+        where: [{ field: "id", value: user.id }],
+      });
+      expect(
+        await adapter.findOne({
+          model: "user",
+          where: [{ field: "id", value: user.id }],
+        }),
+      ).toEqual(user);
+    },
   }),
 );

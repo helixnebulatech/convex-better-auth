@@ -17,7 +17,7 @@ const resolveCdTarget = (
 // all fields in the schema specialFields are automatically indexed
 export const indexFields = {
   account: ["accountId", ["accountId", "providerId"], ["providerId", "userId"]],
-  rateLimit: ["key"],
+  rateLimit: ["key", "lastRequest"],
   session: ["expiresAt", ["expiresAt", "userId"]],
   verification: ["expiresAt", "identifier"],
   user: [["email", "name"], "name", "userId"],
@@ -53,12 +53,27 @@ const specialFields = (tables: BetterAuthDBSchema) =>
 const mergedIndexFields = (tables: BetterAuthDBSchema) =>
   Object.fromEntries(
     Object.entries(tables).map(([key, table]) => {
-      const manualIndexes =
+      // Table-level indexes declared by Better Auth (1.7+)
+      const tableIndexes = (table.indexes ?? []).map((index) => {
+        const fields = index.fields.map((i) => table.fields[i]?.fieldName ?? i);
+        return fields.length === 1 ? fields[0]! : fields;
+      });
+      const manualIndexes = (
         indexFields[key as keyof typeof indexFields]?.map((index) => {
           return typeof index === "string"
             ? (table.fields[index]?.fieldName ?? index)
             : index.map((i) => table.fields[i]?.fieldName ?? i);
-        }) || [];
+        }) || []
+      )
+        .concat(tableIndexes)
+        .filter(
+          (index, idx, all) =>
+            all.findIndex(
+              (other) =>
+                [other].flat().sort().join("_") ===
+                [index].flat().sort().join("_")
+            ) === idx
+        );
       const specialFieldIndexes = Object.keys(
         specialFields(tables)[key as keyof ReturnType<typeof specialFields>] ||
           {}
