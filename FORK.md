@@ -8,6 +8,7 @@ the latest Better Auth without waiting for upstream releases.
 | ------ | ---------------- | ------------------------------------------------------------------------------ |
 | 0.13.0 | `>=1.7.5 <1.8.0` | upstream `0.12.5` + [#444](https://github.com/get-convex/better-auth/pull/444) |
 | 0.13.2 | `>=1.7.5 <1.8.0` | 0.13.0 + fixes audited from open upstream pull requests                        |
+| 0.13.3 | `>=1.7.5 <1.8.0` | 0.13.2 + security fixes                                                        |
 
 ## Use it in an app
 
@@ -15,9 +16,9 @@ Install it under the upstream name with a package alias, so no imports change:
 
 ```sh
 # npm
-npm install @convex-dev/better-auth@npm:@helixnebulatech/convex-better-auth@^0.13.2 better-auth@~1.7.7
+npm install @convex-dev/better-auth@npm:@helixnebulatech/convex-better-auth@^0.13.3 better-auth@~1.7.7
 # pnpm
-pnpm add @convex-dev/better-auth@npm:@helixnebulatech/convex-better-auth@^0.13.2 better-auth@~1.7.7
+pnpm add @convex-dev/better-auth@npm:@helixnebulatech/convex-better-auth@^0.13.3 better-auth@~1.7.7
 ```
 
 Then follow the
@@ -50,6 +51,17 @@ Then follow the
   - Next.js and TanStack Start: hop-by-hop response headers stripped (#415),
     `x-forwarded-host` no longer sent to Convex (#423), `convexUrl` passed to
     the Next.js helpers (#359).
+- Security fixes from our own audit, matching Better Auth's native behaviour:
+  - Cross domain: OAuth sign-in and account linking are tied to the browser that
+    started them (the state cookie check is back), OAuth one-time tokens can
+    only be redeemed by that browser, and one-time tokens are only handed to
+    `siteUrl`.
+  - `jwtCache`: the cached JWT is verified, and `isAuthenticated()` always
+    checks the session.
+  - `verbose` logs no longer include cookies or tokens.
+  - The sign-in JWT no longer includes `returned: false` user fields.
+  - Null comparisons match Better Auth's SQL adapters.
+  - The Next.js example and docs snippets no longer expose other users' data.
 - Not taken: #400 (breaks existing data), #405 (no Better Auth flow uses it),
   #418 (breaks sync storage), #438 (caching the JWKS by default breaks key
   rotation), #445 (performance only).
