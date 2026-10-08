@@ -1,5 +1,56 @@
 # Changelog
 
+## 0.13.2
+
+### Patch Changes
+
+- 47911e8: Apply AND where clauses combined with OR clauses in `findOne`,
+  `findMany`, `count`, `updateMany` and `deleteMany` instead of dropping them,
+  and return null from `findOne` when no OR clause matches
+- e685de9: Cross domain: stop logging "No session found" on callbacks that don't
+  create a session, like linkSocial and error redirects.
+- 0ecc487: Stop sending `x-forwarded-host` to the Convex site from the Next.js
+  and TanStack Start handlers and `getToken`, which Convex's edge briefly routed
+  on in August 2026, answering every auth request from apps on their own domain
+  with an empty 404; the app host still reaches Better Auth via
+  `x-better-auth-forwarded-host`.
+- 57883af: Support `offset` in `findMany`, so paging such as the admin plugin's
+  `listUsers` and the organization plugin's `listMembers` no longer fails (admin
+  `listUsers` returned an empty list)
+- 6645b34: With `jwtCache` enabled, server helpers now retry with a fresh token
+  when Convex rejects the cookie JWT, and no longer re-run calls that failed for
+  other reasons.
+- f9caf76: Require the latest versions of the runtime dependencies:
+  `@better-fetch/fetch` ^1.3.2, `convex-helpers` ^0.1.124, `jose` ^6.2.12,
+  `remeda` ^2.50.0, `semver` ^7.8.5, `type-fest` ^5.10.0 and `zod` ^4.6.5.
+- 4a9de46: Match optional fields that were never written against `eq null` /
+  `ne null` where clauses, so Better Auth atomic updates such as the two factor
+  lockout no longer fail on them
+- 39fbedf: Use the `convexUrl` passed to `convexBetterAuthNextJs` in
+  `preloadAuthQuery`, `fetchAuthQuery`, `fetchAuthMutation` and
+  `fetchAuthAction` instead of always falling back to `NEXT_PUBLIC_CONVEX_URL`.
+- 9f171b0: Type `usePreloadedAuthQuery` as returning `undefined` (not `null`)
+  when there is no result, matching what it returns at runtime and `useQuery`.
+- 098e03b: `ConvexBetterAuthProvider` no longer drops Convex auth when an SSR
+  session hydrates, no longer reuses the SSR token after sign-out or for a
+  different session, and now caches fetched tokens.
+- e7b2227: Strip hop-by-hop headers such as `connection: keep-alive` from
+  proxied auth responses in the Next.js and TanStack Start handlers, fixing
+  empty 400 responses for clients that send `Connection: close`.
+- 2ad2005: Add a `lastRequest` index to the `rateLimit` table so pruning expired
+  rate limit rows no longer scans the whole table. Local installs pick it up by
+  regenerating their schema.
+- 8e201f8: Treat an `id` where clause holding an id from another model as no
+  match, instead of returning that other model's document
+- 4d1d8e6: Fix token issuance and the JWKS endpoint failing when a static JWKS
+  holds several keys or a key with `expiresAt`
+- 9a8a6ce: Enforce unique constraints on renamed fields and on Better Auth
+  table-level unique indexes (such as device authorization codes), and generate
+  schema indexes for table-level indexes.
+- 7fd4ddb: Look up sessions by a list of tokens through the token index instead
+  of scanning the session table, as the multi-session plugin does when listing
+  device sessions.
+
 ## 0.13.1
 
 ### Patch Changes
