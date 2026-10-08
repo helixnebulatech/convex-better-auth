@@ -3,6 +3,9 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { convexTest } from "convex-test";
 import type { BetterAuthOptions } from "better-auth";
+import { getAuthTables } from "better-auth/db";
+import { options } from "../auth-options.js";
+import { createSchema } from "./create-schema.js";
 import { api } from "../component/_generated/api.js";
 import schema from "../component/schema.js";
 import { createClient } from "./index.js";
@@ -70,5 +73,48 @@ describe("indexed queries issued by Better Auth", () => {
       limit: 1,
     });
     expect(limited.map((s) => s.token)).toEqual(["other"]);
+  });
+
+  // rate limiter (database storage): deleteExpiredRows
+  it("deletes expired rate limit rows with an index", async () => {
+    const { t, adapter, unindexedWarnings } = setup();
+    await t.run(async (ctx) => {
+      await ctx.db.insert("rateLimit", {
+        key: "expired",
+        count: 1,
+        lastRequest: 100,
+      });
+      await ctx.db.insert("rateLimit", {
+        key: "current",
+        count: 1,
+        lastRequest: 300,
+      });
+    });
+
+    await adapter.deleteMany({
+      model: "rateLimit",
+      where: [{ field: "lastRequest", operator: "lt", value: 200 }],
+    });
+
+    const remaining = await t.run((ctx) => ctx.db.query("rateLimit").collect());
+    expect(remaining.map((r) => r.key)).toEqual(["current"]);
+    expect(unindexedWarnings()).toEqual([]);
+  });
+
+  it("generates the shipped component schema", async () => {
+    const { code } = await createSchema({
+      tables: getAuthTables(options),
+      file: "src/component/schema.ts",
+    });
+    const shipped = Object.values(
+      import.meta.glob("../component/schema.ts", {
+        query: "?raw",
+        import: "default",
+        eager: true,
+      })
+    )[0] as string;
+    const body = (source: string) =>
+      source.slice(source.indexOf("export const tables"));
+    expect(body(code)).toEqual(body(shipped));
   });
 });
