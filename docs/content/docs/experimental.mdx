@@ -84,9 +84,10 @@ retried too, so `isAuthError` should only match errors a fresh token can fix.
 The cookie JWT is only reused if its signature verifies against your
 deployment's JWKS, with the issuer set to the Convex site URL and the audience
 `convex`. Otherwise a fresh token is fetched. The JWKS is fetched from
-`<convexSiteUrl><basePath>/convex/jwks` once and cached per server instance. A
-JWT signed with a key the cache doesn't know yet causes a JWKS refetch, at most
-once every 30 seconds; until then a fresh token is fetched instead.
+`<convexSiteUrl><basePath>/convex/jwks`, cached per server instance and
+refreshed every 10 minutes. A JWT signed with a key the cache doesn't know yet
+causes a JWKS refetch, at most once every 30 seconds; until then a fresh token
+is fetched instead.
 
 | Option                       | Default         | Description                                                                                     |
 | ---------------------------- | --------------- | ----------------------------------------------------------------------------------------------- |

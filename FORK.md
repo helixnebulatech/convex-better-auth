@@ -58,8 +58,10 @@ Then follow the
     `siteUrl`.
   - `jwtCache`: the cached JWT is verified, and `isAuthenticated()` always
     checks the session.
-  - `verbose` logs no longer include cookies or tokens.
-  - The sign-in JWT no longer includes `returned: false` user fields.
+  - `verbose` header logs redact cookies and tokens. Better Auth's adapter debug
+    logs, which `verbose` also turns on, still print full rows.
+  - The sign-in JWT no longer includes `returned: false` user and session
+    fields.
   - Null comparisons match Better Auth's SQL adapters.
   - The Next.js example and docs snippets no longer expose other users' data.
   - Where the component behaves as Better Auth does on purpose (magic links

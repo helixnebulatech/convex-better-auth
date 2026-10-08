@@ -10,6 +10,6 @@ decoded. The JWKS is cached per server instance; the new `jwtCache.jwks` option
 verifies against a static JWKS without fetching it, and `jwtCache.issuer`
 overrides the expected issuer.
 
-`isAuthenticated()` no longer uses the cached JWT at all: it checks the session
-with the server, like Better Auth's `getSession`, so it turns `false` right
-after sign-out.
+In the Next.js helpers, `isAuthenticated()` no longer uses the cached JWT at
+all: it checks the session with the server, like Better Auth's `getSession`, so
+it turns `false` right after sign-out.

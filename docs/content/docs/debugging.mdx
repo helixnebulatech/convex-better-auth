@@ -25,10 +25,12 @@ export const authComponent = createClient(
   only enable them while debugging. Request and response headers are logged with
   credential headers (`Cookie`, `Authorization`, `Set-Cookie`,
   `Better-Auth-Cookie`, `Set-Better-Auth-Cookie`, `Set-Auth-Token`,
-  `Set-Auth-JWT`) redacted. Verbose mode also turns on the Better Auth adapter
-  `debugLogs`, which log full database rows unredacted, including session
-  tokens, password hashes, OAuth access and refresh tokens, and verification
-  values such as password reset tokens and one-time codes.
+  `Set-Auth-JWT`, `X-Api-Key`) redacted, and redirect `Location` headers are
+  logged without their query string, which can carry one-time tokens. Verbose
+  mode also turns on the Better Auth adapter `debugLogs`, which log full
+  database rows unredacted, including session tokens, password hashes, OAuth
+  access and refresh tokens, and verification values such as password reset
+  tokens and one-time codes.
 </Callout>
 
 ### Client side

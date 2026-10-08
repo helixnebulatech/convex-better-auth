@@ -265,6 +265,16 @@ state cookie is set in the browser and the flow is tied to it, as it is with
 Better Auth on a single domain. A sign-in started in one browser can't be
 finished in another.
 
+Two side effects of starting the redirect this way:
+
+- `signIn.social` and `linkSocial` return `redirect: false`, since the client
+  navigates itself instead of leaving it to Better Auth's redirect.
+- Right before navigating, the client sets the page's referrer policy to
+  `strict-origin-when-cross-origin`, the browser default, so the browser sends
+  your app's origin, which the Convex site checks. Under a stricter policy such
+  as `no-referrer` it would send `Origin: null`. The page is left with that
+  policy if the user comes back to it from the browser's back/forward cache.
+
 If you pass `disableRedirect: true`, start the redirect with
 `authClient.startOAuthRedirect(data.url)` instead of opening the URL yourself.
 Opening it directly skips your Convex site, so the callback fails the state
