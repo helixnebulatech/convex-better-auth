@@ -77,6 +77,10 @@ export const { fetchAuthQuery } = convexBetterAuthReactStart({
 
 </Tabs>
 
+If a call made with the cookie JWT fails and `isAuthError` returns `true`, a
+fresh token is fetched and the call is retried once. Mutations and actions are
+retried too, so `isAuthError` should only match errors a fresh token can fix.
+
 ## Static JWKS
 
 **Faster page loads, navigation, and client readiness by speeding up Convex

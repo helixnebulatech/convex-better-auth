@@ -112,10 +112,12 @@ export const convexBetterAuthReactStart = (
     try {
       return await fn(token?.token);
     } catch (error) {
+      // Only a cached cookie JWT rejected with an auth error is worth a fresh
+      // token and a retry. Anything else would re-run the function for nothing.
       if (
         !opts?.jwtCache?.enabled ||
         token.isFresh ||
-        opts.jwtCache?.isAuthError(error)
+        !opts.jwtCache?.isAuthError(error)
       ) {
         throw error;
       }
