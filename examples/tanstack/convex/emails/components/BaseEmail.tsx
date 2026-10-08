@@ -7,7 +7,7 @@ import {
   Text,
   Img,
   Preview,
-} from "@react-email/components";
+} from "react-email";
 import React from "react";
 
 export interface BaseEmailProps {

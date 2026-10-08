@@ -1,7 +1,7 @@
 import VerifyEmail from "./emails/verifyEmail";
 import MagicLinkEmail from "./emails/magicLink";
 import VerifyOTP from "./emails/verifyOTP";
-import { render } from "@react-email/components";
+import { render } from "@react-email/render";
 import React from "react";
 import ResetPasswordEmail from "./emails/resetPassword";
 import { components } from "./_generated/api";
