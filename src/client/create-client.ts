@@ -85,6 +85,23 @@ type RegisterRoutesLazyOptions = {
   cors?: RouteCorsOptions;
 };
 
+// Verbose logs end up in the Convex dashboard and log streams, keep
+// credentials (session cookies, bearer tokens, JWTs) out of them
+const SENSITIVE_HEADERS = new Set([
+  "authorization",
+  "cookie",
+  "set-cookie",
+  "better-auth-cookie",
+  "set-better-auth-cookie",
+  "set-auth-token",
+  "set-auth-jwt",
+]);
+const redactHeaders = (headers: Headers) =>
+  Array.from(headers.entries()).map(([name, value]) => [
+    name,
+    SENSITIVE_HEADERS.has(name.toLowerCase()) ? "[redacted]" : value,
+  ]);
+
 const restoreOriginalForwardedHeaders = (request: Request) => {
   const originalHost = request.headers.get("x-better-auth-forwarded-host");
   const originalProto = request.headers.get("x-better-auth-forwarded-proto");
@@ -391,14 +408,14 @@ export const createClient = <
           // eslint-disable-next-line no-console
           console.log("options.baseURL", staticAuth.options.baseURL);
           // eslint-disable-next-line no-console
-          console.log("request headers", request.headers);
+          console.log("request headers", redactHeaders(request.headers));
         }
         const auth = createAuth(ctx as any);
         const normalizedRequest = restoreOriginalForwardedHeaders(request);
         const response = await auth.handler(normalizedRequest);
         if (config?.verbose) {
           // eslint-disable-next-line no-console
-          console.log("response headers", response.headers);
+          console.log("response headers", redactHeaders(response.headers));
         }
         return response;
       });
@@ -475,7 +492,9 @@ export const createClient = <
         exposedHeaders: ["Set-Better-Auth-Cookie"].concat(
           corsOpts.exposedHeaders ?? []
         ),
-        debug: config?.verbose,
+        // The CORS router logs raw request and response headers, which carry
+        // credentials. Our own verbose logs print them redacted.
+        debug: false,
         enforceAllowOrigins: false,
       });
 
@@ -511,14 +530,14 @@ export const createClient = <
           // eslint-disable-next-line no-console
           console.log("options.baseURL", getRegistrationAuth().options.baseURL);
           // eslint-disable-next-line no-console
-          console.log("request headers", request.headers);
+          console.log("request headers", redactHeaders(request.headers));
         }
         const auth = createAuth(ctx as any);
         const normalizedRequest = restoreOriginalForwardedHeaders(request);
         const response = await auth.handler(normalizedRequest);
         if (config?.verbose) {
           // eslint-disable-next-line no-console
-          console.log("response headers", response.headers);
+          console.log("response headers", redactHeaders(response.headers));
         }
         return response;
       });
@@ -588,7 +607,9 @@ export const createClient = <
         exposedHeaders: ["Set-Better-Auth-Cookie"].concat(
           corsOpts.exposedHeaders ?? []
         ),
-        debug: config?.verbose,
+        // The CORS router logs raw request and response headers, which carry
+        // credentials. Our own verbose logs print them redacted.
+        debug: false,
         enforceAllowOrigins: false,
       });
 
