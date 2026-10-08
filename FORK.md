@@ -7,6 +7,7 @@ the latest Better Auth without waiting for upstream releases.
 | Fork   | Better Auth      | Based on                                                                       |
 | ------ | ---------------- | ------------------------------------------------------------------------------ |
 | 0.13.0 | `>=1.7.5 <1.8.0` | upstream `0.12.5` + [#444](https://github.com/get-convex/better-auth/pull/444) |
+| 0.13.2 | `>=1.7.5 <1.8.0` | 0.13.0 + fixes audited from open upstream pull requests                        |
 
 ## Use it in an app
 
@@ -14,9 +15,9 @@ Install it under the upstream name with a package alias, so no imports change:
 
 ```sh
 # npm
-npm install @convex-dev/better-auth@npm:@helixnebulatech/convex-better-auth@^0.13.0 better-auth@~1.7.7
+npm install @convex-dev/better-auth@npm:@helixnebulatech/convex-better-auth@^0.13.2 better-auth@~1.7.7
 # pnpm
-pnpm add @convex-dev/better-auth@npm:@helixnebulatech/convex-better-auth@^0.13.0 better-auth@~1.7.7
+pnpm add @convex-dev/better-auth@npm:@helixnebulatech/convex-better-auth@^0.13.2 better-auth@~1.7.7
 ```
 
 Then follow the
@@ -32,9 +33,26 @@ Then follow the
   domain sign in all failed.
 - `consumeOne`/`incrementOne` are no-ops in query context, from upstream PR
   #430.
-- Fixes audited and ported (some reworked) from open upstream PRs: #314, #359,
-  #404, #406, #411, #415, #417, #423, #425, #428, #430 (unique constraints),
-  #431, #436, #440 and #441. Each has a changeset.
+- Fixes audited from the open upstream pull requests. Each bug was reproduced
+  with a failing test before it was fixed, and the fix was reviewed or rewritten
+  where the upstream one was wrong or incomplete:
+  - Adapter: `id` where clauses no longer match other models (#411), AND clauses
+    combined with OR are applied (#404), unset optional fields match `null`
+    (#425), `findMany` supports `offset` (#406), unique constraints cover
+    renamed fields and table-level indexes (#430), and token lists use the
+    unique index instead of a table scan (#314, without its extra index).
+  - Schema: `rateLimit.lastRequest` index (#436).
+  - Convex plugin: static JWKS with several keys or `expiresAt` (#428).
+  - Cross domain: no spurious "No session found" log (#417).
+  - React and SSR: auth kept during hydration and tokens cached per session
+    (#431), `jwtCache` retries only on auth errors (#440),
+    `usePreloadedAuthQuery` typed as `undefined` (#441).
+  - Next.js and TanStack Start: hop-by-hop response headers stripped (#415),
+    `x-forwarded-host` no longer sent to Convex (#423), `convexUrl` passed to
+    the Next.js helpers (#359).
+- Not taken: #400 (breaks existing data), #405 (no Better Auth flow uses it),
+  #418 (breaks sync storage), #438 (caching the JWKS by default breaks key
+  rotation), #445 (performance only).
 
 ## Sync with upstream
 

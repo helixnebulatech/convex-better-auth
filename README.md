@@ -19,8 +19,10 @@ that we do not have to wait.
 
 It starts from upstream `0.12.5` and the Better Auth 1.7 work in
 [get-convex/better-auth#444](https://github.com/get-convex/better-auth/pull/444),
-with fixes for issues we found while testing against Better Auth 1.7.7. See
-[FORK.md](./FORK.md) for the full list of differences from upstream.
+with fixes for issues we found while testing against Better Auth 1.7.7. It also
+includes the bug fixes from the open upstream pull requests, each verified with
+a reproduction test before it was taken. See [FORK.md](./FORK.md) for the full
+list of differences from upstream.
 
 ### Who we are
 
@@ -35,9 +37,9 @@ imports keep working:
 
 ```sh
 # npm
-npm install @convex-dev/better-auth@npm:@helixnebulatech/convex-better-auth@^0.13.0 better-auth@~1.7.7
+npm install @convex-dev/better-auth@npm:@helixnebulatech/convex-better-auth@^0.13.2 better-auth@~1.7.7
 # pnpm
-pnpm add @convex-dev/better-auth@npm:@helixnebulatech/convex-better-auth@^0.13.0 better-auth@~1.7.7
+pnpm add @convex-dev/better-auth@npm:@helixnebulatech/convex-better-auth@^0.13.2 better-auth@~1.7.7
 ```
 
 Then follow the
