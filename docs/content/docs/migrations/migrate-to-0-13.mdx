@@ -139,3 +139,38 @@ npx auth generate
 Without the new indexes everything keeps working, but these queries scan the
 whole table, and unique checks without an index log a warning asking you to
 regenerate the schema.
+
+## Upgrading to 0.13.3
+
+0.13.3 includes security fixes. See the [security notes](/security) for how the
+component behaves now.
+
+### Cross domain apps
+
+With the cross domain plugin, OAuth sign-in now goes through your Convex site
+before the provider, so it's tied to the browser that started it, as it is with
+Better Auth on a single domain.
+
+- Deploy your Convex backend and your frontend together. An old client can't
+  complete an OAuth sign-in against the new server, and the other way round.
+  Users with the app already open need to reload it before signing in with an
+  OAuth provider. Email, magic link, OTP and existing sessions aren't affected.
+- If you call `signIn.social` or `linkSocial` with `disableRedirect: true`,
+  start the redirect with `authClient.startOAuthRedirect(data.url)` instead of
+  opening the URL yourself.
+- The session is only handed to your app at `siteUrl`. Callback URLs on other
+  origins, even trusted ones, are redirected to without a session.
+
+### JWT caching
+
+If you use `jwtCache`, `isAuthenticated()` now checks the session with the
+server on every call, like Better Auth's `getSession`. Other server helpers
+still reuse the cached JWT, after verifying its signature. If the
+`convexSiteUrl` you pass differs from `CONVEX_SITE_URL` in your deployment, set
+`jwtCache.issuer` so the cached JWT can be verified.
+
+### Queries on null fields
+
+`lt`, `lte`, `gt`, `gte`, `ne` and `not_in` where clauses no longer match
+documents where the field is null or unset, as with Better Auth's SQL adapters.
+Check your own queries through the component adapter if they relied on that.

@@ -62,6 +62,10 @@ Then follow the
   - The sign-in JWT no longer includes `returned: false` user fields.
   - Null comparisons match Better Auth's SQL adapters.
   - The Next.js example and docs snippets no longer expose other users' data.
+  - Where the component behaves as Better Auth does on purpose (magic links
+    aren't tied to a browser, forwarded host headers, adapter calls without a
+    `where` clause), the [security notes](./docs/content/docs/security.mdx)
+    document it. See [SECURITY.md](./SECURITY.md) to report a vulnerability.
 - Not taken: #400 (breaks existing data), #405 (no Better Auth flow uses it),
   #418 (breaks sync storage), #438 (caching the JWKS by default breaks key
   rotation), #445 (performance only).

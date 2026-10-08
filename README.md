@@ -21,8 +21,9 @@ It starts from upstream `0.12.5` and the Better Auth 1.7 work in
 [get-convex/better-auth#444](https://github.com/get-convex/better-auth/pull/444),
 with fixes for issues we found while testing against Better Auth 1.7.7. It also
 includes the bug fixes from the open upstream pull requests, each verified with
-a reproduction test before it was taken. See [FORK.md](./FORK.md) for the full
-list of differences from upstream.
+a reproduction test before it was taken, and security fixes from our own audit.
+See [FORK.md](./FORK.md) for the full list of differences from upstream, and
+[SECURITY.md](./SECURITY.md) to report a vulnerability.
 
 ### Who we are
 
