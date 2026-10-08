@@ -46,6 +46,6 @@ jobs:
           pnpm run typecheck
           pnpm run lint
       - name: Install Playwright browsers
-        run: cd e2e && pnpm exec playwright install --with-deps chromium
+        run: cd e2e && pnpm exec playwright install --with-deps chromium firefox
       - name: Run e2e tests
         run: cd e2e && pnpm run test
