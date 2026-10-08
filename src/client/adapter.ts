@@ -125,6 +125,23 @@ const parseWhere = (
   }) as ConvexCleanedWhere[];
 };
 
+// Better Auth where semantics (as in the SQL and Mongo adapters): clauses with
+// connector "OR" form one OR group that is AND'd with every other clause. The
+// component only evaluates AND-only where lists, so split an OR where into one
+// list per OR clause, each combined with all the AND clauses, and union the
+// results. Returns undefined when there is no OR clause.
+const splitOrWhere = (where?: (Where & { join?: undefined })[]) => {
+  const orClauses = where?.filter((w) => w.connector === "OR") ?? [];
+  if (!orClauses.length) {
+    return;
+  }
+  const andClauses = where?.filter((w) => w.connector !== "OR") ?? [];
+  return orClauses.map((w) => [
+    { ...w, connector: "AND" as const },
+    ...andClauses,
+  ]);
+};
+
 type DocWithFlexibleId = {
   _id?: string | null;
   id?: string | null;
@@ -244,14 +261,14 @@ export const convexAdapter = <
 
       const collectIdsForOrWhere = async (data: {
         model: string;
-        where: (Where & { join?: undefined })[];
+        orWhere: (Where & { join?: undefined })[][];
       }) => {
-        const results = await asyncMap(data.where, async (w) =>
+        const results = await asyncMap(data.orWhere, async (where) =>
           handlePagination(
             async ({ paginationOpts }) => {
               return await ctx.runQuery(api.adapter.findMany, {
                 model: data.model as TableNames,
-                where: parseWhere(w),
+                where: parseWhere(where),
                 paginationOpts,
               });
             }
@@ -290,17 +307,19 @@ export const convexAdapter = <
         },
         // Better Auth 1.7.6+ passes modelKey, which the component validators reject
         findOne: async ({ modelKey: _modelKey, ...data }): Promise<any> => {
-          if (data.where?.every((w) => w.connector === "OR")) {
-            for (const w of data.where) {
+          const orWhere = splitOrWhere(data.where);
+          if (orWhere) {
+            for (const where of orWhere) {
               const result = await ctx.runQuery(api.adapter.findOne, {
                 ...data,
                 model: data.model as TableNames,
-                where: parseWhere(w),
+                where: parseWhere(where),
               });
               if (result) {
                 return result;
               }
             }
+            return null;
           }
           return await ctx.runQuery(api.adapter.findOne, {
             ...data,
@@ -313,17 +332,18 @@ export const convexAdapter = <
             throw new Error("offset not supported");
           }
 
-          if (data.where?.some((w) => w.connector === "OR")) {
+          const orWhere = splitOrWhere(data.where);
+          if (orWhere) {
             // Always fetch full docs for OR unions so we can dedupe
             // by id and sort/limit before trimming selected fields.
             const { select: _ignoredSelect, ...queryData } = data;
-            const results = await asyncMap(data.where, async (w) =>
+            const results = await asyncMap(orWhere, async (where) =>
               handlePagination(
                 async ({ paginationOpts }) => {
                   return await ctx.runQuery(api.adapter.findMany, {
                     ...queryData,
                     model: data.model as TableNames,
-                    where: parseWhere(w),
+                    where: parseWhere(where),
                     paginationOpts,
                   });
                 },
@@ -358,13 +378,14 @@ export const convexAdapter = <
         },
         count: async ({ modelKey: _modelKey, ...data }) => {
           // Yes, count is just findMany returning a number.
-          if (data.where?.some((w) => w.connector === "OR")) {
-            const results = await asyncMap(data.where, async (w) =>
+          const orWhere = splitOrWhere(data.where);
+          if (orWhere) {
+            const results = await asyncMap(orWhere, async (where) =>
               handlePagination(async ({ paginationOpts }) => {
                 return await ctx.runQuery(api.adapter.findMany, {
                   ...data,
                   model: data.model as TableNames,
-                  where: parseWhere(w),
+                  where: parseWhere(where),
                   paginationOpts,
                 });
               })
@@ -467,10 +488,11 @@ export const convexAdapter = <
                   config.authFunctions.onDelete
                 )) as FunctionHandle<"mutation">)
               : undefined;
-          if (data.where?.some((w) => w.connector === "OR")) {
+          const orWhere = splitOrWhere(data.where);
+          if (orWhere) {
             const ids = await collectIdsForOrWhere({
               model: data.model as string,
-              where: data.where,
+              orWhere,
             });
             await asyncMap(ids, async (id) => {
               await ctx.runMutation(api.adapter.deleteOne, {
@@ -507,10 +529,11 @@ export const convexAdapter = <
                   config.authFunctions.onUpdate
                 )) as FunctionHandle<"mutation">)
               : undefined;
-          if (data.where?.some((w) => w.connector === "OR")) {
+          const orWhere = splitOrWhere(data.where);
+          if (orWhere) {
             const ids = await collectIdsForOrWhere({
               model: data.model as string,
-              where: data.where,
+              orWhere,
             });
             if (!ids.length) {
               return 0;

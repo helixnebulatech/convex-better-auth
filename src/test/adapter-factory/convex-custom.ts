@@ -857,6 +857,122 @@ export const convexCustomTestSuite = createTestSuite(
         expect(await ids("ne")).toEqual([nonNull.id]);
       },
 
+    "should AND the OR group with the remaining where clauses": async () => {
+      const alice = await adapter.create({
+        model: "user",
+        data: { name: "Alice", email: "alice@or-and.test" },
+      });
+      const bob = await adapter.create({
+        model: "user",
+        data: { name: "Bob", email: "bob@or-and.test" },
+      });
+      await adapter.create({
+        model: "user",
+        data: { name: "Alice", email: "alice@elsewhere.test" },
+      });
+      // (name = Alice OR name = Bob) AND email ends_with @or-and.test
+      const where = [
+        { field: "name", value: "Alice", connector: "OR" as const },
+        { field: "name", value: "Bob", connector: "OR" as const },
+        {
+          field: "email",
+          operator: "ends_with" as const,
+          value: "@or-and.test",
+        },
+      ];
+      expect(
+        await adapter.findMany({
+          model: "user",
+          where,
+          sortBy: { field: "name", direction: "asc" },
+        }),
+      ).toEqual([alice, bob]);
+      expect(await adapter.count({ model: "user", where })).toEqual(2);
+      expect(
+        await adapter.findOne({
+          model: "user",
+          where: [
+            { field: "name", value: "Nobody", connector: "OR" },
+            { field: "name", value: "Bob", connector: "OR" },
+            {
+              field: "email",
+              operator: "ends_with",
+              value: "@or-and.test",
+            },
+          ],
+        }),
+      ).toEqual(bob);
+      expect(
+        await adapter.findOne({
+          model: "user",
+          where: [
+            { field: "name", value: "Nobody", connector: "OR" },
+            { field: "name", value: "Alice", connector: "OR" },
+            { field: "email", value: "nobody@or-and.test" },
+          ],
+        }),
+      ).toEqual(null);
+    },
+
+    "should return null from findOne when no OR clause matches": async () => {
+      expect(
+        await adapter.findOne({
+          model: "user",
+          where: [
+            { field: "name", value: "missing-one", connector: "OR" },
+            { field: "name", value: "missing-two", connector: "OR" },
+          ],
+        }),
+      ).toEqual(null);
+    },
+
+    "should only update and delete rows matching both the OR group and AND clauses":
+      async () => {
+        const target = await adapter.create({
+          model: "user",
+          data: { name: "mixed-write", email: "target@mixed-write.test" },
+        });
+        const excluded = await adapter.create({
+          model: "user",
+          data: { name: "mixed-write", email: "excluded@elsewhere.test" },
+        });
+        const where = [
+          { field: "name", value: "mixed-write", connector: "OR" as const },
+          { field: "name", value: "also-mixed", connector: "OR" as const },
+          {
+            field: "email",
+            operator: "ends_with" as const,
+            value: "@mixed-write.test",
+          },
+        ];
+        expect(
+          await adapter.updateMany({
+            model: "user",
+            where,
+            update: { image: "updated" },
+          }),
+        ).toEqual(1);
+        expect(
+          await adapter.findOne({
+            model: "user",
+            where: [{ field: "id", value: excluded.id }],
+          }),
+        ).toEqual(excluded);
+        expect(await adapter.deleteMany({ model: "user", where })).toEqual(1);
+        expect(
+          await adapter.findOne({
+            model: "user",
+            where: [{ field: "id", value: target.id }],
+          }),
+        ).toEqual(null);
+        expect(
+          await adapter.findOne({
+            model: "user",
+            where: [{ field: "id", value: excluded.id }],
+          }),
+        ).toEqual(excluded);
+      },
+
     "should not match an id from a different model": async () => {
       const user = await adapter.create({
         model: "user",
