@@ -565,9 +565,33 @@ export const paginate = async <
     if (!Array.isArray(inWhere.value)) {
       throw new Error("in clause value must be an array");
     }
-    // For ids, just use asyncMap + .get()
-    if (inWhere.field === "_id") {
+    // Ids and unique fields match at most one document per value, so look
+    // each value up directly and apply the other clauses as static filters.
+    // Streaming per value would need an index covering every other clause
+    // (eg. multi-session's token "in" + expiresAt "gt"), or scan the table.
+    const inUniqueField =
+      inWhere.field !== "_id" &&
+      isUniqueField(betterAuthSchema, args.model, inWhere.field);
+    if (inWhere.field === "_id" || inUniqueField) {
+      const { index: uniqueIndex } =
+        (inUniqueField &&
+          findIndex(schema, {
+            model: args.model,
+            where: [{ ...inWhere, operator: "eq" }],
+          })) ||
+        {};
+      if (inUniqueField && !uniqueIndex) {
+        throw new Error(`No index found for ${args.model}.${inWhere.field}`);
+      }
       const docs = await asyncMap(inWhere.value as any[], async (value) => {
+        if (uniqueIndex) {
+          return await ctx.db
+            .query(args.model as any)
+            .withIndex(uniqueIndex.indexDescriptor as any, (q) =>
+              q.eq(uniqueIndex.fields[0], value)
+            )
+            .unique();
+        }
         return ctx.db.get(args.model, value as GenericId<T>);
       });
       const filteredDocs = docs
@@ -598,6 +622,7 @@ export const paginate = async <
             }
             return 0;
           })
+          .slice(0, args.limit)
           .map((doc) => selectFields(doc, args.select))
           .flatMap((doc) => (doc ? [doc] : [])) as Doc[],
         isDone: true,
