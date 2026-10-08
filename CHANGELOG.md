@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.13.1
+
+### Patch Changes
+
+- a9a711c: Publish from GitHub Actions with npm provenance
+
 ## 0.13.0
 
 - feat!: update to better-auth 1.7.5, minimum 1.7.5 (see the
