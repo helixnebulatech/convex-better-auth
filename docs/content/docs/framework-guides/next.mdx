@@ -320,6 +320,9 @@ export const Header = ({
 export default Header;
 ```
 
+Like `useQuery`, `usePreloadedAuthQuery` can return `undefined`, for example
+once auth settles as unauthenticated and the preloaded value is dropped.
+
 ### Using Better Auth in server code
 
 Better Auth's
