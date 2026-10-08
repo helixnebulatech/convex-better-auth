@@ -180,7 +180,10 @@ export const crossDomainClient = (
               "startOAuthRedirect needs the URL returned by the last signIn.social or linkSocial call"
             );
           }
-          if (!(await redirectToOAuth(url, lastOAuth.baseURL))) {
+          // A state can only be started once, so forget it (eg. double click)
+          const { baseURL } = lastOAuth;
+          lastOAuth = null;
+          if (!(await redirectToOAuth(url, baseURL))) {
             throw new Error("Could not start the OAuth redirect");
           }
         },
@@ -269,17 +272,16 @@ export const crossDomainClient = (
             if (!data?.url) {
               return;
             }
-            lastOAuth = {
-              url: data.url,
-              baseURL: context.request.url
-                .toString()
-                .replace(/\/(sign-in\/social|link-social)(\?.*)?$/, ""),
-            };
+            const baseURL = context.request.url
+              .toString()
+              .replace(/\/(sign-in\/social|link-social)(\?.*)?$/, "");
             // With disableRedirect the app starts it with startOAuthRedirect
             if (!data.redirect) {
+              lastOAuth = { url: data.url, baseURL };
               return;
             }
-            const started = await redirectToOAuth(data.url, lastOAuth.baseURL);
+            lastOAuth = null;
+            const started = await redirectToOAuth(data.url, baseURL);
             if (!started) {
               return;
             }

@@ -388,6 +388,11 @@ describe("crossDomainClient OAuth", () => {
     // Better Auth's redirect plugin doesn't navigate to the provider
     expect(data?.redirect).toBe(false);
     expect(submitted).toHaveLength(1);
+    // The redirect already started, so the URL can't be started again
+    await expect(
+      (client as any).startOAuthRedirect(data!.url)
+    ).rejects.toThrow();
+    expect(submitted).toHaveLength(1);
     const [form] = submitted as [(typeof submitted)[0]];
     expect(form.action).toBe(`${BASE}/cross-domain/oauth/start`);
     // Sent with a policy that includes the app's Origin, even though the app
@@ -421,6 +426,11 @@ describe("crossDomainClient OAuth", () => {
       (client as any).startOAuthRedirect("https://provider.example.com/other")
     ).rejects.toThrow();
     await (client as any).startOAuthRedirect(data!.url);
+    expect(submitted).toHaveLength(1);
+    // A second call (eg. a double click) doesn't start the used state again
+    await expect(
+      (client as any).startOAuthRedirect(data!.url)
+    ).rejects.toThrow();
     expect(submitted).toHaveLength(1);
     const ott = ottOf(await completeFlow(submitted[0]!))!;
     const { error } = await (client as any).crossDomain.oneTimeToken.verify({
