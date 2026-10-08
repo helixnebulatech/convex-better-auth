@@ -1,6 +1,6 @@
 import { asyncMap } from "convex-helpers";
 import { v } from "convex/values";
-import type { GenericId, Infer } from "convex/values";
+import type { Infer } from "convex/values";
 import type {
   DocumentByName,
   GenericDataModel,
@@ -339,11 +339,14 @@ const filterByWhere = <
       }
       return val > wVal;
     };
+    // Convex omits optional fields that were never written, so an unset
+    // field reads as undefined. Match it against null like SQL IS NULL.
+    const isNullish = (val: typeof value) => val === undefined || val === null;
     const filter = (w: Infer<typeof adapterWhereValidator>) => {
       switch (w.operator) {
         case undefined:
         case "eq": {
-          return value === w.value;
+          return w.value === null ? isNullish(value) : value === w.value;
         }
         case "in": {
           return Array.isArray(w.value) && (w.value as any[]).includes(value);
@@ -366,7 +369,7 @@ const filterByWhere = <
           return value === w.value || isGreaterThan(value, w.value);
         }
         case "ne": {
-          return value !== w.value;
+          return w.value === null ? !isNullish(value) : value !== w.value;
         }
         case "contains": {
           return typeof value === "string" && value.includes(w.value as string);
@@ -388,13 +391,22 @@ const filterByWhere = <
   return true;
 };
 
+// An index range on eq null only matches explicit nulls, not documents where
+// the optional field was never written, so these clauses are applied
+// statically instead (see filterByWhere).
+const isEqNull = (w: Infer<typeof adapterWhereValidator>) =>
+  (!w.operator || w.operator === "eq") && w.value === null;
+
 const generateQuery = (
   ctx: GenericQueryCtx<GenericDataModel>,
   schema: SchemaDefinition<any, any>,
   args: Infer<typeof adapterArgsValidator>
 ) => {
   const { index, values, boundField, indexFields } =
-    findIndex(schema, args) ?? {};
+    findIndex(schema, {
+      ...args,
+      where: args.where?.filter((w) => !isEqNull(w)),
+    }) ?? {};
   const usableIndex =
     index?.indexDescriptor === "by_creation_time" ? undefined : index;
   const query = stream(ctx.db as any, schema).query(args.model as any);
@@ -454,13 +466,28 @@ const generateQuery = (
       // Index used for all eq and range clauses, apply remaining clauses
       // incompatible with Convex statically.
       (w) =>
-        w.operator &&
-        ["contains", "starts_with", "ends_with", "ne", "not_in"].includes(
-          w.operator
-        )
+        isEqNull(w) ||
+        (w.operator &&
+          ["contains", "starts_with", "ends_with", "ne", "not_in"].includes(
+            w.operator
+          ))
     );
   });
   return filteredQuery;
+};
+
+// Resolve an _id where value within the requested model. normalizeId returns
+// null for ids of other tables and for strings that aren't Convex ids at all
+// (better-auth's adapter tests pass UUIDs), and both mean "no match". A bare
+// ctx.db.get(id) would return a document from whatever table the id is in.
+const getDocById = async <T extends TableNamesInDataModel<GenericDataModel>>(
+  ctx: GenericQueryCtx<GenericDataModel>,
+  model: T,
+  value: unknown
+) => {
+  const id =
+    typeof value === "string" ? ctx.db.normalizeId(model, value) : null;
+  return id ? await ctx.db.get(model, id) : null;
 };
 
 // This is the core function for reading from the database, it parses and
@@ -504,12 +531,14 @@ export const paginate = async <
   }
   // If any where clause is "eq" (or missing operator) on a unique field,
   // we can only return a single document, so we get it and use any other
-  // where clauses as static filters.
+  // where clauses as static filters. Several documents can have a null or
+  // unset unique field, so eq null isn't a unique lookup.
   const uniqueWhere = args.where?.find(
     (w) =>
       (!w.operator || w.operator === "eq") &&
-      (isUniqueField(betterAuthSchema, args.model, w.field) ||
-        w.field === "_id")
+      (w.field === "_id" ||
+        (w.value !== null &&
+          isUniqueField(betterAuthSchema, args.model, w.field)))
   );
   if (uniqueWhere) {
     const { index } =
@@ -524,9 +553,7 @@ export const paginate = async <
     }
     const doc =
       uniqueWhere.field === "_id"
-        ? // Unfortunately this is one place where tests pass in UUIDs as values and convex-test doesn't support them
-          // eslint-disable-next-line @convex-dev/explicit-table-ids
-          await ctx.db.get(uniqueWhere.value as GenericId<T>)
+        ? await getDocById(ctx, args.model as T, uniqueWhere.value)
         : await ctx.db
             .query(args.model as any)
             .withIndex(index?.indexDescriptor as any, (q) =>
@@ -567,9 +594,9 @@ export const paginate = async <
     }
     // For ids, just use asyncMap + .get()
     if (inWhere.field === "_id") {
-      const docs = await asyncMap(inWhere.value as any[], async (value) => {
-        return ctx.db.get(args.model, value as GenericId<T>);
-      });
+      const docs = await asyncMap(inWhere.value as any[], async (value) =>
+        getDocById(ctx, args.model as T, value)
+      );
       const filteredDocs = docs
         .flatMap((doc) => (doc ? [doc] : []))
         .filter((doc) => filterByWhere(doc, args.where, (w) => w !== inWhere));

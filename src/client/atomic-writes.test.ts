@@ -78,6 +78,32 @@ describe("atomic adapter writes", () => {
     ).toMatchObject({ failedVerificationCount: 2 });
   });
 
+  // Two factor lockout sets lockedUntil, which a fresh row never wrote. The
+  // fallback guards on the row snapshot, so it matches lockedUntil eq null.
+  it("sets a field that was never written", async () => {
+    const adapter = setup();
+    const row = await adapter.create<{ id: string }>({
+      model: "twoFactor",
+      data: { secret: "s", backupCodes: "[]", userId: "u1" },
+    });
+    const lockedUntil = new Date(Date.now() + 60_000);
+    expect(
+      await adapter.incrementOne({
+        model: "twoFactor",
+        where: [
+          { field: "id", value: row.id },
+          {
+            field: "failedVerificationCount",
+            operator: "gte" as const,
+            value: 0,
+          },
+        ],
+        increment: {},
+        set: { lockedUntil },
+      })
+    ).toMatchObject({ lockedUntil: lockedUntil.getTime() });
+  });
+
   it("consumes a row exactly once", async () => {
     const adapter = setup();
     await adapter.create({
