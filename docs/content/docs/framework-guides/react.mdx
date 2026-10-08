@@ -263,8 +263,21 @@ https://adjective-animal-123.convex.site/api/auth/callback/google
 `crossDomainClient` starts the sign-in through your Convex site, so the OAuth
 state cookie is set in the browser and the flow is tied to it, as it is with
 Better Auth on a single domain. A sign-in started in one browser can't be
-finished in another. If you pass `disableRedirect: true` and open the returned
-URL yourself, the callback fails the state check, so keep the default redirect.
+finished in another.
+
+If you pass `disableRedirect: true`, start the redirect with
+`authClient.startOAuthRedirect(data.url)` instead of opening the URL yourself.
+Opening it directly skips your Convex site, so the callback fails the state
+check.
+
+```ts
+const { data } = await authClient.signIn.social({
+  provider: "github",
+  disableRedirect: true,
+});
+await authClient.startOAuthRedirect(data.url);
+```
 
 The session is only handed to your app at `siteUrl`. Callback URLs on other
-origins, even trusted ones, are redirected to without a session.
+origins, even trusted ones, are redirected to without a session. See
+[Security notes](/security) for more.

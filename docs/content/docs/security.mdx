@@ -1,0 +1,85 @@
+---
+title: Security notes
+description:
+  How the component behaves compared to Better Auth, and what to watch for
+---
+
+The component aims to behave exactly like Better Auth with a database adapter.
+This page lists where that needs care, and the few places where behaviour is
+inherited from Better Auth rather than changed by the component.
+
+## Cross domain sessions
+
+With the [cross domain plugin](/framework-guides/react), your app and your
+Convex site are on different domains, so the session is handed to the app with a
+one-time token in the `?ott=` query parameter. `ConvexBetterAuthProvider`
+redeems it automatically.
+
+- **OAuth** sign-in and account linking are tied to the browser that started
+  them, as Better Auth does with its state cookie. `crossDomainClient` starts
+  the redirect through your Convex site, which sets that cookie, and the
+  one-time token from an OAuth sign-in can only be redeemed by the browser that
+  started the flow. A sign-in started in one browser can't be finished in
+  another.
+- **Magic links** aren't tied to a browser, in Better Auth or here: whoever
+  opens the link is signed in. Their one-time token can be redeemed from any
+  browser for 3 minutes. This means that someone can request a magic link for
+  their own account and send it to you, and opening it signs you in to their
+  account. That's the same with Better Auth's magic links, so treat sign-in
+  links you didn't request with suspicion.
+- One-time tokens are only handed to `siteUrl`. Callback URLs on other origins,
+  even trusted ones such as a custom scheme or a wildcard domain, are redirected
+  to without a session.
+- `crossDomainClient` keeps the session cookie in `localStorage` by default, so
+  any XSS in your app can read it. Use the `storage` option to store it
+  elsewhere.
+
+## Forwarded host headers
+
+The framework handlers (`convexBetterAuthNextJs`, `convexBetterAuthReactStart`)
+send the app's host to your Convex site in `x-better-auth-forwarded-host` and
+`x-better-auth-forwarded-proto`. The component restores them as
+`x-forwarded-host` and `x-forwarded-proto` before calling Better Auth.
+
+Your Convex site URL is publicly reachable, so any client can set these headers,
+just as any client can set `x-forwarded-host` on a Better Auth server reachable
+without your proxy in front of it. Better Auth ignores them unless
+`advanced.trustedProxyHeaders` is enabled. If you enable it, the host used for
+the base URL, and so for links in emails such as password reset and verification
+links, is chosen by the caller. Use a static `baseURL`, or a dynamic `baseURL`
+whose `allowedHosts` lists only exact hosts you control, without wildcards on
+shared platform domains such as `*.vercel.app`.
+
+## Adapter calls without a where clause
+
+Better Auth always passes a `where` clause when it deletes or updates rows. If
+you call the adapter or the component's adapter functions yourself, always pass
+one too. With an empty `where`:
+
+| Call                                     | Effect                            |
+| ---------------------------------------- | --------------------------------- |
+| Adapter `delete`                         | Deletes the first document        |
+| Adapter `consumeOne`                     | Deletes and returns the first one |
+| Adapter `update`                         | Does nothing and returns `null`   |
+| Adapter `deleteMany` / `updateMany`      | Deletes / updates every document  |
+| Component `adapter.deleteOne` (no where) | Deletes the first document        |
+| Component `adapter.updateOne` (no where) | Updates the first document        |
+
+Better Auth's own adapters don't agree on this either. With Postgres, Better
+Auth runs `delete from "session" where 1 = 1` and deletes every row.
+
+## Tokens and revocation
+
+The JWT Convex uses holds the user's fields, except `id`, `image` and fields
+with `returned: false`. `ctx.auth.getUserIdentity()` checks the JWT, not the
+session, so it stays valid after sign-out or a ban until the JWT expires (15
+minutes by default). Use `authComponent.getAuthUser` or `safeGetAuthUser` when
+the session must be checked. With [JWT caching](/experimental),
+`isAuthenticated()` always checks the session with the server.
+
+## Verbose logs
+
+`verbose: true` logs request and response headers with cookies, tokens and API
+keys redacted. It also enables Better Auth's adapter debug logs, which print
+whole database rows, including session tokens, password hashes and verification
+values. Only enable it while debugging, and not in production.
