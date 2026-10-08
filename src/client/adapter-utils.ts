@@ -362,27 +362,17 @@ const filterByWhere = <
     const value = doc[w.field as keyof typeof doc] as Infer<
       typeof adapterWhereValidator
     >["value"];
-    const isLessThan = (val: typeof value, wVal: typeof w.value) => {
-      if (wVal === undefined || wVal === null) {
-        return false;
-      }
-      if (val === undefined || val === null) {
-        return true;
-      }
-      return val < wVal;
-    };
-    const isGreaterThan = (val: typeof value, wVal: typeof w.value) => {
-      if (val === undefined || val === null) {
-        return false;
-      }
-      if (wVal === undefined || wVal === null) {
-        return true;
-      }
-      return val > wVal;
-    };
     // Convex omits optional fields that were never written, so an unset
-    // field reads as undefined. Match it against null like SQL IS NULL.
-    const isNullish = (val: typeof value) => val === undefined || val === null;
+    // field reads as undefined. Both stand for SQL NULL here.
+    const isNullish = (val: unknown) => val === undefined || val === null;
+    // As in Better Auth's SQL adapters, a comparison with NULL on either side
+    // is never true: only eq/ne null (IS NULL / IS NOT NULL) match on null.
+    const isComparable = (val: typeof value, wVal: typeof w.value) =>
+      !isNullish(val) && !isNullish(wVal);
+    const isLessThan = (val: typeof value, wVal: typeof w.value) =>
+      isComparable(val, wVal) && val! < wVal!;
+    const isGreaterThan = (val: typeof value, wVal: typeof w.value) =>
+      isComparable(val, wVal) && val! > wVal!;
     const filter = (w: Infer<typeof adapterWhereValidator>) => {
       switch (w.operator) {
         case undefined:
@@ -393,24 +383,34 @@ const filterByWhere = <
           return Array.isArray(w.value) && (w.value as any[]).includes(value);
         }
         case "not_in": {
-          const result =
-            Array.isArray(w.value) && !(w.value as any[]).includes(value);
-          return result;
+          // SQL NOT IN excludes rows where the field is NULL.
+          return (
+            Array.isArray(w.value) &&
+            !isNullish(value) &&
+            !(w.value as any[]).includes(value)
+          );
         }
         case "lt": {
           return isLessThan(value, w.value);
         }
         case "lte": {
-          return value === w.value || isLessThan(value, w.value);
+          return (
+            isComparable(value, w.value) &&
+            (value === w.value || isLessThan(value, w.value))
+          );
         }
         case "gt": {
           return isGreaterThan(value, w.value);
         }
         case "gte": {
-          return value === w.value || isGreaterThan(value, w.value);
+          return (
+            isComparable(value, w.value) &&
+            (value === w.value || isGreaterThan(value, w.value))
+          );
         }
         case "ne": {
-          return w.value === null ? !isNullish(value) : value !== w.value;
+          // ne null is IS NOT NULL; otherwise SQL <> excludes NULL rows.
+          return !isNullish(value) && value !== w.value;
         }
         case "contains": {
           return typeof value === "string" && value.includes(w.value as string);
@@ -437,6 +437,16 @@ const filterByWhere = <
 // statically instead (see filterByWhere).
 const isEqNull = (w: Infer<typeof adapterWhereValidator>) =>
   (!w.operator || w.operator === "eq") && w.value === null;
+
+// Convex orders null below every other value, so an index range against null
+// would match documents a SQL comparison with NULL never does. Applied
+// statically, these clauses match nothing (see filterByWhere).
+const isRangeNull = (w: Infer<typeof adapterWhereValidator>) =>
+  (w.operator === "lt" ||
+    w.operator === "lte" ||
+    w.operator === "gt" ||
+    w.operator === "gte") &&
+  w.value === null;
 
 const generateQuery = (
   ctx: GenericQueryCtx<GenericDataModel>,
@@ -465,17 +475,23 @@ const generateQuery = (
               for (const [idx, value] of (values?.eq ?? []).entries()) {
                 q = q.eq(usableIndex.fields[idx], value);
               }
+              if (values?.gt !== undefined) {
+                q = q.gt(boundField, values.gt);
+              } else if (values?.gte !== undefined) {
+                q = q.gte(boundField, values.gte);
+              } else if (
+                boundField !== "createdAt" &&
+                (values?.lt !== undefined || values?.lte !== undefined)
+              ) {
+                // Convex orders undefined < null < every other value, so an
+                // upper bound alone would also match null and unset fields.
+                q = q.gt(boundField, null);
+              }
               if (values?.lt !== undefined) {
                 q = q.lt(boundField, values.lt);
               }
               if (values?.lte !== undefined) {
                 q = q.lte(boundField, values.lte);
-              }
-              if (values?.gt !== undefined) {
-                q = q.gt(boundField, values.gt);
-              }
-              if (values?.gte !== undefined) {
-                q = q.gte(boundField, values.gte);
               }
               return q;
             }
@@ -508,6 +524,7 @@ const generateQuery = (
       // incompatible with Convex statically.
       (w) =>
         isEqNull(w) ||
+        isRangeNull(w) ||
         (w.operator &&
           ["contains", "starts_with", "ends_with", "ne", "not_in"].includes(
             w.operator

@@ -618,12 +618,15 @@ export const convexCustomTestSuite = createTestSuite(
         ).toEqual(null);
       },
 
-    "should preserve null to non-null range comparisons": async () => {
+    // Better Auth's SQL adapters compare with NULL as SQL does: never true.
+    // Convex orders null below every value, which used to make a null field
+    // "less than" anything and any value "greater than" null.
+    "should not match null in range comparisons": async () => {
       const now = Date.now();
       const nullRangeAccountId = `null-range-${now}-null`;
       const nonNullRangeAccountId = `null-range-${now}-non-null`;
 
-      const nullRangeAccount = await adapter.create({
+      await adapter.create({
         model: "account",
         data: {
           accountId: nullRangeAccountId,
@@ -635,7 +638,7 @@ export const convexCustomTestSuite = createTestSuite(
         },
       });
 
-      const nonNullRangeAccount = await adapter.create({
+      await adapter.create({
         model: "account",
         data: {
           accountId: nonNullRangeAccountId,
@@ -665,7 +668,7 @@ export const convexCustomTestSuite = createTestSuite(
             },
           ],
         }),
-      ).toEqual(nullRangeAccount);
+      ).toEqual(null);
 
       expect(
         await adapter.findOne({
@@ -685,7 +688,7 @@ export const convexCustomTestSuite = createTestSuite(
             },
           ],
         }),
-      ).toEqual(nullRangeAccount);
+      ).toEqual(null);
 
       expect(
         await adapter.findOne({
@@ -705,7 +708,7 @@ export const convexCustomTestSuite = createTestSuite(
             },
           ],
         }),
-      ).toEqual(nonNullRangeAccount);
+      ).toEqual(null);
 
       expect(
         await adapter.findOne({
@@ -725,7 +728,7 @@ export const convexCustomTestSuite = createTestSuite(
             },
           ],
         }),
-      ).toEqual(nonNullRangeAccount);
+      ).toEqual(null);
     },
 
     "should fail to create a record with a unique field that already exists":
