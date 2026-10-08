@@ -21,7 +21,7 @@ async function startMockSignIn(page: Page) {
   const startRequest = page.waitForRequest(
     (req) =>
       req.url().endsWith("/api/auth/cross-domain/oauth/start") &&
-      req.method() === "POST",
+      req.method() === "POST"
   );
   await page.getByRole("button", { name: "Sign in with Mock" }).click();
 
@@ -29,12 +29,12 @@ async function startMockSignIn(page: Page) {
   const start = await startRequest;
   expect(await start.headerValue("origin")).toBe("http://localhost:5176");
   expect(await start.headerValue("content-type")).toContain(
-    "application/x-www-form-urlencoded",
+    "application/x-www-form-urlencoded"
   );
   const startResponse = await start.response();
   expect(startResponse?.status()).toBe(302);
   expect(await startResponse?.headerValue("location")).toContain(
-    `${mockOAuthUrl}/authorize`,
+    `${mockOAuthUrl}/authorize`
   );
 
   const continueLink = page.locator("#continue");
@@ -57,6 +57,39 @@ async function expectSignedIn(page: Page) {
   });
   // Rendered from the authenticated Convex query api.auth.getCurrentUser
   await expect(page.getByText(mockUserEmail)).toBeVisible({ timeout: 30_000 });
+}
+
+// helmet and many apps use no-referrer, under which browsers send
+// `Origin: null` on a cross-origin form POST
+for (const via of ["header", "meta tag"] as const) {
+  test(`OAuth sign-in works when the app sets a no-referrer policy (${via})`, async ({
+    page,
+  }) => {
+    if (via === "header") {
+      await page.route("http://localhost:5176/**", async (route: Route) => {
+        if (route.request().resourceType() !== "document") {
+          return route.fallback();
+        }
+        const response = await route.fetch();
+        await route.fulfill({
+          response,
+          headers: { ...response.headers(), "referrer-policy": "no-referrer" },
+        });
+      });
+    } else {
+      await page.addInitScript(() => {
+        document.addEventListener("DOMContentLoaded", () => {
+          const meta = document.createElement("meta");
+          meta.name = "referrer";
+          meta.content = "no-referrer";
+          document.head.prepend(meta);
+        });
+      });
+    }
+    await startMockSignIn(page);
+    await page.locator("#continue").click();
+    await expectSignedIn(page);
+  });
 }
 
 test("OAuth sign-in from the cross-domain SPA ends signed in", async ({
@@ -141,7 +174,7 @@ test("a callback URL forwarded to another browser fails with state_mismatch", as
   try {
     const pageB = await contextB.newPage();
     const callbackResponse = pageB.waitForResponse((res) =>
-      res.url().startsWith(`${convexSiteUrl}/api/auth/callback/mock`),
+      res.url().startsWith(`${convexSiteUrl}/api/auth/callback/mock`)
     );
     await pageB.goto(callbackUrl);
     const callback = await callbackResponse;
@@ -154,7 +187,7 @@ test("a callback URL forwarded to another browser fails with state_mismatch", as
     // No session anywhere in browser B
     const cookiesB = await contextB.cookies();
     expect(cookiesB.filter((c) => c.name.includes("session_token"))).toEqual(
-      [],
+      []
     );
     await pageB.goto("/");
     await expect(pageB.getByTestId("auth-unauthenticated")).toBeVisible({

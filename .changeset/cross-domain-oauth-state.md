@@ -12,5 +12,5 @@ Deploy your Convex backend and your frontend together: an old client can't
 complete an OAuth sign-in against the new server, and the other way round. Users
 with the app already open need to reload it before signing in with an OAuth
 provider. Email, magic link, OTP and existing sessions aren't affected. If you
-pass `disableRedirect: true` and open the provider URL yourself, the callback
-now fails the state check, as it does with Better Auth on a single domain.
+pass `disableRedirect: true`, start the redirect with the new
+`authClient.startOAuthRedirect(data.url)` instead of opening the URL yourself.

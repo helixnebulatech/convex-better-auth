@@ -58,13 +58,15 @@ export const crossDomain = ({ siteUrl }: { siteUrl: string }) => {
     // actually affect ctx.trustedOrigins. cors allowedOrigins
     // is using it, via options.trustedOrigins, though, so it's
     // a breaking change.
-    init() {
+    init(ctx) {
       return {
         options: {
           trustedOrigins: [siteUrl],
         },
         context: {
           oauthConfig: {
+            // Keep the rest of the app's OAuth config, eg. skipStateCookieCheck
+            ...ctx.oauthConfig,
             // The client can't receive the state cookie from the sign-in
             // request, so crossDomainClient starts the redirect through
             // /cross-domain/oauth/start, which sets it in the browser like
@@ -249,17 +251,12 @@ export const crossDomain = ({ siteUrl }: { siteUrl: string }) => {
                   oauthVerifierIdentifier(state)
                 );
               } else {
-                const providerId = ctx.path.split("/")[2];
-                const providers = await ctx.context.socialProviders;
-                const provider = providers.find((p) => p.id === providerId);
-                // Flows started by the identity provider have no client to
-                // bind to, Better Auth only allows them when opted in.
-                if (!provider?.allowIdpInitiated) {
-                  ctx.context.logger.error(
-                    "OAuth flow wasn't started by crossDomainClient, not handing off the session"
-                  );
-                  return;
-                }
+                // The flow wasn't started by crossDomainClient in this
+                // browser, so there's no browser to hand the session to.
+                ctx.context.logger.error(
+                  "OAuth flow wasn't started by crossDomainClient, not handing off the session"
+                );
+                return;
               }
             }
             const token = generateRandomString(32);

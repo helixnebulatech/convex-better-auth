@@ -21,7 +21,15 @@ export default defineConfig({
   projects: [
     {
       name: "chromium",
-      use: { ...devices["Desktop Chrome"] },
+      use: {
+        ...devices["Desktop Chrome"],
+        // The no-referrer OAuth test rewrites the app's document headers with
+        // page.route, which Chromium's local network access checks treat as an
+        // unknown origin and then block requests to the backend on 127.0.0.1.
+        launchOptions: {
+          args: ["--disable-features=LocalNetworkAccessChecks"],
+        },
+      },
     },
     {
       name: "firefox",

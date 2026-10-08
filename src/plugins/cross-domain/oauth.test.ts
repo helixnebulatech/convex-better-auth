@@ -1,9 +1,9 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { createAuthClient } from "better-auth/client";
 import { crossDomainClient } from "./client.js";
 import { betterAuth } from "better-auth/minimal";
-import { memoryAdapter  } from "better-auth/adapters/memory";
-import type {MemoryDB} from "better-auth/adapters/memory";
+import { memoryAdapter } from "better-auth/adapters/memory";
+import type { MemoryDB } from "better-auth/adapters/memory";
 import { genericOAuth } from "better-auth/plugins/generic-oauth";
 import { magicLink } from "better-auth/plugins/magic-link";
 import { crossDomain } from "./index.js";
@@ -60,7 +60,8 @@ const build = (
   });
   return { auth, db, magicLinks };
 };
-type Auth = ReturnType<typeof build>["auth"];
+// The helpers only need the request handler
+type Auth = { handler: (request: Request) => Promise<Response> };
 
 // Like crossDomainClient: cookies travel in the Better-Auth-Cookie header
 const clientHeaders = (cookie = "") => ({
@@ -238,6 +239,60 @@ describe("cross domain OAuth", () => {
     expect(db.account).toHaveLength(2);
   });
 
+  it("doesn't hand off a session from a flow not started through the auth server", async () => {
+    const { auth, db } = build();
+    // The attacker completes their own flow with the state cookie from the
+    // sign-in response, skipping /cross-domain/oauth/start
+    const res = await auth.handler(
+      new Request(`${BASE}/sign-in/social`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ provider: "mock", callbackURL: SITE }),
+      })
+    );
+    const state = new URL((await res.json()).url).searchParams.get("state")!;
+    const cb = await callback(auth, state, "codeA", cookieHeader(res));
+    expect(db.session).toHaveLength(1);
+    expect(cb.headers.get("location")).not.toContain("ott=");
+  });
+
+  it("keeps the app's skipStateCookieCheck option, as Better Auth does", async () => {
+    const db: MemoryDB = {
+      user: [],
+      session: [],
+      account: [],
+      verification: [],
+    };
+    const auth = betterAuth({
+      baseURL: AUTH,
+      secret: "cross-domain-test-secret-at-least-32-characters",
+      database: memoryAdapter(db),
+      trustedOrigins: [SITE],
+      logger: { disabled: true },
+      account: { skipStateCookieCheck: true },
+      plugins: [
+        genericOAuth({
+          config: [
+            {
+              providerId: "mock",
+              clientId: "c",
+              clientSecret: "s",
+              authorizationUrl: "https://provider.example.com/authorize",
+              getToken: async () => ({ accessToken: "at:codeA" }) as any,
+              getUserInfo: async () =>
+                ({ ...ACCOUNTS.codeA, emailVerified: true }) as any,
+            },
+          ],
+        }),
+        crossDomain({ siteUrl: SITE }),
+      ],
+    });
+    const state = await signInSocial(auth);
+    const res = await callback(auth, state, "codeA");
+    expect(res.headers.get("location")).not.toContain("state_mismatch");
+    expect(db.session).toHaveLength(1);
+  });
+
   it("keeps magic link tokens usable from any browser, like Better Auth's magic link", async () => {
     const { auth, magicLinks } = build();
     await auth.handler(
@@ -255,78 +310,122 @@ describe("cross domain OAuth", () => {
   });
 });
 
+// A crossDomainClient talking to the test server, with a minimal DOM that
+// records the form it submits and the referrer policy in effect at the time
+const setupClient = (auth: Auth) => {
+  const items = new Map<string, string>();
+  const storage = {
+    getItem: (key: string) => items.get(key) ?? null,
+    setItem: (key: string, value: string) => {
+      items.set(key, value);
+    },
+  };
+  const client = createAuthClient({
+    baseURL: BASE,
+    plugins: [crossDomainClient({ storage })],
+    fetchOptions: {
+      customFetchImpl: (input, init) => {
+        const headers = new Headers(init?.headers);
+        headers.set("origin", SITE);
+        return auth.handler(new Request(input, { ...init, headers }));
+      },
+    },
+  });
+  const submitted: {
+    action: string;
+    fields: Record<string, string>;
+    referrerPolicy?: string;
+  }[] = [];
+  // The app's own policy, eg. helmet's default
+  let referrerPolicy = "no-referrer";
+  const createElement = (tag: string) => {
+    const element: any = { tag, children: [] as any[], style: {} };
+    element.appendChild = (child: any) => element.children.push(child);
+    element.submit = () =>
+      submitted.push({
+        action: element.action,
+        fields: Object.fromEntries(
+          element.children.map((input: any) => [input.name, input.value])
+        ),
+        referrerPolicy,
+      });
+    return element;
+  };
+  const document = {
+    createElement,
+    body: { appendChild() {} },
+    head: {
+      appendChild(element: any) {
+        if (element.tag === "meta" && element.name === "referrer") {
+          referrerPolicy = element.content;
+        }
+      },
+    },
+  };
+  // Follows the form POST, the provider and the callback like the browser
+  const completeFlow = async (form: (typeof submitted)[0], code = "codeA") => {
+    const start = await startOAuth(auth, form.fields.state!, {
+      verifier: form.fields.verifier!,
+    });
+    return callback(auth, form.fields.state!, code, cookieHeader(start));
+  };
+  return { client, submitted, document, completeFlow };
+};
+
 describe("crossDomainClient OAuth", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
   it("starts OAuth through the auth server and redeems the token with its verifier", async () => {
     const { auth } = build();
-    const items = new Map<string, string>();
-    const storage = {
-      getItem: (key: string) => items.get(key) ?? null,
-      setItem: (key: string, value: string) => {
-        items.set(key, value);
-      },
-    };
-    const client = createAuthClient({
-      baseURL: BASE,
-      plugins: [crossDomainClient({ storage })],
-      fetchOptions: {
-        customFetchImpl: (input, init) => {
-          const headers = new Headers(init?.headers);
-          headers.set("origin", SITE);
-          return auth.handler(new Request(input, { ...init, headers }));
-        },
-      },
-    });
-    // Minimal DOM: records the form crossDomainClient submits
-    const submitted: { action: string; fields: Record<string, string> }[] = [];
-    const createElement = (tag: string) => {
-      const element: any = { tag, children: [] as any[] };
-      element.appendChild = (child: any) => element.children.push(child);
-      element.style = {};
-      element.submit = () =>
-        submitted.push({
-          action: element.action,
-          fields: Object.fromEntries(
-            element.children.map((input: any) => [input.name, input.value])
-          ),
-        });
-      return element;
-    };
-    vi.stubGlobal("document", { createElement, body: { appendChild() {} } });
-    try {
-      const { data } = await client.$fetch<{
-        url: string;
-        redirect: boolean;
-      }>("/sign-in/social", {
-        method: "POST",
-        body: { provider: "mock", callbackURL: SITE },
-      });
-      // Better Auth's redirect plugin doesn't navigate to the provider
-      expect(data?.redirect).toBe(false);
-    } finally {
-      vi.unstubAllGlobals();
-    }
-    expect(submitted).toHaveLength(1);
-    const [{ action, fields }] = submitted as [(typeof submitted)[0]];
-    expect(action).toBe(`${BASE}/cross-domain/oauth/start`);
-
-    // The browser follows the form POST, the provider and the callback
-    const start = await startOAuth(auth, fields.state!, {
-      verifier: fields.verifier!,
-    });
-    const res = await callback(
-      auth,
-      fields.state!,
-      "codeA",
-      cookieHeader(start)
+    const { client, submitted, document, completeFlow } = setupClient(auth);
+    vi.stubGlobal("document", document);
+    const { data } = await client.$fetch<{ url: string; redirect: boolean }>(
+      "/sign-in/social",
+      { method: "POST", body: { provider: "mock", callbackURL: SITE } }
     );
-    const ott = ottOf(res)!;
+    // Better Auth's redirect plugin doesn't navigate to the provider
+    expect(data?.redirect).toBe(false);
+    expect(submitted).toHaveLength(1);
+    const [form] = submitted as [(typeof submitted)[0]];
+    expect(form.action).toBe(`${BASE}/cross-domain/oauth/start`);
+    // Sent with a policy that includes the app's Origin, even though the app
+    // uses no-referrer, which would send `Origin: null`
+    expect(form.referrerPolicy).toBe("strict-origin-when-cross-origin");
 
+    const ott = ottOf(await completeFlow(form))!;
     // Another browser (no stored verifier) can't redeem it
     expect((await redeem(auth, ott)).status).toBe(400);
-    const { data, error } = await (
+    const { data: verified, error } = await (
       client as any
     ).crossDomain.oneTimeToken.verify({ token: ott });
     expect(error).toBeNull();
-    expect(data.user.email).toBe("a@example.com");
+    expect(verified.user.email).toBe("a@example.com");
+  });
+
+  it("starts the redirect with startOAuthRedirect after disableRedirect, as Better Auth allows", async () => {
+    const { auth } = build();
+    const { client, submitted, document, completeFlow } = setupClient(auth);
+    vi.stubGlobal("document", document);
+    const { data } = await client.$fetch<{ url: string; redirect: boolean }>(
+      "/sign-in/social",
+      {
+        method: "POST",
+        body: { provider: "mock", callbackURL: SITE, disableRedirect: true },
+      }
+    );
+    expect(data?.redirect).toBe(false);
+    expect(submitted).toHaveLength(0);
+    await expect(
+      (client as any).startOAuthRedirect("https://provider.example.com/other")
+    ).rejects.toThrow();
+    await (client as any).startOAuthRedirect(data!.url);
+    expect(submitted).toHaveLength(1);
+    const ott = ottOf(await completeFlow(submitted[0]!))!;
+    const { error } = await (client as any).crossDomain.oneTimeToken.verify({
+      token: ott,
+    });
+    expect(error).toBeNull();
   });
 });

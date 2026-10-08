@@ -11,6 +11,7 @@ interface StoredCookie {
 
 type CrossDomainActions = {
   getCookie: () => string;
+  startOAuthRedirect: (url: string) => Promise<void>;
   updateSession: () => void;
   getSessionData: () => Record<string, unknown> | null;
 };
@@ -98,6 +99,13 @@ const startOAuthRedirect = (
     form.appendChild(input);
   }
   document.body.appendChild(form);
+  // The auth server checks the Origin of this POST. Browsers send
+  // `Origin: null` under a strict referrer policy (eg. no-referrer), so use
+  // the browser default for this navigation, which sends the app's origin.
+  const referrer = document.createElement("meta");
+  referrer.name = "referrer";
+  referrer.content = "strict-origin-when-cross-origin";
+  document.head.appendChild(referrer);
   form.submit();
 };
 
@@ -115,6 +123,32 @@ export const crossDomainClient = (
   const cookieName = `${opts?.storagePrefix || "better-auth"}_cookie`;
   const localCacheName = `${opts?.storagePrefix || "better-auth"}_session_data`;
   const oauthVerifierName = `${opts?.storagePrefix || "better-auth"}_oauth_verifier`;
+
+  // The last provider URL returned by sign-in or link-social
+  let lastOAuth: { url: string; baseURL: string } | null = null;
+  // Starts the OAuth redirect for a provider URL returned by sign-in or
+  // link-social through the auth server at baseURL.
+  const redirectToOAuth = async (url: string, baseURL: string) => {
+    if (!storage || typeof document === "undefined") {
+      return false;
+    }
+    let state: string | null = null;
+    try {
+      state = new URL(url).searchParams.get("state");
+    } catch {
+      // noop
+    }
+    if (!state) {
+      return false;
+    }
+    const verifier = generateVerifier();
+    await storage.setItem(oauthVerifierName, verifier);
+    startOAuthRedirect(`${baseURL}/cross-domain/oauth/start`, {
+      state,
+      verifier,
+    });
+    return true;
+  };
   const storage =
     opts?.storage || (typeof window !== "undefined" ? localStorage : undefined);
 
@@ -125,6 +159,31 @@ export const crossDomainClient = (
     getActions(_, $store) {
       store = $store;
       return {
+        /**
+         * Start the OAuth redirect for the URL returned by `signIn.social` or
+         * `linkSocial` called with `disableRedirect: true`. Use this instead of
+         * navigating to the URL yourself: it goes through the auth server, which
+         * ties the flow to this browser.
+         *
+         * @example
+         * ```ts
+         * const { data } = await authClient.signIn.social({
+         *   provider: "github",
+         *   disableRedirect: true,
+         * });
+         * await authClient.startOAuthRedirect(data.url);
+         * ```
+         */
+        startOAuthRedirect: async (url: string) => {
+          if (!lastOAuth || lastOAuth.url !== url) {
+            throw new Error(
+              "startOAuthRedirect needs the URL returned by the last signIn.social or linkSocial call"
+            );
+          }
+          if (!(await redirectToOAuth(url, lastOAuth.baseURL))) {
+            throw new Error("Could not start the OAuth redirect");
+          }
+        },
         /**
          * Get the stored cookie.
          *
@@ -207,29 +266,23 @@ export const crossDomainClient = (
               .clone()
               .json()
               .catch(() => null);
-            if (!data?.url || !data.redirect) {
+            if (!data?.url) {
               return;
             }
-            let state: string | null = null;
-            try {
-              state = new URL(data.url).searchParams.get("state");
-            } catch {
-              // noop
-            }
-            if (!state) {
-              return;
-            }
-            const verifier = generateVerifier();
-            await storage.setItem(oauthVerifierName, verifier);
-            startOAuthRedirect(
-              context.request.url
+            lastOAuth = {
+              url: data.url,
+              baseURL: context.request.url
                 .toString()
-                .replace(
-                  /\/(sign-in\/social|link-social)(\?.*)?$/,
-                  "/cross-domain/oauth/start"
-                ),
-              { state, verifier }
-            );
+                .replace(/\/(sign-in\/social|link-social)(\?.*)?$/, ""),
+            };
+            // With disableRedirect the app starts it with startOAuthRedirect
+            if (!data.redirect) {
+              return;
+            }
+            const started = await redirectToOAuth(data.url, lastOAuth.baseURL);
+            if (!started) {
+              return;
+            }
             // The form POST navigates away, don't let Better Auth's redirect
             // plugin navigate to the provider directly.
             return new Response(JSON.stringify({ ...data, redirect: false }), {
