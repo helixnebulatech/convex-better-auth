@@ -33,13 +33,12 @@ rm -rf dist/ && pnpm run build
 pnpm pack
 ```
 
-### Deploying a new version
+### Releasing
+
+Add a changeset to any pull request that changes `src/`:
 
 ```sh
-# this will change the version and commit it (if you run it in the root directory)
-pnpm version patch
-pnpm publish --dry-run
-# sanity check files being included
-pnpm publish
-git push --tags
+pnpm changeset
 ```
+
+Releases are published from GitHub Actions. See [FORK.md](./FORK.md#release).

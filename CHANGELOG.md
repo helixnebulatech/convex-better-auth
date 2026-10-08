@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.13.0
 
 - feat!: update to better-auth 1.7.5, minimum 1.7.5 (see the
   [0.13 migration guide](./docs/content/docs/migrations/migrate-to-0-13.mdx))

@@ -82,12 +82,40 @@ calls until the adapter strips or handles it.
 
 ## Release
 
-Publish with pnpm, not npm. pnpm replaces `workspace:` versions on publish.
+Releases are published from GitHub Actions with
+[Changesets](https://github.com/changesets/changesets), the same flow Vercel
+uses for the AI SDK. npm
+[trusted publishing](https://docs.npmjs.com/trusted-publishers) authenticates
+the workflow with OIDC, so there is no npm token in the repo, and every version
+ships with
+[provenance](https://docs.npmjs.com/generating-provenance-statements).
+
+1. Every pull request that changes `src/` adds a changeset with
+   `pnpm changeset`. The Verify Changesets check fails without one. Use
+   `pnpm changeset --empty` when a change does not need a release.
+2. When changesets land on `main`, the Release workflow opens or updates a
+   "Version Packages" pull request. It bumps the version, syncs `src/version.ts`
+   and writes `CHANGELOG.md`.
+3. Merging that pull request publishes to npm, and creates the git tag and the
+   GitHub release.
+
+To try a change before releasing it, run the Release workflow manually with
+"snapshot" checked. It publishes `0.0.0-<sha>-<timestamp>` under the `snapshot`
+dist-tag, which never replaces `latest`:
 
 ```sh
-pnpm version <patch|minor> --no-git-tag-version
-node scripts/sync-version.mjs
-rm -rf dist *.tsbuildinfo && pnpm run build && pnpm test
-pnpm publish
-git commit -am "<version>" && git tag v<version> && git push --follow-tags
+pnpm add @convex-dev/better-auth@npm:@helixnebulatech/convex-better-auth@snapshot
 ```
+
+### One-time setup
+
+- In the GitHub repo settings, under Actions > General, allow GitHub Actions to
+  create and approve pull requests.
+- Publish the first version by hand with `pnpm publish`, as npm needs the
+  package to exist before it can trust a publisher.
+- Trust the Release workflow on npm. This needs npm 11.15 or later and 2FA on
+  the npm account. The same setting is in the package settings on npmjs.com.
+
+  ```sh
+  npm trust github @helixnebulatech/convex-better-auth --repo helixnebulatech/convex-better-auth --file release.yml --allow-publish
+  ```
