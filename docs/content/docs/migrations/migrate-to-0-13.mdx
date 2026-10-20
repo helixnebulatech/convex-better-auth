@@ -178,3 +178,57 @@ still reuse the cached JWT, after verifying its signature. If the
 `lt`, `lte`, `gt`, `gte`, `ne` and `not_in` where clauses no longer match
 documents where the field is null or unset, as with Better Auth's SQL adapters.
 Check your own queries through the component adapter if they relied on that.
+
+## Upgrading to 0.13.4
+
+### Better Auth returns dates as `Date` objects
+
+The adapter now hands date fields (`createdAt`, `updatedAt`, `expiresAt`, and
+any additional field of type `date`) to Better Auth as `Date` objects instead
+of epoch milliseconds. This is what Better Auth's types have always said, and
+what Better Auth expects: with numbers, the session cookie cache never
+validated, and code paths that call `.getTime()` on a date threw. If you
+disabled `session.cookieCache` because of `Cookie cache payload failed schema
+validation` warnings, you can turn it back on.
+
+Dates are still stored as numbers in Convex, so no data migration is needed,
+and these keep returning numbers:
+
+- `authComponent.getAuthUser()`, `safeGetAuthUser()` and `getAnyUserById()`
+- triggers
+- the claims of the Convex JWT, so `ctx.auth.getUserIdentity()` is unchanged
+- `auth.api.rotateKeys()` and `auth.api.getLatestJwks()`
+
+What changes is the result of `auth.api.*` calls and of the adapter. Convex
+functions can't return `Date` objects, nor pass them to `ctx.runMutation`,
+`ctx.runQuery` or the scheduler. If a function returns a Better Auth result
+that holds dates, convert them first, or it fails with
+`Date "…" is not a supported Convex type`:
+
+```ts
+export const getCurrentSession = query({
+  args: {},
+  handler: async (ctx) => {
+    const { auth, headers } = await authComponent.getAuth(createAuth, ctx);
+    const session = await auth.api.getSession({ headers });
+    if (!session) {
+      return null;
+    }
+    return session.session; // [!code --]
+    return { // [!code ++]
+      ...session.session, // [!code ++]
+      createdAt: session.session.createdAt.getTime(), // [!code ++]
+      updatedAt: session.session.updatedAt.getTime(), // [!code ++]
+      expiresAt: session.session.expiresAt.getTime(), // [!code ++]
+    }; // [!code ++]
+  },
+});
+```
+
+The same applies to Better Auth's `databaseHooks` and plugin hooks: the rows
+they receive now hold `Date` objects.
+
+Responses of the Better Auth HTTP endpoints, such as `/get-session`, now carry
+dates as ISO strings, as with any other Better Auth adapter, instead of
+numbers. Clients that read them as numbers should parse them with
+`new Date(value)`.

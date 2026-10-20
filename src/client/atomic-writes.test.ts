@@ -101,7 +101,7 @@ describe("atomic adapter writes", () => {
         increment: {},
         set: { lockedUntil },
       })
-    ).toMatchObject({ lockedUntil: lockedUntil.getTime() });
+    ).toMatchObject({ lockedUntil });
   });
 
   it("consumes a row exactly once", async () => {

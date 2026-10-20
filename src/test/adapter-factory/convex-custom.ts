@@ -761,7 +761,7 @@ export const convexCustomTestSuite = createTestSuite(
           where: [{ field: "createdAt", value: now }],
         })
       ).toEqual(user);
-      expect(typeof user.createdAt).toBe("number");
+      expect(user.createdAt).toBeInstanceOf(Date);
     },
 
     "should reject case-insensitive where clauses": async () => {

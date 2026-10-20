@@ -82,11 +82,45 @@ export const getAuthFlowSuiteTests = (
       user: User;
       session: Session;
     };
-    signUpResult.user.createdAt = new Date(signUpResult.user.createdAt).getTime() as unknown as Date;
-    signUpResult.user.updatedAt = new Date(signUpResult.user.updatedAt).getTime() as unknown as Date;
+    signUpResult.user.createdAt = new Date(signUpResult.user.createdAt);
+    signUpResult.user.updatedAt = new Date(signUpResult.user.updatedAt);
     expect(result?.user).toBeDefined();
     expect(result?.user).toStrictEqual(signUpResult.user);
     expect(result?.session).toBeDefined();
+  },
+  "should read the session from the cookie cache": async () => {
+    for (const strategy of ["compact", "jwt", "jwe"] as const) {
+      await modifyBetterAuthOptions(
+        { session: { cookieCache: { enabled: true, strategy } } },
+        false,
+      );
+      const auth = await getAuth();
+      const user = await generate("user");
+      const response = await auth.api.signUpEmail({
+        body: {
+          email: user.email,
+          password: crypto.randomUUID(),
+          name: user.name,
+          image: user.image || "",
+        },
+        asResponse: true,
+      });
+      const headers = new Headers();
+      setCookieToHeader(headers)({ response });
+      expect(headers.get("cookie")).toContain("better-auth.session_data=");
+      // A valid cached session is read from the cookie and not written again.
+      // When the cache fails validation, Better Auth reads the database and
+      // sets the session_data cookie on every request.
+      const result = await auth.api.getSession({
+        headers,
+        returnHeaders: true,
+      });
+      expect(result.response?.user.email).toBe(user.email.toLowerCase());
+      expect(result.response?.session.expiresAt).toBeInstanceOf(Date);
+      expect(result.headers.get("set-cookie") ?? "").not.toContain(
+        "session_data",
+      );
+    }
   },
   "should not sign in with invalid email": async () => {
     const auth = await getAuth();
@@ -151,6 +185,6 @@ export const getAuthFlowSuiteTests = (
       headers,
     });
     //@ts-expect-error - we are testing with additional fields
-    expect(result?.user.dateField).toStrictEqual(dateField.getTime());
+    expect(result?.user.dateField).toStrictEqual(dateField);
   },
 });

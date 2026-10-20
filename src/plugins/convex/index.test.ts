@@ -306,4 +306,14 @@ describe("convex plugin default JWT payload", () => {
       expect(claimNames(token)).toEqual(expected);
     }
   });
+
+  it("keeps date claims as epoch milliseconds", async () => {
+    const auth = makeParityAuth([
+      convex({ authConfig: { providers: [getAuthConfigProvider()] } }),
+    ]);
+    const signUp = await post(auth, "/sign-up/email", credentials);
+    const claims = decodeJwt(jwtCookieOf(signUp)!);
+    expect(typeof claims.createdAt).toBe("number");
+    expect(typeof claims.updatedAt).toBe("number");
+  });
 });

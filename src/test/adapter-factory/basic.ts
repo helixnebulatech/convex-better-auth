@@ -44,11 +44,7 @@ export const getNormalTestSuiteTests = (
 
       expect(typeof result.id).toEqual("string");
       const transformed = transformGeneratedModel(user);
-      expect(result).toEqual({
-        ...transformed,
-        createdAt: new Date(user.createdAt).getTime(),
-        updatedAt: new Date(user.updatedAt).getTime(),
-      });
+      expect(result).toEqual(transformed);
     },
     "findOne - should find model with date field": async () => {
       const [user] = await insertRandom("user");
@@ -57,7 +53,7 @@ export const getNormalTestSuiteTests = (
         where: [{ field: "createdAt", value: user.createdAt, operator: "eq" }],
       });
       expect(result).toEqual(user);
-      expect(typeof result?.createdAt).toBe("number");
+      expect(result?.createdAt).toBeInstanceOf(Date);
       expect(result?.createdAt).toEqual(user.createdAt);
     },
     "findOne - should work with both one-to-one and one-to-many joins":

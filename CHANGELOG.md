@@ -1,5 +1,28 @@
 # Changelog
 
+## 0.13.4
+
+### Patch Changes
+
+- The adapter now returns date fields to Better Auth as `Date` objects, as
+  Better Auth's types say and as other adapters do. With epoch milliseconds,
+  Better Auth 1.7 rejected the session cookie cache on every request
+  (`Cookie cache payload failed schema validation`), so the cache never worked
+  and the `session_data` cookie was set again on each `get-session`. This made
+  Expo clients request the session in a loop. Code paths in Better Auth that
+  call `.getTime()` on a date, such as signing out of OAuth providers with an
+  end session URL, no longer throw.
+
+  Dates are still stored as numbers, and `getAuthUser`, `safeGetAuthUser`,
+  `getAnyUserById`, triggers, the Convex JWT claims, `rotateKeys` and
+  `getLatestJwks` still return numbers.
+
+  Breaking: results of `auth.api.*` calls and rows passed to `databaseHooks` now
+  hold `Date` objects, which Convex functions can't return or pass to
+  `runMutation`, `runQuery` or the scheduler. Convert them to numbers first.
+  Better Auth HTTP responses, such as `/get-session`, carry dates as ISO strings
+  instead of numbers. See "Upgrading to 0.13.4" in the 0.13 migration guide.
+
 ## 0.13.3
 
 ### Patch Changes

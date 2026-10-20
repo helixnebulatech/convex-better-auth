@@ -67,6 +67,24 @@ const parseAuthConfig = (authConfig: AuthConfig, opts: { jwks?: string }) => {
   return providerConfig;
 };
 
+// The adapter hands dates to Better Auth as Date objects. JSON would turn them
+// into ISO strings in the JWT, so keep them as epoch milliseconds, as they are
+// stored in Convex and as the claims have always been.
+const datesToMillis = (value: unknown): any => {
+  if (value instanceof Date) {
+    return value.getTime();
+  }
+  if (Array.isArray(value)) {
+    return value.map(datesToMillis);
+  }
+  if (value && typeof value === "object") {
+    return Object.fromEntries(
+      Object.entries(value).map(([key, item]) => [key, datesToMillis(item)])
+    );
+  }
+  return value;
+};
+
 export const convex = (opts: {
   /**
    * @param {AuthConfig} authConfig - Auth config from your Convex project.
@@ -177,9 +195,11 @@ export const convex = (opts: {
       audience: "convex",
       expirationTime: `${jwtExpirationSeconds}s`,
       definePayload: async ({ user, session }) => ({
-        ...(opts.jwt?.definePayload
-          ? await opts.jwt.definePayload({ user, session })
-          : omit(user, ["id", "image"])),
+        ...datesToMillis(
+          opts.jwt?.definePayload
+            ? await opts.jwt.definePayload({ user, session })
+            : omit(user, ["id", "image"])
+        ),
         sessionId: session.id,
         iat: Math.floor(new Date().getTime() / 1000),
       }),
@@ -558,7 +578,8 @@ export const convex = (opts: {
           });
           // Add alg to jwks, otherwise Better Auth will default to EdDSA
           jwks[0].alg = jwtOptions.jwks.keyPairConfig.alg;
-          return jwks;
+          // Returned from Convex functions, which can't hold Date objects.
+          return datesToMillis(jwks);
         }
       ),
       rotateKeys: createAuthEndpoint(
@@ -598,7 +619,8 @@ export const convex = (opts: {
             },
           });
           jwks[0].alg = jwtOptions.jwks.keyPairConfig.alg;
-          return jwks;
+          // Returned from Convex functions, which can't hold Date objects.
+          return datesToMillis(jwks);
         }
       ),
       getToken: createAuthEndpoint(

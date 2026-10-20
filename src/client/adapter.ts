@@ -227,17 +227,19 @@ export const convexAdapter = <
       mapKeysTransformOutput: {
         _id: "id",
       },
-      // Convert dates to numbers. This aligns with how
-      // Convex stores _creationTime and avoids a breaking change.
+      // Store dates as numbers, like Convex's _creationTime.
       customTransformInput: ({ data, fieldAttributes }) => {
         if (data && fieldAttributes.type === "date") {
           return new Date(data).getTime();
         }
         return data;
       },
+      // Hand dates back to Better Auth as Date objects, like every other
+      // adapter. Better Auth validates the session cookie cache with
+      // z.date(), so numbers there make the cache never validate.
       customTransformOutput: ({ data, fieldAttributes }) => {
-        if (data && fieldAttributes.type === "date") {
-          return new Date(data).getTime();
+        if (data != null && fieldAttributes.type === "date") {
+          return new Date(data);
         }
         return data;
       },
