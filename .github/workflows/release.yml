@@ -31,6 +31,8 @@ jobs:
       id-token: write
       contents: write
       pull-requests: write
+      # dispatch CI for the "Version Packages" pull request
+      actions: write
     # do not attempt running in forks
     if: github.repository_owner == 'helixnebulatech'
     steps:
@@ -72,6 +74,33 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PUBLISHED_PACKAGES: ${{ steps.changesets.outputs.published-packages }}
+
+      # Pull requests opened by GITHUB_TOKEN do not trigger workflows, so run
+      # the required checks on the "Version Packages" branch explicitly.
+      - name: Run checks on the release pull request
+        if: inputs.snapshot != true && steps.changesets.outputs.pr-number != ''
+        run: |
+          gh workflow run test.yml --ref changeset-release/main
+          gh workflow run verify-changesets.yml --ref changeset-release/main
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+
+      # Merges the "Version Packages" pull request once the required checks
+      # pass. Uses a personal token because a merge made with GITHUB_TOKEN
+      # would not trigger this workflow again to publish.
+      - name: Enable auto-merge for the release pull request
+        if: inputs.snapshot != true && steps.changesets.outputs.pr-number != ''
+        run: |
+          if [ -z "$GH_TOKEN" ]; then
+            echo "::warning::RELEASE_BOT_TOKEN is not set; merge the Version Packages pull request manually."
+            exit 0
+          fi
+          gh pr merge "$PR_NUMBER" --auto --squash
+        env:
+          GH_TOKEN: ${{ secrets.RELEASE_BOT_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ steps.changesets.outputs.pr-number }}
 
       # Snapshot release path
       - name: Version Packages (snapshot)
