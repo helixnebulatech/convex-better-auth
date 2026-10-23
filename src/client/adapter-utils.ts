@@ -751,13 +751,27 @@ export const listOne = async <
   betterAuthSchema: BetterAuthDBSchema,
   args: Infer<typeof adapterArgsValidator>
 ): Promise<Doc | null> => {
-  return (
-    await paginate(ctx, schema, betterAuthSchema, {
-      ...args,
-      paginationOpts: {
-        numItems: 1,
-        cursor: null,
-      },
-    })
-  ).page[0] as Doc | null;
+  // Each page reads at most 200 rows. Without an index, a page can end before
+  // the matching row, so keep reading until a row matches or the table ends.
+  // Returning null after the first page would report an existing row as
+  // missing, and Better Auth would create a duplicate.
+  let cursor: string | null = null;
+  for (;;) {
+    const result: PaginationResult<Doc> = await paginate(
+      ctx,
+      schema,
+      betterAuthSchema,
+      {
+        ...args,
+        paginationOpts: { numItems: 1, cursor },
+      }
+    );
+    if (result.page.length > 0) {
+      return result.page[0] as Doc;
+    }
+    if (result.isDone || result.continueCursor === cursor) {
+      return null;
+    }
+    cursor = result.continueCursor;
+  }
 };

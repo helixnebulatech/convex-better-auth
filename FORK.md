@@ -9,6 +9,8 @@ the latest Better Auth without waiting for upstream releases.
 | 0.13.0 | `>=1.7.5 <1.8.0` | upstream `0.12.5` + [#444](https://github.com/get-convex/better-auth/pull/444) |
 | 0.13.2 | `>=1.7.5 <1.8.0` | 0.13.0 + fixes audited from open upstream pull requests                        |
 | 0.13.3 | `>=1.7.5 <1.8.0` | 0.13.2 + security fixes                                                        |
+| 0.13.4 | `>=1.7.5 <1.8.0` | 0.13.3 + dates returned to Better Auth as `Date` objects                       |
+| 0.13.5 | `>=1.7.5 <1.8.0` | 0.13.4 + missing indexes, single row lookups without an index                  |
 
 ## Use it in an app
 
@@ -16,9 +18,9 @@ Install it under the upstream name with a package alias, so no imports change:
 
 ```sh
 # npm
-npm install @convex-dev/better-auth@npm:@helixnebulatech/convex-better-auth@^0.13.3 better-auth@~1.7.7
+npm install @convex-dev/better-auth@npm:@helixnebulatech/convex-better-auth@^0.13.5 better-auth@~1.7.7
 # pnpm
-pnpm add @convex-dev/better-auth@npm:@helixnebulatech/convex-better-auth@^0.13.3 better-auth@~1.7.7
+pnpm add @convex-dev/better-auth@npm:@helixnebulatech/convex-better-auth@^0.13.5 better-auth@~1.7.7
 ```
 
 Then follow the
@@ -68,6 +70,15 @@ Then follow the
     aren't tied to a browser, forwarded host headers, adapter calls without a
     `where` clause), the [security notes](./docs/content/docs/security.mdx)
     document it. See [SECURITY.md](./SECURITY.md) to report a vulnerability.
+- Indexes and lookups, from our own audit of every lookup Better Auth 1.7 and
+  its official plugins make:
+  - Indexes for lookups that had none, such as the credential account lookup
+    added in Better Auth 1.7 and listing a user's active sessions.
+  - Schema generation indexes the fields Better Auth marks with `index: true`,
+    keeps the field order of compound indexes, and skips indexes on fields a
+    table doesn't have.
+  - Single row lookups without an index read the whole table instead of stopping
+    after 200 rows and reporting the row as missing.
 - Not taken: #400 (breaks existing data), #405 (no Better Auth flow uses it),
   #418 (breaks sync storage), #438 (caching the JWKS by default breaks key
   rotation), #445 (performance only).

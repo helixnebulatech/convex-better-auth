@@ -232,3 +232,86 @@ Responses of the Better Auth HTTP endpoints, such as `/get-session`, now carry
 dates as ISO strings, as with any other Better Auth adapter, instead of
 numbers. Clients that read them as numbers should parse them with
 `new Date(value)`.
+
+## Upgrading to 0.13.5
+
+0.13.5 adds indexes for Better Auth lookups that had none. Apps using the
+default install get them on their next deploy. Apps using
+[Local Install](/local-install) need to regenerate their schema and deploy:
+
+```npm
+cd convex/betterAuth
+npx auth generate
+```
+
+### Credential account index
+
+The new `accountId_providerId_userId` index on the `account` table is for the
+lookup Better Auth 1.7 runs on a user's credential account when resetting,
+changing or setting a password. Earlier 0.13 releases had no index for it, so
+the lookup read at most 200 rows of the `account` table and missed accounts
+beyond them. When that happened, password reset and set password created a
+second credential account instead of updating the existing one. Sign-in kept
+checking the password of the first account, so the user got a 401 with their
+new password. With fewer than 200 accounts, as in most development
+deployments, the lookup worked and only logged a `Querying without an index`
+warning.
+
+If your app ran an earlier 0.13 release with more than 200 accounts, check for
+users with more than one account where `providerId` is `credential`. The newest
+of these rows holds the password the user set last. Delete the older rows so
+sign-in uses the newest one, and ask the user to reset their password again if
+you aren't sure which one they expect.
+
+### Lookups without an index
+
+Single row lookups (`findOne`, `update`, `delete`) without an index now keep
+reading the table until they find a matching row or reach its end. Earlier 0.13
+releases stopped after the first 200 rows and reported the row as missing, which
+is how the credential account lookup above created duplicates. A lookup without
+an index is still slow and logs a `Querying without an index` warning, and on a
+large table it can fail with Convex's read limit instead of returning a wrong
+result. Add the index the warning asks for.
+
+### Other new indexes
+
+- `session.userId_expiresAt`, for listing a user's active sessions
+  (`/list-sessions` and the anonymous plugin). Without it, each call read the
+  whole `session` table.
+- `twoFactor.secret`.
+
+Schema generation now creates an index for every field Better Auth marks with
+`index: true`, as the Drizzle and Prisma generators do. Before, these fields
+had no index, so lookups on them could miss rows past the first 200 of the
+table, as with the credential account. This affects Local Install apps using:
+
+- the API key plugin: `apikey.key`, checked on every request authenticated
+  with an API key, plus `referenceId` and `configId`.
+- the passkey plugin: `passkey.credentialID`, used for passkey sign-in.
+- the OAuth provider plugin: `authorizationCodeId` in `oauthAccessToken` and
+  `oauthRefreshToken`.
+
+Local Install apps also get indexes for lookups by these plugins:
+
+- Organization: `member.organizationId_userId`, `teamMember.teamId_userId`,
+  `invitation.email_organizationId_status_expiresAt`,
+  `invitation.organizationId_status` and `organizationRole.organizationId_role`.
+- SIWE: `walletAddress.address_chainId`.
+- SSO: `ssoProvider.domain`.
+- OAuth provider: `oauthConsent.clientId_referenceId_userId`,
+  `oauthClient.referenceId` and `oauthRefreshToken.clientId_userId`.
+- API key: `apikey.expiresAt`.
+- Stripe: `stripeCustomerId` on `user` and `organization`, and
+  `subscription.referenceId_status`, `subscription.stripeSubscriptionId` and
+  `subscription.stripeCustomerId`.
+- SCIM: compound indexes on `scimGroupMember`, `scimManagedConnectionEvent`,
+  `scimManagedCredential`, `scimProjectionGrant` and `scimUser`.
+
+Indexes on fields a table doesn't have, such as the Stripe fields when Stripe
+isn't used, are skipped.
+
+Schema generation now keeps the field order of compound indexes. It used to
+sort them alphabetically, which put range fields such as `expiresAt` before the
+equality fields and made the index unusable. If you add your own indexes, list
+the fields compared with equality first, then the field compared with a range
+(`lt`, `gt`...), then the field you sort by.

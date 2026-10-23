@@ -11,6 +11,16 @@ same transaction as the original operation.
 Triggers run in the same transaction as the original operation, and work on any
 table in your Better Auth schema.
 
+<Callout>
+  Since Better Auth 1.7.8, `databaseHooks` `after` callbacks also run when the
+  request fails after the write. The Convex adapter has no request-wide
+  transaction, so a write made before the failure stays in the database, and
+  its `after` hook runs. If an `after` hook has side effects outside the
+  database, such as sending an email or calling an API, expect it to run for
+  requests that end with an error. Use triggers to keep work in the same
+  transaction as the write.
+</Callout>
+
 ## Configuration
 
 To enable triggers, pass the `triggers` option to the component client config. A

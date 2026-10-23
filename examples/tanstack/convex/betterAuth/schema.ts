@@ -40,8 +40,9 @@ export const tables = {
   })
     .index("expiresAt", ["expiresAt"])
     .index("expiresAt_userId", ["expiresAt","userId"])
-    .index("token", ["token"])
-    .index("userId", ["userId"]),
+    .index("userId_expiresAt", ["userId","expiresAt"])
+    .index("userId", ["userId"])
+    .index("token", ["token"]),
   account: defineTable({
     accountId: v.string(),
     providerId: v.string(),
@@ -59,6 +60,7 @@ export const tables = {
     .index("accountId", ["accountId"])
     .index("accountId_providerId", ["accountId","providerId"])
     .index("providerId_userId", ["providerId","userId"])
+    .index("accountId_providerId_userId", ["accountId","providerId","userId"])
     .index("userId", ["userId"]),
   verification: defineTable({
     identifier: v.string(),
@@ -77,6 +79,7 @@ export const tables = {
     failedVerificationCount: v.optional(v.union(v.null(), v.number())),
     lockedUntil: v.optional(v.union(v.null(), v.number())),
   })
+    .index("secret", ["secret"])
     .index("userId", ["userId"]),
   jwks: defineTable({
     publicKey: v.string(),
