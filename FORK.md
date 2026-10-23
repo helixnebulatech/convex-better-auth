@@ -146,8 +146,18 @@ ships with
 2. When changesets land on `main`, the Release workflow opens or updates a
    "Version Packages" pull request. It bumps the version, syncs `src/version.ts`
    and writes `CHANGELOG.md`.
-3. Merging that pull request publishes to npm, and creates the git tag and the
+3. Review the "Version Packages" pull request: check the version bump and the
+   `CHANGELOG.md` entry. GitHub holds its "Test and lint" and "Verify
+   Changesets" runs until someone approves them, because a bot opened the pull
+   request. Approve them from the pull request checks ("Approve and run"), then
+   approve the pull request once they pass.
+4. Merging that pull request publishes to npm, and creates the git tag and the
    GitHub release.
+
+The Release workflow can enable auto-merge on the "Version Packages" pull
+request if the `RELEASE_BOT_TOKEN` secret holds a token allowed to merge. We
+leave it unset, so a person reviews every release before it's published. Vercel
+also merges its release pull requests by hand.
 
 To try a change before releasing it, run the Release workflow manually with
 "snapshot" checked. It publishes `0.0.0-<sha>-<timestamp>` under the `snapshot`
@@ -156,6 +166,21 @@ dist-tag, which never replaces `latest`:
 ```sh
 pnpm add @convex-dev/better-auth@npm:@helixnebulatech/convex-better-auth@snapshot
 ```
+
+### Rules on `main`
+
+A ruleset protects `main`:
+
+- Changes land through pull requests, merged with squash. Direct pushes, force
+  pushes and deleting the branch are blocked.
+- Every pull request needs 1 approval, and the "Test and lint" and "Verify
+  Changesets" checks must pass.
+- Commits must be signed. Squash merges are signed by GitHub.
+- Repository admins can bypass the rules, but only inside a pull request. With a
+  single maintainer this is how your own pull requests get merged, since GitHub
+  doesn't let authors approve their own pull requests. GitHub records each
+  bypass. Pull requests opened by a bot, such as "Version Packages", can be
+  approved normally.
 
 ### One-time setup
 
