@@ -14,17 +14,88 @@ const resolveCdTarget = (
 };
 
 // Manually add fields to index on for schema generation,
-// all fields in the schema specialFields are automatically indexed
+// all fields in the schema specialFields are automatically indexed.
+// Indexes are generated with their fields in the order given here. The
+// adapter matches equality fields in alphabetical order, followed by the
+// range field (lt, gt...) and then the sort field, so list them that way.
+// Indexes on fields a table doesn't have, such as plugin fields when the
+// plugin isn't used, are skipped.
 export const indexFields = {
-  account: ["accountId", ["accountId", "providerId"], ["providerId", "userId"]],
+  account: [
+    "accountId",
+    ["accountId", "providerId"],
+    ["providerId", "userId"],
+    // Better Auth 1.7 findCredentialAccount
+    ["accountId", "providerId", "userId"],
+  ],
   rateLimit: ["key", "lastRequest"],
-  session: ["expiresAt", ["expiresAt", "userId"]],
+  session: [
+    "expiresAt",
+    ["expiresAt", "userId"],
+    // listSessions with onlyActiveSessions: userId + expiresAt > now
+    ["userId", "expiresAt"],
+    "userId",
+  ],
   verification: ["expiresAt", "identifier"],
-  user: [["email", "name"], "name", "userId"],
-  oauthConsent: [["clientId", "userId"]],
+  user: [
+    ["email", "name"],
+    "name",
+    "userId",
+    // Stripe plugin
+    "stripeCustomerId",
+  ],
+  oauthConsent: [
+    ["clientId", "userId"],
+    // OAuth provider plugin
+    ["clientId", "referenceId", "userId"],
+  ],
+  organization: [
+    // Stripe plugin
+    "stripeCustomerId",
+  ],
+  // Organization plugin. Single field indexes are listed too, since a
+  // compound index starting with a field replaces the field's own index.
+  member: ["organizationId", ["organizationId", "userId"]],
+  teamMember: ["teamId", ["teamId", "userId"]],
+  invitation: [
+    "organizationId",
+    "email",
+    // Also used by the SSO plugin with expiresAt > now
+    ["email", "organizationId", "status", "expiresAt"],
+    ["organizationId", "status"],
+  ],
+  organizationRole: ["organizationId", ["organizationId", "role"]],
+  // SIWE plugin
+  walletAddress: [["address", "chainId"]],
+  // SSO plugin
+  ssoProvider: ["domain"],
+  // OAuth provider plugin
+  oauthClient: ["referenceId"],
+  oauthRefreshToken: [["clientId", "userId"]],
+  // API key plugin
+  apikey: ["expiresAt"],
+  // Stripe plugin
+  subscription: [
+    ["referenceId", "status"],
+    "stripeSubscriptionId",
+    "stripeCustomerId",
+  ],
+  // SCIM plugin
+  scimGroupMember: [
+    ["connectionId", "groupId"],
+    ["connectionId", "groupId", "scimUserId"],
+    ["connectionId", "scimUserId"],
+  ],
+  scimManagedConnectionEvent: [["connectionRecordId", "sequence"]],
+  scimManagedCredential: [
+    "connectionRecordId",
+    ["connectionRecordId", "status"],
+  ],
+  scimProjectionGrant: [["provisioningDomainId", "userId"]],
+  scimUser: [["provisioningDomainId", "userId"]],
 };
 
-// Return map of unique, sortable, and reference fields
+// Return map of unique, sortable, indexed and reference fields
 const specialFields = (tables: BetterAuthDBSchema) =>
   Object.fromEntries(
     Object.entries(tables)
@@ -36,6 +107,9 @@ const specialFields = (tables: BetterAuthDBSchema) =>
               {
                 ...(field.sortable ? { sortable: true } : {}),
                 ...(field.unique ? { unique: true } : {}),
+                // Fields Better Auth marks for an index, as the Drizzle and
+                // Prisma generators do
+                ...(field.index ? { index: true } : {}),
                 ...(field.references ? { references: field.references } : {}),
               },
             ])
@@ -53,25 +127,33 @@ const specialFields = (tables: BetterAuthDBSchema) =>
 const mergedIndexFields = (tables: BetterAuthDBSchema) =>
   Object.fromEntries(
     Object.entries(tables).map(([key, table]) => {
-      // Table-level indexes declared by Better Auth (1.7+)
+      // Table-level indexes declared by Better Auth (1.7+). These are for
+      // equality lookups, and the adapter matches equality fields in
+      // alphabetical order, so sort them.
       const tableIndexes = (table.indexes ?? []).map((index) => {
-        const fields = index.fields.map((i) => table.fields[i]?.fieldName ?? i);
+        const fields = index.fields
+          .map((i) => table.fields[i]?.fieldName ?? i)
+          .sort();
         return fields.length === 1 ? fields[0]! : fields;
       });
       const manualIndexes = (
-        indexFields[key as keyof typeof indexFields]?.map((index) => {
-          return typeof index === "string"
-            ? (table.fields[index]?.fieldName ?? index)
-            : index.map((i) => table.fields[i]?.fieldName ?? i);
-        }) || []
+        indexFields[key as keyof typeof indexFields]
+          ?.filter((index) =>
+            [index].flat().every((field) => field in table.fields)
+          )
+          .map((index) => {
+            return typeof index === "string"
+              ? (table.fields[index]?.fieldName ?? index)
+              : index.map((i) => table.fields[i]?.fieldName ?? i);
+          }) || []
       )
         .concat(tableIndexes)
+        // Field order matters for Convex indexes, so [a, b] and [b, a] are
+        // different indexes.
         .filter(
           (index, idx, all) =>
             all.findIndex(
-              (other) =>
-                [other].flat().sort().join("_") ===
-                [index].flat().sort().join("_")
+              (other) => [other].flat().join("_") === [index].flat().join("_")
             ) === idx
         );
       const specialFieldIndexes = Object.keys(
@@ -186,7 +268,7 @@ export const tables = {
       mergedIndexFields(tables)[
         tableKey as keyof typeof mergedIndexFields
       ]?.map((index) => {
-        const indexArray = Array.isArray(index) ? index.sort() : [index];
+        const indexArray = Array.isArray(index) ? index : [index];
         const indexName = indexArray.join("_");
         return `.index("${indexName}", ${JSON.stringify(indexArray)})`;
       }) || [];
