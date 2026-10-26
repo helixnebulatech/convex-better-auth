@@ -14,6 +14,7 @@ import { stream } from "convex-helpers/server/stream";
 import { mergedStream } from "convex-helpers/server/stream";
 import { stripIndent } from "common-tags";
 import type { BetterAuthDBSchema } from "better-auth/db";
+import { customIdField } from "./create-schema.js";
 
 export const adapterWhereValidator = v.object({
   field: v.string(),
@@ -534,18 +535,47 @@ const generateQuery = (
   return filteredQuery;
 };
 
+// Whether the table stores ids chosen by Better Auth in customId (see
+// customIdTables in create-schema.ts). Schemas generated before customId
+// existed don't have it.
+export const hasCustomIdIndex = (
+  schema: SchemaDefinition<any, any>,
+  model: string
+) =>
+  Boolean(
+    schema.tables[model]?.[" indexes"]?.().some(
+      (index: { indexDescriptor: string; fields: string[] }) =>
+        index.indexDescriptor === customIdField &&
+        index.fields.length === 1 &&
+        index.fields[0] === customIdField
+    )
+  );
+
 // Resolve an _id where value within the requested model. normalizeId returns
 // null for ids of other tables and for strings that aren't Convex ids at all
 // (better-auth's adapter tests pass UUIDs), and both mean "no match". A bare
 // ctx.db.get(id) would return a document from whatever table the id is in.
-const getDocById = async <T extends TableNamesInDataModel<GenericDataModel>>(
+// Ids Better Auth chose itself live in customId, so look there too.
+export const getDocById = async <
+  T extends TableNamesInDataModel<GenericDataModel>,
+>(
   ctx: GenericQueryCtx<GenericDataModel>,
+  schema: SchemaDefinition<any, any>,
   model: T,
   value: unknown
 ) => {
-  const id =
-    typeof value === "string" ? ctx.db.normalizeId(model, value) : null;
-  return id ? await ctx.db.get(model, id) : null;
+  if (typeof value !== "string") {
+    return null;
+  }
+  const id = ctx.db.normalizeId(model, value);
+  const doc = id ? await ctx.db.get(model, id) : null;
+  if (doc || !hasCustomIdIndex(schema, model)) {
+    return doc;
+  }
+  return await ctx.db
+    .query(model as any)
+    .withIndex(customIdField as any, (q) => q.eq(customIdField, value))
+    .unique();
 };
 
 // This is the core function for reading from the database, it parses and
@@ -609,7 +639,7 @@ export const paginate = async <
     }
     const doc =
       uniqueWhere.field === "_id"
-        ? await getDocById(ctx, args.model as T, uniqueWhere.value)
+        ? await getDocById(ctx, schema, args.model as T, uniqueWhere.value)
         : await ctx.db
             .query(args.model as any)
             .withIndex(index?.indexDescriptor as any, (q) =>
@@ -673,7 +703,7 @@ export const paginate = async <
             )
             .unique();
         }
-        return getDocById(ctx, args.model as T, value);
+        return getDocById(ctx, schema, args.model as T, value);
       });
       const filteredDocs = docs
         .flatMap((doc) => (doc ? [doc] : []))

@@ -31,6 +31,7 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
           input:
             | {
                 data: {
+                  _id?: string;
                   createdAt: number;
                   displayUsername?: null | string;
                   email: string;
@@ -49,6 +50,7 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
               }
             | {
                 data: {
+                  _id?: string;
                   createdAt: number;
                   expiresAt: number;
                   ipAddress?: null | string;
@@ -61,6 +63,7 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
               }
             | {
                 data: {
+                  _id?: string;
                   accessToken?: null | string;
                   accessTokenExpiresAt?: null | number;
                   accountId: string;
@@ -78,7 +81,9 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
               }
             | {
                 data: {
+                  _id?: string;
                   createdAt: number;
+                  customId?: string;
                   expiresAt: number;
                   identifier: string;
                   updatedAt: number;
@@ -88,6 +93,7 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
               }
             | {
                 data: {
+                  _id?: string;
                   backupCodes: string;
                   failedVerificationCount?: null | number;
                   lockedUntil?: null | number;
@@ -99,6 +105,7 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
               }
             | {
                 data: {
+                  _id?: string;
                   alg?: null | string;
                   createdAt: number;
                   crv?: null | string;
@@ -109,7 +116,12 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
                 model: "jwks";
               }
             | {
-                data: { count: number; key: string; lastRequest: number };
+                data: {
+                  _id?: string;
+                  count: number;
+                  key: string;
+                  lastRequest: number;
+                };
                 model: "rateLimit";
               };
           onCreateHandle?: string;
@@ -249,6 +261,7 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
                     | "expiresAt"
                     | "createdAt"
                     | "updatedAt"
+                    | "customId"
                     | "_id";
                   mode?: "sensitive" | "insensitive";
                   operator?:
@@ -511,6 +524,7 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
                     | "expiresAt"
                     | "createdAt"
                     | "updatedAt"
+                    | "customId"
                     | "_id";
                   mode?: "sensitive" | "insensitive";
                   operator?:
@@ -882,6 +896,7 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
                 model: "verification";
                 update: {
                   createdAt?: number;
+                  customId?: string;
                   expiresAt?: number;
                   identifier?: string;
                   updatedAt?: number;
@@ -895,6 +910,7 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
                     | "expiresAt"
                     | "createdAt"
                     | "updatedAt"
+                    | "customId"
                     | "_id";
                   mode?: "sensitive" | "insensitive";
                   operator?:
@@ -1206,6 +1222,7 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
                 model: "verification";
                 update: {
                   createdAt?: number;
+                  customId?: string;
                   expiresAt?: number;
                   identifier?: string;
                   updatedAt?: number;
@@ -1219,6 +1236,7 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
                     | "expiresAt"
                     | "createdAt"
                     | "updatedAt"
+                    | "customId"
                     | "_id";
                   mode?: "sensitive" | "insensitive";
                   operator?:
@@ -1369,6 +1387,7 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
             input:
               | {
                   data: {
+                    _id?: string;
                     cbDefaultValueField?: null | string;
                     createdAt: number;
                     customField?: null | string;
@@ -1392,6 +1411,7 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
                 }
               | {
                   data: {
+                    _id?: string;
                     createdAt: number;
                     expiresAt: number;
                     ipAddress?: null | string;
@@ -1404,6 +1424,7 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
                 }
               | {
                   data: {
+                    _id?: string;
                     accessToken?: null | string;
                     accessTokenExpiresAt?: null | number;
                     accountId: string;
@@ -1421,7 +1442,9 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
                 }
               | {
                   data: {
+                    _id?: string;
                     createdAt: number;
+                    customId?: string;
                     expiresAt: number;
                     identifier: string;
                     updatedAt: number;
@@ -1431,6 +1454,7 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
                 }
               | {
                   data: {
+                    _id?: string;
                     backupCodes: string;
                     failedVerificationCount?: null | number;
                     lockedUntil?: null | number;
@@ -1442,6 +1466,7 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
                 }
               | {
                   data: {
+                    _id?: string;
                     alg?: null | string;
                     createdAt: number;
                     crv?: null | string;
@@ -1452,7 +1477,12 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
                   model: "jwks";
                 }
               | {
-                  data: { count: number; key: string; lastRequest: number };
+                  data: {
+                    _id?: string;
+                    count: number;
+                    key: string;
+                    lastRequest: number;
+                  };
                   model: "rateLimit";
                 };
             onCreateHandle?: string;
@@ -1597,6 +1627,7 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
                       | "expiresAt"
                       | "createdAt"
                       | "updatedAt"
+                      | "customId"
                       | "_id";
                     mode?: "sensitive" | "insensitive";
                     operator?:
@@ -1864,6 +1895,7 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
                       | "expiresAt"
                       | "createdAt"
                       | "updatedAt"
+                      | "customId"
                       | "_id";
                     mode?: "sensitive" | "insensitive";
                     operator?:
@@ -2255,6 +2287,7 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
                   model: "verification";
                   update: {
                     createdAt?: number;
+                    customId?: string;
                     expiresAt?: number;
                     identifier?: string;
                     updatedAt?: number;
@@ -2268,6 +2301,7 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
                       | "expiresAt"
                       | "createdAt"
                       | "updatedAt"
+                      | "customId"
                       | "_id";
                     mode?: "sensitive" | "insensitive";
                     operator?:
@@ -2593,6 +2627,7 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
                   model: "verification";
                   update: {
                     createdAt?: number;
+                    customId?: string;
                     expiresAt?: number;
                     identifier?: string;
                     updatedAt?: number;
@@ -2606,6 +2641,7 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
                       | "expiresAt"
                       | "createdAt"
                       | "updatedAt"
+                      | "customId"
                       | "_id";
                     mode?: "sensitive" | "insensitive";
                     operator?:
@@ -2759,6 +2795,7 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
             input:
               | {
                   data: {
+                    _id?: string;
                     cbDefaultValueField?: null | string;
                     createdAt: number;
                     customField?: null | string;
@@ -2783,6 +2820,7 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
                 }
               | {
                   data: {
+                    _id?: string;
                     createdAt: number;
                     expiresAt: number;
                     ipAddress?: null | string;
@@ -2795,6 +2833,7 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
                 }
               | {
                   data: {
+                    _id?: string;
                     accessToken?: null | string;
                     accessTokenExpiresAt?: null | number;
                     accountId: string;
@@ -2812,7 +2851,9 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
                 }
               | {
                   data: {
+                    _id?: string;
                     createdAt: number;
+                    customId?: string;
                     expiresAt: number;
                     identifier: string;
                     updatedAt: number;
@@ -2822,6 +2863,7 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
                 }
               | {
                   data: {
+                    _id?: string;
                     backupCodes: string;
                     failedVerificationCount?: null | number;
                     lockedUntil?: null | number;
@@ -2833,6 +2875,7 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
                 }
               | {
                   data: {
+                    _id?: string;
                     alg?: null | string;
                     createdAt: number;
                     crv?: null | string;
@@ -2843,11 +2886,17 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
                   model: "jwks";
                 }
               | {
-                  data: { count: number; key: string; lastRequest: number };
+                  data: {
+                    _id?: string;
+                    count: number;
+                    key: string;
+                    lastRequest: number;
+                  };
                   model: "rateLimit";
                 }
               | {
                   data: {
+                    _id?: string;
                     cbDefaultValueField?: null | string;
                     createdAt: number;
                     customField?: null | string;
@@ -2872,6 +2921,7 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
                 }
               | {
                   data: {
+                    _id?: string;
                     cbDefaultValueField?: null | string;
                     createdAt: number;
                     customField?: null | string;
@@ -2894,9 +2944,13 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
                   };
                   model: "user_table";
                 }
-              | { data: { oneToOne: string }; model: "oneToOneTable" }
+              | {
+                  data: { _id?: string; oneToOne: string };
+                  model: "oneToOneTable";
+                }
               | {
                   data: {
+                    _id?: string;
                     oneToOne?: null | string;
                     one_to_one?: null | string;
                   };
@@ -2904,6 +2958,7 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
                 }
               | {
                   data: {
+                    _id?: string;
                     cbDefaultValueField?: null | string;
                     json?: any;
                     nullableReference?: null | string;
@@ -2915,6 +2970,7 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
                 }
               | {
                   data: {
+                    _id?: string;
                     createdAt: number;
                     logo?: null | string;
                     metadata?: null | string;
@@ -2926,6 +2982,7 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
                 }
               | {
                   data: {
+                    _id?: string;
                     createdAt: number;
                     organizationId: string;
                     role: string;
@@ -2936,6 +2993,7 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
                 }
               | {
                   data: {
+                    _id?: string;
                     createdAt: number;
                     memberCount: number;
                     name: string;
@@ -2946,6 +3004,7 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
                 }
               | {
                   data: {
+                    _id?: string;
                     createdAt?: null | number;
                     membershipKey?: null | string;
                     teamId: string;
@@ -2955,6 +3014,7 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
                 }
               | {
                   data: {
+                    _id?: string;
                     createdAt?: null | number;
                     email?: null | string;
                     expiresAt?: null | number;
@@ -3110,6 +3170,7 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
                       | "expiresAt"
                       | "createdAt"
                       | "updatedAt"
+                      | "customId"
                       | "_id";
                     mode?: "sensitive" | "insensitive";
                     operator?:
@@ -3729,6 +3790,7 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
                       | "expiresAt"
                       | "createdAt"
                       | "updatedAt"
+                      | "customId"
                       | "_id";
                     mode?: "sensitive" | "insensitive";
                     operator?:
@@ -4493,6 +4555,7 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
                   model: "verification";
                   update: {
                     createdAt?: number;
+                    customId?: string;
                     expiresAt?: number;
                     identifier?: string;
                     updatedAt?: number;
@@ -4506,6 +4569,7 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
                       | "expiresAt"
                       | "createdAt"
                       | "updatedAt"
+                      | "customId"
                       | "_id";
                     mode?: "sensitive" | "insensitive";
                     operator?:
@@ -5278,6 +5342,7 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
                   model: "verification";
                   update: {
                     createdAt?: number;
+                    customId?: string;
                     expiresAt?: number;
                     identifier?: string;
                     updatedAt?: number;
@@ -5291,6 +5356,7 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
                       | "expiresAt"
                       | "createdAt"
                       | "updatedAt"
+                      | "customId"
                       | "_id";
                     mode?: "sensitive" | "insensitive";
                     operator?:
@@ -5889,6 +5955,7 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
             input:
               | {
                   data: {
+                    _id?: string;
                     cbDefaultValueField?: null | string;
                     createdAt: number;
                     customField?: null | string;
@@ -5913,6 +5980,7 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
                 }
               | {
                   data: {
+                    _id?: string;
                     createdAt: number;
                     expiresAt: number;
                     ipAddress?: null | string;
@@ -5925,6 +5993,7 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
                 }
               | {
                   data: {
+                    _id?: string;
                     accessToken?: null | string;
                     accessTokenExpiresAt?: null | number;
                     accountId: string;
@@ -5942,7 +6011,9 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
                 }
               | {
                   data: {
+                    _id?: string;
                     createdAt: number;
+                    customId?: string;
                     expiresAt: number;
                     identifier: string;
                     updatedAt: number;
@@ -5952,6 +6023,7 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
                 }
               | {
                   data: {
+                    _id?: string;
                     backupCodes: string;
                     failedVerificationCount?: null | number;
                     lockedUntil?: null | number;
@@ -5963,6 +6035,7 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
                 }
               | {
                   data: {
+                    _id?: string;
                     alg?: null | string;
                     createdAt: number;
                     crv?: null | string;
@@ -5973,11 +6046,17 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
                   model: "jwks";
                 }
               | {
-                  data: { count: number; key: string; lastRequest: number };
+                  data: {
+                    _id?: string;
+                    count: number;
+                    key: string;
+                    lastRequest: number;
+                  };
                   model: "rateLimit";
                 }
               | {
                   data: {
+                    _id?: string;
                     cbDefaultValueField?: null | string;
                     createdAt: number;
                     customField?: null | string;
@@ -6002,6 +6081,7 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
                 }
               | {
                   data: {
+                    _id?: string;
                     cbDefaultValueField?: null | string;
                     createdAt: number;
                     customField?: null | string;
@@ -6024,9 +6104,13 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
                   };
                   model: "user_table";
                 }
-              | { data: { oneToOne: string }; model: "oneToOneTable" }
+              | {
+                  data: { _id?: string; oneToOne: string };
+                  model: "oneToOneTable";
+                }
               | {
                   data: {
+                    _id?: string;
                     oneToOne?: null | string;
                     one_to_one?: null | string;
                   };
@@ -6034,6 +6118,7 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
                 }
               | {
                   data: {
+                    _id?: string;
                     cbDefaultValueField?: null | string;
                     json?: any;
                     nullableReference?: null | string;
@@ -6045,6 +6130,7 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
                 }
               | {
                   data: {
+                    _id?: string;
                     createdAt: number;
                     logo?: null | string;
                     metadata?: null | string;
@@ -6056,6 +6142,7 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
                 }
               | {
                   data: {
+                    _id?: string;
                     createdAt: number;
                     organizationId: string;
                     role: string;
@@ -6066,6 +6153,7 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
                 }
               | {
                   data: {
+                    _id?: string;
                     createdAt: number;
                     memberCount: number;
                     name: string;
@@ -6076,6 +6164,7 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
                 }
               | {
                   data: {
+                    _id?: string;
                     createdAt?: null | number;
                     membershipKey?: null | string;
                     teamId: string;
@@ -6085,6 +6174,7 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
                 }
               | {
                   data: {
+                    _id?: string;
                     createdAt?: null | number;
                     email?: null | string;
                     expiresAt?: null | number;
@@ -6240,6 +6330,7 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
                       | "expiresAt"
                       | "createdAt"
                       | "updatedAt"
+                      | "customId"
                       | "_id";
                     mode?: "sensitive" | "insensitive";
                     operator?:
@@ -6859,6 +6950,7 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
                       | "expiresAt"
                       | "createdAt"
                       | "updatedAt"
+                      | "customId"
                       | "_id";
                     mode?: "sensitive" | "insensitive";
                     operator?:
@@ -7623,6 +7715,7 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
                   model: "verification";
                   update: {
                     createdAt?: number;
+                    customId?: string;
                     expiresAt?: number;
                     identifier?: string;
                     updatedAt?: number;
@@ -7636,6 +7729,7 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
                       | "expiresAt"
                       | "createdAt"
                       | "updatedAt"
+                      | "customId"
                       | "_id";
                     mode?: "sensitive" | "insensitive";
                     operator?:
@@ -8408,6 +8502,7 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
                   model: "verification";
                   update: {
                     createdAt?: number;
+                    customId?: string;
                     expiresAt?: number;
                     identifier?: string;
                     updatedAt?: number;
@@ -8421,6 +8516,7 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
                       | "expiresAt"
                       | "createdAt"
                       | "updatedAt"
+                      | "customId"
                       | "_id";
                     mode?: "sensitive" | "insensitive";
                     operator?:
@@ -9019,6 +9115,7 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
             input:
               | {
                   data: {
+                    _id?: string;
                     cbDefaultValueField?: null | string;
                     createdAt: number;
                     customField?: null | string;
@@ -9043,6 +9140,7 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
                 }
               | {
                   data: {
+                    _id?: string;
                     createdAt: number;
                     expiresAt: number;
                     ipAddress?: null | string;
@@ -9055,6 +9153,7 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
                 }
               | {
                   data: {
+                    _id?: string;
                     accessToken?: null | string;
                     accessTokenExpiresAt?: null | number;
                     accountId: string;
@@ -9072,7 +9171,9 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
                 }
               | {
                   data: {
+                    _id?: string;
                     createdAt: number;
+                    customId?: string;
                     expiresAt: number;
                     identifier: string;
                     updatedAt: number;
@@ -9082,6 +9183,7 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
                 }
               | {
                   data: {
+                    _id?: string;
                     backupCodes: string;
                     failedVerificationCount?: null | number;
                     lockedUntil?: null | number;
@@ -9093,6 +9195,7 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
                 }
               | {
                   data: {
+                    _id?: string;
                     alg?: null | string;
                     createdAt: number;
                     crv?: null | string;
@@ -9103,11 +9206,17 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
                   model: "jwks";
                 }
               | {
-                  data: { count: number; key: string; lastRequest: number };
+                  data: {
+                    _id?: string;
+                    count: number;
+                    key: string;
+                    lastRequest: number;
+                  };
                   model: "rateLimit";
                 }
               | {
                   data: {
+                    _id?: string;
                     cbDefaultValueField?: null | string;
                     createdAt: number;
                     customField?: null | string;
@@ -9132,6 +9241,7 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
                 }
               | {
                   data: {
+                    _id?: string;
                     cbDefaultValueField?: null | string;
                     createdAt: number;
                     customField?: null | string;
@@ -9154,9 +9264,13 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
                   };
                   model: "user_table";
                 }
-              | { data: { oneToOne: string }; model: "oneToOneTable" }
+              | {
+                  data: { _id?: string; oneToOne: string };
+                  model: "oneToOneTable";
+                }
               | {
                   data: {
+                    _id?: string;
                     oneToOne?: null | string;
                     one_to_one?: null | string;
                   };
@@ -9164,6 +9278,7 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
                 }
               | {
                   data: {
+                    _id?: string;
                     cbDefaultValueField?: null | string;
                     json?: any;
                     nullableReference?: null | string;
@@ -9175,6 +9290,7 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
                 }
               | {
                   data: {
+                    _id?: string;
                     createdAt: number;
                     logo?: null | string;
                     metadata?: null | string;
@@ -9186,6 +9302,7 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
                 }
               | {
                   data: {
+                    _id?: string;
                     createdAt: number;
                     organizationId: string;
                     role: string;
@@ -9196,6 +9313,7 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
                 }
               | {
                   data: {
+                    _id?: string;
                     createdAt: number;
                     memberCount: number;
                     name: string;
@@ -9206,6 +9324,7 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
                 }
               | {
                   data: {
+                    _id?: string;
                     createdAt?: null | number;
                     membershipKey?: null | string;
                     teamId: string;
@@ -9215,6 +9334,7 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
                 }
               | {
                   data: {
+                    _id?: string;
                     createdAt?: null | number;
                     email?: null | string;
                     expiresAt?: null | number;
@@ -9370,6 +9490,7 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
                       | "expiresAt"
                       | "createdAt"
                       | "updatedAt"
+                      | "customId"
                       | "_id";
                     mode?: "sensitive" | "insensitive";
                     operator?:
@@ -9989,6 +10110,7 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
                       | "expiresAt"
                       | "createdAt"
                       | "updatedAt"
+                      | "customId"
                       | "_id";
                     mode?: "sensitive" | "insensitive";
                     operator?:
@@ -10753,6 +10875,7 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
                   model: "verification";
                   update: {
                     createdAt?: number;
+                    customId?: string;
                     expiresAt?: number;
                     identifier?: string;
                     updatedAt?: number;
@@ -10766,6 +10889,7 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
                       | "expiresAt"
                       | "createdAt"
                       | "updatedAt"
+                      | "customId"
                       | "_id";
                     mode?: "sensitive" | "insensitive";
                     operator?:
@@ -11538,6 +11662,7 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
                   model: "verification";
                   update: {
                     createdAt?: number;
+                    customId?: string;
                     expiresAt?: number;
                     identifier?: string;
                     updatedAt?: number;
@@ -11551,6 +11676,7 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
                       | "expiresAt"
                       | "createdAt"
                       | "updatedAt"
+                      | "customId"
                       | "_id";
                     mode?: "sensitive" | "insensitive";
                     operator?:
@@ -12149,6 +12275,7 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
             input:
               | {
                   data: {
+                    _id?: string;
                     cbDefaultValueField?: null | string;
                     createdAt: number;
                     customField?: null | string;
@@ -12173,6 +12300,7 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
                 }
               | {
                   data: {
+                    _id?: string;
                     createdAt: number;
                     expiresAt: number;
                     ipAddress?: null | string;
@@ -12185,6 +12313,7 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
                 }
               | {
                   data: {
+                    _id?: string;
                     accessToken?: null | string;
                     accessTokenExpiresAt?: null | number;
                     accountId: string;
@@ -12202,7 +12331,9 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
                 }
               | {
                   data: {
+                    _id?: string;
                     createdAt: number;
+                    customId?: string;
                     expiresAt: number;
                     identifier: string;
                     updatedAt: number;
@@ -12212,6 +12343,7 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
                 }
               | {
                   data: {
+                    _id?: string;
                     backupCodes: string;
                     failedVerificationCount?: null | number;
                     lockedUntil?: null | number;
@@ -12223,6 +12355,7 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
                 }
               | {
                   data: {
+                    _id?: string;
                     alg?: null | string;
                     createdAt: number;
                     crv?: null | string;
@@ -12233,11 +12366,17 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
                   model: "jwks";
                 }
               | {
-                  data: { count: number; key: string; lastRequest: number };
+                  data: {
+                    _id?: string;
+                    count: number;
+                    key: string;
+                    lastRequest: number;
+                  };
                   model: "rateLimit";
                 }
               | {
                   data: {
+                    _id?: string;
                     cbDefaultValueField?: null | string;
                     createdAt: number;
                     customField?: null | string;
@@ -12262,6 +12401,7 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
                 }
               | {
                   data: {
+                    _id?: string;
                     cbDefaultValueField?: null | string;
                     createdAt: number;
                     customField?: null | string;
@@ -12284,9 +12424,13 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
                   };
                   model: "user_table";
                 }
-              | { data: { oneToOne: string }; model: "oneToOneTable" }
+              | {
+                  data: { _id?: string; oneToOne: string };
+                  model: "oneToOneTable";
+                }
               | {
                   data: {
+                    _id?: string;
                     oneToOne?: null | string;
                     one_to_one?: null | string;
                   };
@@ -12294,6 +12438,7 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
                 }
               | {
                   data: {
+                    _id?: string;
                     cbDefaultValueField?: null | string;
                     json?: any;
                     nullableReference?: null | string;
@@ -12305,6 +12450,7 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
                 }
               | {
                   data: {
+                    _id?: string;
                     createdAt: number;
                     logo?: null | string;
                     metadata?: null | string;
@@ -12316,6 +12462,7 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
                 }
               | {
                   data: {
+                    _id?: string;
                     createdAt: number;
                     organizationId: string;
                     role: string;
@@ -12326,6 +12473,7 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
                 }
               | {
                   data: {
+                    _id?: string;
                     createdAt: number;
                     memberCount: number;
                     name: string;
@@ -12336,6 +12484,7 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
                 }
               | {
                   data: {
+                    _id?: string;
                     createdAt?: null | number;
                     membershipKey?: null | string;
                     teamId: string;
@@ -12345,6 +12494,7 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
                 }
               | {
                   data: {
+                    _id?: string;
                     createdAt?: null | number;
                     email?: null | string;
                     expiresAt?: null | number;
@@ -12500,6 +12650,7 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
                       | "expiresAt"
                       | "createdAt"
                       | "updatedAt"
+                      | "customId"
                       | "_id";
                     mode?: "sensitive" | "insensitive";
                     operator?:
@@ -13119,6 +13270,7 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
                       | "expiresAt"
                       | "createdAt"
                       | "updatedAt"
+                      | "customId"
                       | "_id";
                     mode?: "sensitive" | "insensitive";
                     operator?:
@@ -13883,6 +14035,7 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
                   model: "verification";
                   update: {
                     createdAt?: number;
+                    customId?: string;
                     expiresAt?: number;
                     identifier?: string;
                     updatedAt?: number;
@@ -13896,6 +14049,7 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
                       | "expiresAt"
                       | "createdAt"
                       | "updatedAt"
+                      | "customId"
                       | "_id";
                     mode?: "sensitive" | "insensitive";
                     operator?:
@@ -14668,6 +14822,7 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
                   model: "verification";
                   update: {
                     createdAt?: number;
+                    customId?: string;
                     expiresAt?: number;
                     identifier?: string;
                     updatedAt?: number;
@@ -14681,6 +14836,7 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
                       | "expiresAt"
                       | "createdAt"
                       | "updatedAt"
+                      | "customId"
                       | "_id";
                     mode?: "sensitive" | "insensitive";
                     operator?:
@@ -15279,6 +15435,7 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
             input:
               | {
                   data: {
+                    _id?: string;
                     cbDefaultValueField?: null | string;
                     createdAt: number;
                     customField?: null | string;
@@ -15303,6 +15460,7 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
                 }
               | {
                   data: {
+                    _id?: string;
                     createdAt: number;
                     expiresAt: number;
                     ipAddress?: null | string;
@@ -15315,6 +15473,7 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
                 }
               | {
                   data: {
+                    _id?: string;
                     accessToken?: null | string;
                     accessTokenExpiresAt?: null | number;
                     accountId: string;
@@ -15332,7 +15491,9 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
                 }
               | {
                   data: {
+                    _id?: string;
                     createdAt: number;
+                    customId?: string;
                     expiresAt: number;
                     identifier: string;
                     updatedAt: number;
@@ -15342,6 +15503,7 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
                 }
               | {
                   data: {
+                    _id?: string;
                     backupCodes: string;
                     failedVerificationCount?: null | number;
                     lockedUntil?: null | number;
@@ -15353,6 +15515,7 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
                 }
               | {
                   data: {
+                    _id?: string;
                     alg?: null | string;
                     createdAt: number;
                     crv?: null | string;
@@ -15363,11 +15526,17 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
                   model: "jwks";
                 }
               | {
-                  data: { count: number; key: string; lastRequest: number };
+                  data: {
+                    _id?: string;
+                    count: number;
+                    key: string;
+                    lastRequest: number;
+                  };
                   model: "rateLimit";
                 }
               | {
                   data: {
+                    _id?: string;
                     cbDefaultValueField?: null | string;
                     createdAt: number;
                     customField?: null | string;
@@ -15392,6 +15561,7 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
                 }
               | {
                   data: {
+                    _id?: string;
                     cbDefaultValueField?: null | string;
                     createdAt: number;
                     customField?: null | string;
@@ -15414,9 +15584,13 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
                   };
                   model: "user_table";
                 }
-              | { data: { oneToOne: string }; model: "oneToOneTable" }
+              | {
+                  data: { _id?: string; oneToOne: string };
+                  model: "oneToOneTable";
+                }
               | {
                   data: {
+                    _id?: string;
                     oneToOne?: null | string;
                     one_to_one?: null | string;
                   };
@@ -15424,6 +15598,7 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
                 }
               | {
                   data: {
+                    _id?: string;
                     cbDefaultValueField?: null | string;
                     json?: any;
                     nullableReference?: null | string;
@@ -15435,6 +15610,7 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
                 }
               | {
                   data: {
+                    _id?: string;
                     createdAt: number;
                     logo?: null | string;
                     metadata?: null | string;
@@ -15446,6 +15622,7 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
                 }
               | {
                   data: {
+                    _id?: string;
                     createdAt: number;
                     organizationId: string;
                     role: string;
@@ -15456,6 +15633,7 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
                 }
               | {
                   data: {
+                    _id?: string;
                     createdAt: number;
                     memberCount: number;
                     name: string;
@@ -15466,6 +15644,7 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
                 }
               | {
                   data: {
+                    _id?: string;
                     createdAt?: null | number;
                     membershipKey?: null | string;
                     teamId: string;
@@ -15475,6 +15654,7 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
                 }
               | {
                   data: {
+                    _id?: string;
                     createdAt?: null | number;
                     email?: null | string;
                     expiresAt?: null | number;
@@ -15630,6 +15810,7 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
                       | "expiresAt"
                       | "createdAt"
                       | "updatedAt"
+                      | "customId"
                       | "_id";
                     mode?: "sensitive" | "insensitive";
                     operator?:
@@ -16249,6 +16430,7 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
                       | "expiresAt"
                       | "createdAt"
                       | "updatedAt"
+                      | "customId"
                       | "_id";
                     mode?: "sensitive" | "insensitive";
                     operator?:
@@ -17013,6 +17195,7 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
                   model: "verification";
                   update: {
                     createdAt?: number;
+                    customId?: string;
                     expiresAt?: number;
                     identifier?: string;
                     updatedAt?: number;
@@ -17026,6 +17209,7 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
                       | "expiresAt"
                       | "createdAt"
                       | "updatedAt"
+                      | "customId"
                       | "_id";
                     mode?: "sensitive" | "insensitive";
                     operator?:
@@ -17798,6 +17982,7 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
                   model: "verification";
                   update: {
                     createdAt?: number;
+                    customId?: string;
                     expiresAt?: number;
                     identifier?: string;
                     updatedAt?: number;
@@ -17811,6 +17996,7 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
                       | "expiresAt"
                       | "createdAt"
                       | "updatedAt"
+                      | "customId"
                       | "_id";
                     mode?: "sensitive" | "insensitive";
                     operator?:

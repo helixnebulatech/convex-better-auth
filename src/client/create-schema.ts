@@ -95,6 +95,15 @@ export const indexFields = {
   scimUser: [["provisioningDomainId", "userId"]],
 };
 
+// Tables where Better Auth creates rows with an id it chooses (forceAllowId)
+// and relies on the primary key to reject a second row with the same id:
+// reserveVerificationValue (magic link, email OTP, SIWE) and the OAuth
+// provider's private_key_jwt replay check. Convex picks _id itself, so the
+// chosen id is stored in an indexed customId field and the adapter enforces
+// it like a primary key.
+export const customIdTables = ["verification", "oauthClientAssertion"];
+export const customIdField = "customId";
+
 // Return map of unique, sortable, indexed and reference fields
 const specialFields = (tables: BetterAuthDBSchema) =>
   Object.fromEntries(
@@ -264,14 +273,19 @@ export const tables = {
       return typeMap[type];
     }
 
-    const indexes =
-      mergedIndexFields(tables)[
-        tableKey as keyof typeof mergedIndexFields
-      ]?.map((index) => {
+    const hasCustomId =
+      customIdTables.includes(tableKey) && !(customIdField in fields);
+
+    const indexes = (
+      mergedIndexFields(tables)[tableKey as keyof typeof mergedIndexFields] ||
+      []
+    )
+      .concat(hasCustomId ? [customIdField] : [])
+      .map((index) => {
         const indexArray = Array.isArray(index) ? index : [index];
         const indexName = indexArray.join("_");
         return `.index("${indexName}", ${JSON.stringify(indexArray)})`;
-      }) || [];
+      });
 
     const schema = `${modelName}: defineTable({
 ${Object.keys(fields)
@@ -284,6 +298,7 @@ ${Object.keys(fields)
         : `v.optional(v.union(v.null(), ${fieldSchema}))`;
     return `    ${attr.fieldName ?? field}: ${optional(type)},`;
   })
+  .concat(hasCustomId ? [`    ${customIdField}: v.optional(v.string()),`] : [])
   .join("\n")}
   })${indexes.length > 0 ? `\n    ${indexes.join("\n    ")}` : ""},\n`;
     code += `  ${schema}`;

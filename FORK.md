@@ -11,6 +11,7 @@ the latest Better Auth without waiting for upstream releases.
 | 0.13.3 | `>=1.7.5 <1.8.0` | 0.13.2 + security fixes                                                        |
 | 0.13.4 | `>=1.7.5 <1.8.0` | 0.13.3 + dates returned to Better Auth as `Date` objects                       |
 | 0.13.5 | `>=1.7.5 <1.8.0` | 0.13.4 + missing indexes, single row lookups without an index                  |
+| 0.13.6 | `>=1.7.5 <1.8.0` | 0.13.5 + upstream `0.12.6`, ids chosen by Better Auth, tested with 1.7.13      |
 
 ## Use it in an app
 
@@ -18,9 +19,9 @@ Install it under the upstream name with a package alias, so no imports change:
 
 ```sh
 # npm
-npm install @convex-dev/better-auth@npm:@helixnebulatech/convex-better-auth@^0.13.5 better-auth@~1.7.7
+npm install @convex-dev/better-auth@npm:@helixnebulatech/convex-better-auth@^0.13.6 better-auth@~1.7.13
 # pnpm
-pnpm add @convex-dev/better-auth@npm:@helixnebulatech/convex-better-auth@^0.13.5 better-auth@~1.7.7
+pnpm add @convex-dev/better-auth@npm:@helixnebulatech/convex-better-auth@^0.13.6 better-auth@~1.7.13
 ```
 
 Then follow the
@@ -87,6 +88,12 @@ Then follow the
   - Cross domain one-time tokens (GHSA-j8qq-g9pm-v3c2): ours kept. Upstream
     hands tokens to any origin listed exactly in `trustedOrigins`, ours only to
     `siteUrl`.
+- Ids chosen by Better Auth: since Better Auth 1.7.8, magic link and email OTP
+  sign-in for unverified users, SIWE email claims and the OAuth provider's
+  `private_key_jwt` replay check create rows with an id Better Auth picks and
+  rely on the primary key to reject a duplicate. The `verification` and
+  `oauthClientAssertion` tables keep that id in an indexed `customId` field, and
+  the component enforces it like a primary key.
 - Not taken: #400 (breaks existing data), #405 (no Better Auth flow uses it),
   #418 (breaks sync storage), #438 (caching the JWKS by default breaks key
   rotation), #445 (performance only).
@@ -124,14 +131,15 @@ pnpm run build:codegen  # needs a Convex deployment (CONVEX_DEPLOYMENT)
 pnpm test && pnpm run typecheck && pnpm run lint
 ```
 
-`pnpm-workspace.yaml` blocks versions published less than 7 days ago. To use a
-newer Better Auth release before that, add its packages to
-`minimumReleaseAgeExclude`:
+`pnpm-workspace.yaml` blocks versions published less than 3 days ago, also on
+`pnpm install --frozen-lockfile` in CI. To use a newer Better Auth release
+before that, add the exact versions pnpm reports to `minimumReleaseAgeExclude`,
+and drop them once they're 3 days old:
 
 ```yaml
 minimumReleaseAgeExclude:
-  - better-auth
-  - "@better-auth/*"
+  - better-auth@1.7.13
+  - "@better-auth/core@1.7.13"
 ```
 
 Check the Better Auth changelog for new adapter methods or arguments. The
