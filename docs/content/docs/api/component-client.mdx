@@ -116,12 +116,12 @@ The framework handlers (`@convex-dev/better-auth/nextjs`,
 `@convex-dev/better-auth/react-start`) send your app's host and protocol in
 `x-better-auth-forwarded-host` and `x-better-auth-forwarded-proto`. The routes
 registered by `registerRoutes()` and `registerRoutesLazy()` copy them to
-`x-forwarded-host` and `x-forwarded-proto` before calling Better Auth.
+`x-forwarded-host` and `x-forwarded-proto` before calling Better Auth, only when
+together they form an origin listed exactly in `trustedOrigins`,
+`BETTER_AUTH_TRUSTED_ORIGINS` or the `allowedHosts` of a dynamic `baseURL`.
+Wildcard entries such as `*.vercel.app` don't count. Otherwise both headers are
+left as they arrived.
 
-Your Convex site URL is publicly reachable, so any client can set these headers.
-Better Auth ignores them unless `advanced.trustedProxyHeaders` is enabled. If
-you enable it, the host used for the base URL, and so for links in emails such
-as password reset and verification links, is chosen by the caller. Use a static
-`baseURL`, or a dynamic `baseURL` whose `allowedHosts` lists only exact hosts
-you control, without wildcards on shared platform domains such as
-`*.vercel.app`.
+Better Auth only reads these headers with `advanced.trustedProxyHeaders`
+enabled. To build links in emails from the host the user is on, enable it and
+list each host exactly. See [Security notes](/security#forwarded-host-headers).

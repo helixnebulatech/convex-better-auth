@@ -41,18 +41,22 @@ redeems it automatically.
 ## Forwarded host headers
 
 The framework handlers (`convexBetterAuthNextJs`, `convexBetterAuthReactStart`)
-send the app's host to your Convex site in `x-better-auth-forwarded-host` and
-`x-better-auth-forwarded-proto`. The component restores them as
-`x-forwarded-host` and `x-forwarded-proto` before calling Better Auth.
+send the app's host and protocol to your Convex site in
+`x-better-auth-forwarded-host` and `x-better-auth-forwarded-proto`. They don't
+send `x-forwarded-host` or `x-forwarded-proto`, and drop them if the incoming
+request has them.
 
-Your Convex site URL is publicly reachable, so any client can set these headers,
-just as any client can set `x-forwarded-host` on a Better Auth server reachable
-without your proxy in front of it. Better Auth ignores them unless
-`advanced.trustedProxyHeaders` is enabled. If you enable it, the host used for
-the base URL, and so for links in emails such as password reset and verification
-links, is chosen by the caller. Use a static `baseURL`, or a dynamic `baseURL`
-whose `allowedHosts` lists only exact hosts you control, without wildcards on
-shared platform domains such as `*.vercel.app`.
+Your Convex site URL is publicly reachable, so any client can set these headers.
+The component restores them as `x-forwarded-host` and `x-forwarded-proto` only
+when together they form an origin listed exactly in `trustedOrigins`,
+`BETTER_AUTH_TRUSTED_ORIGINS` or the `allowedHosts` of a dynamic `baseURL`.
+Wildcard entries such as `*.vercel.app` don't count, since anyone can deploy to
+a shared platform domain. Both headers are restored or neither is.
+
+Better Auth ignores `x-forwarded-*` unless `advanced.trustedProxyHeaders` is
+enabled. With it, the base URL, and so the links in emails such as password
+reset and verification links, uses the restored host. The worst a caller can do
+is pick another of the origins you listed exactly.
 
 ## Adapter calls without a where clause
 
