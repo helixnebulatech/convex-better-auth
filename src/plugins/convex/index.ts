@@ -395,8 +395,12 @@ export const convex = (opts: {
         },
       ],
     },
+    // Endpoint keys are unique across Better Auth's plugins, as theirs are.
+    // Better Auth merges every plugin's endpoints by key, so a shared key
+    // (getToken and getJwks in the jwt plugin, getOpenIdConfig in
+    // oauth-provider) silently replaces the other plugin's endpoint.
     endpoints: {
-      getOpenIdConfig: createAuthEndpoint(
+      getConvexOpenIdConfig: createAuthEndpoint(
         "/convex/.well-known/openid-configuration",
         {
           method: "GET",
@@ -447,7 +451,7 @@ export const convex = (opts: {
           });
         }
       ),
-      getJwks: createAuthEndpoint(
+      getConvexJwks: createAuthEndpoint(
         "/convex/jwks",
         {
           method: "GET",
@@ -623,7 +627,7 @@ export const convex = (opts: {
           return datesToMillis(jwks);
         }
       ),
-      getToken: createAuthEndpoint(
+      getConvexToken: createAuthEndpoint(
         "/convex/token",
         {
           method: "GET",

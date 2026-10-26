@@ -5,7 +5,7 @@ import type { BetterAuthOptions } from "better-auth/minimal";
 import { memoryAdapter } from "better-auth/adapters/memory";
 import { admin } from "better-auth/plugins/admin";
 import { jwt as jwtPlugin } from "better-auth/plugins/jwt";
-import { decodeJwt } from "jose";
+import { createLocalJWKSet, decodeJwt, jwtVerify } from "jose";
 import type { MemoryDB } from "better-auth/adapters/memory";
 import { getAuthConfigProvider } from "../../auth-config.js";
 import { convex } from "./index.js";
@@ -316,4 +316,82 @@ describe("convex plugin default JWT payload", () => {
     expect(typeof claims.createdAt).toBe("number");
     expect(typeof claims.updatedAt).toBe("number");
   });
+});
+
+describe("convex plugin with Better Auth's jwt plugin", () => {
+  const build = (order: "convex,jwt" | "jwt,convex") => {
+    process.env.CONVEX_SITE_URL = baseURL;
+    const db: MemoryDB = {
+      user: [],
+      session: [],
+      account: [],
+      verification: [],
+      jwks: [],
+    };
+    const convexPlugin = convex({
+      authConfig: { providers: [getAuthConfigProvider()] },
+    });
+    return betterAuth({
+      baseURL,
+      secret: "test-secret-at-least-thirty-two-characters-long",
+      emailAndPassword: { enabled: true },
+      logger: { disabled: true },
+      database: (options: BetterAuthOptions) => {
+        const adapter = memoryAdapter(db)(options);
+        return {
+          ...adapter,
+          options: { ...adapter.options, isRunMutationCtx: true },
+        };
+      },
+      plugins:
+        order === "convex,jwt"
+          ? [convexPlugin, jwtPlugin()]
+          : [jwtPlugin(), convexPlugin],
+    });
+  };
+
+  for (const order of ["convex,jwt", "jwt,convex"] as const) {
+    it(`keeps the endpoints of both plugins with ${order}`, async () => {
+      const auth = build(order);
+      const signUp = await auth.handler(
+        new Request(`${baseURL}/api/auth/sign-up/email`, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            email: "both@example.com",
+            password: "testpassword123",
+            name: "Both",
+          }),
+        })
+      );
+      const cookie = signUp.headers
+        .getSetCookie()
+        .map((c) => c.split(";")[0])
+        .join("; ");
+      const get = (path: string) =>
+        auth.handler(
+          new Request(`${baseURL}/api/auth${path}`, { headers: { cookie } })
+        );
+      for (const path of [
+        "/convex/token",
+        "/convex/jwks",
+        "/convex/.well-known/openid-configuration",
+        "/token",
+        "/jwks",
+      ]) {
+        const res = await get(path);
+        expect(res.status, `${path}: ${await res.clone().text()}`).toBe(200);
+      }
+      // Both plugins keep their keys in the jwks table. Each token verifies
+      // against the keys its own plugin publishes.
+      for (const [tokenPath, jwksPath] of [
+        ["/convex/token", "/convex/jwks"],
+        ["/token", "/jwks"],
+      ] as const) {
+        const { token } = await (await get(tokenPath)).json();
+        const jwks = createLocalJWKSet(await (await get(jwksPath)).json());
+        await expect(jwtVerify(token, jwks)).resolves.toBeTruthy();
+      }
+    });
+  }
 });

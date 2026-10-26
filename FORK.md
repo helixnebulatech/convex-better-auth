@@ -124,6 +124,10 @@ web origin.
     `oneTimeToken` plugin, and its token storage. With both plugins, one of the
     two verify endpoints disappeared, and the official one could redeem an OAuth
     one-time token without the browser's verifier.
+  - The Convex plugin used `getToken` and `getJwks`, the keys of Better Auth's
+    `jwt` plugin, and `getOpenIdConfig`, the key of `oauthProvider`, which needs
+    `jwt`. With either plugin, one of the token, JWKS or discovery endpoints
+    disappeared, and without the Convex ones Convex can't validate its JWT.
 - Not taken: #400 (breaks existing data), #405 (no Better Auth flow uses it),
   #418 (breaks sync storage), #438 (caching the JWKS by default breaks key
   rotation), #445 (performance only).
