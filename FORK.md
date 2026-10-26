@@ -131,14 +131,15 @@ pnpm run build:codegen  # needs a Convex deployment (CONVEX_DEPLOYMENT)
 pnpm test && pnpm run typecheck && pnpm run lint
 ```
 
-`pnpm-workspace.yaml` blocks versions published less than 7 days ago. To use a
-newer Better Auth release before that, add its packages to
-`minimumReleaseAgeExclude`:
+`pnpm-workspace.yaml` blocks versions published less than 3 days ago, also on
+`pnpm install --frozen-lockfile` in CI. To use a newer Better Auth release
+before that, add the exact versions pnpm reports to `minimumReleaseAgeExclude`,
+and drop them once they're 3 days old:
 
 ```yaml
 minimumReleaseAgeExclude:
-  - better-auth
-  - "@better-auth/*"
+  - better-auth@1.7.13
+  - "@better-auth/core@1.7.13"
 ```
 
 Check the Better Auth changelog for new adapter methods or arguments. The
