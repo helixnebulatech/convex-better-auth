@@ -374,3 +374,22 @@ With the cross domain plugin and `autoSignInAfterVerification`, opening the
 verification link now signs the user in to the app at `siteUrl`, like a magic
 link. The same applies when confirming an email change. Before, Better Auth
 created the session but the app never received it.
+
+### Using the plugins with other Better Auth plugins
+
+The cross domain and Convex plugins registered some endpoints under the same
+keys as Better Auth's `oneTimeToken`, `jwt` and `oauthProvider` plugins, so
+using them together removed endpoints of one or the other. They now use keys of
+their own. If you called these endpoints on the server, rename the calls:
+
+| Before                                         | After                                      |
+| ---------------------------------------------- | ------------------------------------------ |
+| `auth.api.getToken()` (Convex)                 | `auth.api.getConvexToken()`                |
+| `auth.api.getJwks()` (Convex)                  | `auth.api.getConvexJwks()`                 |
+| `auth.api.getOpenIdConfig()`                   | `auth.api.getConvexOpenIdConfig()`         |
+| `auth.api.verifyOneTimeToken()` (cross domain) | `auth.api.crossDomainVerifyOneTimeToken()` |
+| `auth.api.startOAuth()`                        | `auth.api.crossDomainOAuthStart()`         |
+
+The paths and the clients don't change. A cross domain sign-in that is between
+the redirect and the token exchange during the upgrade fails, and the user has
+to sign in again.
