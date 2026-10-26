@@ -112,24 +112,79 @@ const redactHeaders = (headers: Headers) =>
         : value,
   ]);
 
-const restoreOriginalForwardedHeaders = (request: Request) => {
+// Origins named exactly in trustedOrigins, BETTER_AUTH_TRUSTED_ORIGINS and,
+// with a dynamic baseURL, allowedHosts. Wildcard patterns and non-http(s)
+// entries are left out.
+const exactTrustedOrigins = async (
+  auth: {
+    $context: Promise<{
+      trustedOrigins?: string[];
+      options: { trustedOrigins?: unknown };
+    }>;
+  },
+  request: Request
+) => {
+  const ctx = await auth.$context;
+  const origins: unknown[] = [...(ctx.trustedOrigins ?? [])];
+  if (Array.isArray(ctx.options.trustedOrigins)) {
+    origins.push(...ctx.options.trustedOrigins);
+  } else if (typeof ctx.options.trustedOrigins === "function") {
+    const resolved = await ctx.options.trustedOrigins(request);
+    if (Array.isArray(resolved)) {
+      origins.push(...resolved);
+    }
+  }
+  const result = new Set<string>();
+  for (const origin of origins) {
+    if (typeof origin !== "string" || origin.includes("*")) {
+      continue;
+    }
+    try {
+      const url = new URL(origin);
+      if (url.protocol === "http:" || url.protocol === "https:") {
+        result.add(url.origin);
+      }
+    } catch {
+      // not a URL
+    }
+  }
+  return result;
+};
+
+// The framework handlers send the app's host and protocol in
+// x-better-auth-forwarded-* headers. Anyone can call the Convex site with
+// these headers, so they are restored into x-forwarded-* only when together
+// they form an origin listed exactly in trustedOrigins. Both are restored or
+// neither is.
+const restoreOriginalForwardedHeaders = async (
+  auth: Parameters<typeof exactTrustedOrigins>[0],
+  request: Request
+) => {
   const originalHost = request.headers.get("x-better-auth-forwarded-host");
   const originalProto = request.headers.get("x-better-auth-forwarded-proto");
-
-  if (!originalHost && !originalProto) {
+  if (
+    !originalHost ||
+    (originalProto !== "http" && originalProto !== "https")
+  ) {
     return request;
   }
-
+  let origin: string;
+  try {
+    const url = new URL(`${originalProto}://${originalHost}`);
+    // Reject values carrying a path, credentials or anything besides a host
+    if (url.host !== originalHost.toLowerCase()) {
+      return request;
+    }
+    origin = url.origin;
+  } catch {
+    return request;
+  }
+  if (!(await exactTrustedOrigins(auth, request)).has(origin)) {
+    return request;
+  }
   const headers = new Headers(request.headers);
-
-  if (originalHost) {
-    headers.set("x-forwarded-host", originalHost);
-  }
-
-  if (originalProto) {
-    headers.set("x-forwarded-proto", originalProto);
-  }
-
+  headers.set("x-forwarded-host", originalHost);
+  headers.set("x-forwarded-proto", originalProto);
   return new Request(request, { headers });
 };
 
@@ -421,7 +476,10 @@ export const createClient = <
           console.log("request headers", redactHeaders(request.headers));
         }
         const auth = createAuth(ctx as any);
-        const normalizedRequest = restoreOriginalForwardedHeaders(request);
+        const normalizedRequest = await restoreOriginalForwardedHeaders(
+          auth,
+          request
+        );
         const response = await auth.handler(normalizedRequest);
         if (config?.verbose) {
           // eslint-disable-next-line no-console
@@ -543,7 +601,10 @@ export const createClient = <
           console.log("request headers", redactHeaders(request.headers));
         }
         const auth = createAuth(ctx as any);
-        const normalizedRequest = restoreOriginalForwardedHeaders(request);
+        const normalizedRequest = await restoreOriginalForwardedHeaders(
+          auth,
+          request
+        );
         const response = await auth.handler(normalizedRequest);
         if (config?.verbose) {
           // eslint-disable-next-line no-console

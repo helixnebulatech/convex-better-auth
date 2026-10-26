@@ -81,7 +81,7 @@ describe("convexBetterAuthNextJs handler", () => {
     const headers = headersOf(fetchSpy);
     expect(headers.get("host")).toBe(new URL(SITE_URL).host);
     expect(headers.get("x-forwarded-host")).toBeNull();
-    expect(headers.get("x-forwarded-proto")).toBe("https");
+    expect(headers.get("x-forwarded-proto")).toBeNull();
     expect(headers.get("x-better-auth-forwarded-host")).toBe("app.example.com");
     expect(headers.get("x-better-auth-forwarded-proto")).toBe("https");
   });
