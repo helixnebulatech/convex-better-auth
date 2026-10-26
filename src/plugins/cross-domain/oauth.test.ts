@@ -20,7 +20,10 @@ const ACCOUNTS: Record<string, { id: string; email: string; name: string }> = {
 };
 
 const build = (
-  opts: { crossDomain?: boolean; trustedOrigins?: string[] } = {}
+  opts: {
+    crossDomain?: boolean;
+    trustedOrigins?: string[] | ((request?: Request) => Promise<string[]>);
+  } = {}
 ) => {
   const db: MemoryDB = { user: [], session: [], account: [], verification: [] };
   const magicLinks: string[] = [];
@@ -200,7 +203,7 @@ describe("cross domain OAuth", () => {
     expect((await startOAuth(auth, state)).status).toBe(400);
   });
 
-  it("doesn't hand the session to origins other than siteUrl", async () => {
+  it("doesn't hand the session to custom schemes or origins matched by a wildcard", async () => {
     const { auth, db } = build({
       trustedOrigins: [SITE, "your-scheme://", "https://*.vercel.app"],
     });
@@ -487,5 +490,129 @@ describe("crossDomainClient OAuth", () => {
       token: ott,
     });
     expect(error).toBeNull();
+  });
+});
+
+describe("cross domain OAuth from other app origins", () => {
+  const ADMIN = "https://admin.example.com";
+
+  // An app on ADMIN runs crossDomainClient too
+  const browserSignInFrom = async (
+    auth: Auth,
+    origin: string,
+    body: Record<string, unknown> = {}
+  ) => {
+    const state = await signInSocial(auth, body, {
+      ...clientHeaders(),
+      origin,
+    });
+    const start = await startOAuth(auth, state, { origin });
+    expect(start.status).toBe(302);
+    return callback(auth, state, "codeA", cookieHeader(start));
+  };
+
+  it("hands the session back to an exact trusted origin that started the flow, like Better Auth's oauth-popup", async () => {
+    const { auth } = build({ trustedOrigins: [SITE, ADMIN] });
+    const res = await browserSignInFrom(auth, ADMIN, {
+      callbackURL: `${ADMIN}/home`,
+    });
+    const location = new URL(res.headers.get("location")!);
+    expect(`${location.origin}${location.pathname}`).toBe(`${ADMIN}/home`);
+    const ott = location.searchParams.get("ott")!;
+    expect((await redeem(auth, ott)).status).toBe(400);
+    expect((await redeem(auth, ott, VERIFIER)).status).toBe(200);
+  });
+
+  it("resolves relative URLs and the default callbackURL against the app that started the flow", async () => {
+    const { auth } = build({ trustedOrigins: [SITE, ADMIN] });
+    const relative = await browserSignInFrom(auth, ADMIN, {
+      callbackURL: "/home",
+    });
+    expect(relative.headers.get("location")).toMatch(
+      new RegExp(`^${ADMIN}/home\\?ott=`)
+    );
+    const { auth: auth2 } = build({ trustedOrigins: [SITE, ADMIN] });
+    const state = await signInSocial(
+      auth2,
+      { callbackURL: undefined },
+      {
+        ...clientHeaders(),
+        origin: ADMIN,
+      }
+    );
+    const start = await startOAuth(auth2, state, { origin: ADMIN });
+    const res = await callback(auth2, state, "codeA", cookieHeader(start));
+    expect(res.headers.get("location")).toMatch(
+      new RegExp(`^${ADMIN}/\\?ott=`)
+    );
+  });
+
+  it("only hands the session to the origin that started the flow", async () => {
+    const { auth, db } = build({ trustedOrigins: [SITE, ADMIN] });
+    // Started on ADMIN, coming back to SITE, and the other way round
+    const toSite = await browserSignInFrom(auth, ADMIN, { callbackURL: SITE });
+    expect(toSite.headers.get("location")).not.toContain("ott=");
+    const toAdmin = await browserSignIn(auth, "codeA", {
+      callbackURL: `${ADMIN}/home`,
+    });
+    expect(toAdmin.headers.get("location")).not.toContain("ott=");
+    expect(
+      db.verification.some((v) => v.identifier.startsWith("one-time-token:"))
+    ).toBe(false);
+  });
+
+  it("doesn't start a flow from an origin matched only by a wildcard", async () => {
+    const { auth } = build({
+      trustedOrigins: [SITE, "https://*.vercel.app"],
+    });
+    const preview = "https://attacker.vercel.app";
+    const state = await signInSocial(
+      auth,
+      { callbackURL: `${preview}/x` },
+      {
+        ...clientHeaders(),
+        origin: preview,
+      }
+    );
+    expect((await startOAuth(auth, state, { origin: preview })).status).toBe(
+      403
+    );
+  });
+
+  it("accepts exact origins returned by a trustedOrigins function", async () => {
+    const { auth } = build({ trustedOrigins: async () => [SITE, ADMIN] });
+    const res = await browserSignInFrom(auth, ADMIN, {
+      callbackURL: `${ADMIN}/home`,
+    });
+    expect(ottOf(res)).toBeTruthy();
+  });
+
+  it("only hands a magic link session to siteUrl, as Better Auth never sends one to another web origin", async () => {
+    const { auth, magicLinks } = build({ trustedOrigins: [SITE, ADMIN] });
+    await auth.handler(
+      new Request(`${BASE}/sign-in/magic-link`, {
+        method: "POST",
+        headers: { ...clientHeaders(), origin: ADMIN },
+        body: JSON.stringify({
+          email: "m@example.com",
+          callbackURL: `${ADMIN}/home`,
+        }),
+      })
+    );
+    const res = await auth.handler(new Request(magicLinks[0]!));
+    expect(res.headers.get("location")).toBe(`${ADMIN}/home`);
+  });
+
+  it("still hands off flows started before the start origin was stored", async () => {
+    const { auth, db } = build({ trustedOrigins: [SITE, ADMIN] });
+    const state = await signInSocial(auth);
+    const start = await startOAuth(auth, state);
+    const row = db.verification.find(
+      (v) => v.identifier === `cross-domain-oauth-verifier:${state}`
+    )!;
+    row.value = JSON.parse(row.value).hash;
+    const res = await callback(auth, state, "codeA", cookieHeader(start));
+    expect(new URL(res.headers.get("location")!).origin).toBe(SITE);
+    expect((await redeem(auth, ottOf(res)!, VERIFIER)).status).toBe(200);
   });
 });

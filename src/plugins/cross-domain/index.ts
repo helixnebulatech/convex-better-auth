@@ -16,6 +16,55 @@ const ottVerifierIdentifier = (token: string) =>
   `cross-domain-ott-verifier:${token}`;
 
 type PendingOAuthStart = { url: string; errorCallbackURL?: string };
+// Stored per OAuth flow when crossDomainClient starts it
+type OAuthVerifier = { hash: string; origin: string };
+
+const parseOAuthVerifier = (value: string, siteOrigin: string) => {
+  try {
+    const parsed = JSON.parse(value) as Partial<OAuthVerifier>;
+    if (typeof parsed.hash === "string" && typeof parsed.origin === "string") {
+      return parsed as OAuthVerifier;
+    }
+  } catch {
+    // Flows started before 0.13.7 stored only the hash, always from siteUrl
+  }
+  return { hash: value, origin: siteOrigin };
+};
+
+// Origins listed exactly in trustedOrigins, resolved for this request like
+// Better Auth's origin check does. Wildcard patterns and custom schemes are
+// left out.
+const getExactTrustedOrigins = async (ctx: {
+  context: {
+    trustedOrigins: string[];
+    options: { trustedOrigins?: unknown };
+  };
+  request?: Request;
+}) => {
+  const entries: unknown[] = [...ctx.context.trustedOrigins];
+  const option = ctx.context.options.trustedOrigins;
+  if (typeof option === "function") {
+    const resolved = await option(ctx.request);
+    if (Array.isArray(resolved)) {
+      entries.push(...resolved);
+    }
+  }
+  const origins = new Set<string>();
+  for (const entry of entries) {
+    if (typeof entry !== "string" || entry.includes("*")) {
+      continue;
+    }
+    try {
+      const url = new URL(entry);
+      if (url.protocol === "http:" || url.protocol === "https:") {
+        origins.add(url.origin);
+      }
+    } catch {
+      // not a URL
+    }
+  }
+  return origins;
+};
 
 const sha256 = async (value: string) => {
   const digest = await crypto.subtle.digest(
@@ -39,14 +88,23 @@ export const crossDomain = ({ siteUrl }: { siteUrl: string }) => {
   const oneTimeToken = oneTimeTokenPlugin();
   const siteOrigin = new URL(siteUrl).origin;
 
-  const rewriteCallbackURL = (callbackURL?: string) => {
+  // Origins that may start an OAuth flow and receive its session: siteUrl
+  // and the exact entries of trustedOrigins.
+  const getAppOrigins = async (
+    ctx: Parameters<typeof getExactTrustedOrigins>[0]
+  ) => (await getExactTrustedOrigins(ctx)).add(siteOrigin);
+
+  const rewriteCallbackURL = (
+    callbackURL: string | undefined,
+    base: string
+  ) => {
     if (!callbackURL) {
       return callbackURL;
     }
     if (!callbackURL.startsWith("/")) {
       return callbackURL;
     }
-    return new URL(callbackURL, siteUrl).toString();
+    return new URL(callbackURL, base).toString();
   };
 
   const isExpoNative = (ctx: { headers?: Headers }) => {
@@ -121,7 +179,10 @@ export const crossDomain = ({ siteUrl }: { siteUrl: string }) => {
           },
           handler: createAuthMiddleware(async (ctx) => {
             if (ctx.query?.callbackURL) {
-              ctx.query.callbackURL = rewriteCallbackURL(ctx.query.callbackURL);
+              ctx.query.callbackURL = rewriteCallbackURL(
+                ctx.query.callbackURL,
+                siteUrl
+              );
             }
             return { context: ctx };
           }),
@@ -131,8 +192,21 @@ export const crossDomain = ({ siteUrl }: { siteUrl: string }) => {
             return Boolean(ctx.method === "POST" && !isExpoNative(ctx));
           },
           handler: createAuthMiddleware(async (ctx) => {
-            // Set callbackURL to siteUrl for redirect-triggering paths with
-            // no callbackURL defined.
+            // An OAuth flow comes back to the app that started it, so its
+            // relative URLs resolve against that app's origin, as with
+            // Better Auth's oauth-popup. Other flows resolve against siteUrl.
+            let base = siteUrl;
+            if (
+              ctx.path?.startsWith("/sign-in/social") ||
+              ctx.path?.startsWith("/link-social")
+            ) {
+              const origin = ctx.request?.headers.get("origin");
+              if (origin && (await getAppOrigins(ctx)).has(origin)) {
+                base = origin;
+              }
+            }
+            // Set callbackURL for redirect-triggering paths with no
+            // callbackURL defined.
             if (
               ctx.body &&
               !ctx.body.callbackURL &&
@@ -140,19 +214,24 @@ export const crossDomain = ({ siteUrl }: { siteUrl: string }) => {
                 ctx.path?.startsWith("/sign-in/magic-link") ||
                 ctx.path?.startsWith("/send-verification-email"))
             ) {
-              ctx.body.callbackURL = siteUrl;
+              ctx.body.callbackURL = base === siteUrl ? siteUrl : `${base}/`;
             }
             if (ctx.body?.callbackURL) {
-              ctx.body.callbackURL = rewriteCallbackURL(ctx.body.callbackURL);
+              ctx.body.callbackURL = rewriteCallbackURL(
+                ctx.body.callbackURL,
+                base
+              );
             }
             if (ctx.body?.newUserCallbackURL) {
               ctx.body.newUserCallbackURL = rewriteCallbackURL(
-                ctx.body.newUserCallbackURL
+                ctx.body.newUserCallbackURL,
+                base
               );
             }
             if (ctx.body?.errorCallbackURL) {
               ctx.body.errorCallbackURL = rewriteCallbackURL(
-                ctx.body.errorCallbackURL
+                ctx.body.errorCallbackURL,
+                base
               );
             }
             return { context: ctx };
@@ -232,32 +311,24 @@ export const crossDomain = ({ siteUrl }: { siteUrl: string }) => {
               return;
             }
             const url = new URL(redirectTo, siteUrl);
-            // Better Auth keeps the session in a cookie of the auth server and
-            // never hands it to the callback URL. The one-time token only
-            // exists to bring it to the app at siteUrl, so other origins
-            // (even trusted ones) don't get one.
-            if (url.origin !== siteOrigin) {
-              return;
-            }
-            // An OAuth session can't move to another browser in Better Auth
-            // (the state cookie ties the flow to the browser that started
-            // it), so bind the token to the verifier of the client that
-            // started the flow. Magic links aren't tied to a browser, so their
-            // token isn't either.
+            // Better Auth keeps the session in a cookie of the auth server.
+            // Its plugins only hand a session to another web origin when
+            // that origin started the flow in the same browser (oauth-popup,
+            // oauth-proxy), and never for a magic link, which anyone can
+            // request with any callback URL. The one-time token follows the
+            // same rules.
             let verifierHash: string | undefined;
             if (ctx.path?.startsWith("/callback")) {
+              // OAuth: only to the app that started the flow, and only
+              // redeemable with the verifier of the browser that started it,
+              // as the state cookie ties the flow to that browser.
               const state = ctx.query?.state as string | undefined;
-              const verifier = state
+              const verifierRow = state
                 ? await ctx.context.internalAdapter.findVerificationValue(
                     oauthVerifierIdentifier(state)
                   )
                 : null;
-              if (verifier && state) {
-                verifierHash = verifier.value;
-                await ctx.context.internalAdapter.deleteVerificationByIdentifier(
-                  oauthVerifierIdentifier(state)
-                );
-              } else {
+              if (!verifierRow || !state) {
                 // The flow wasn't started by crossDomainClient in this
                 // browser, so there's no browser to hand the session to.
                 ctx.context.logger.error(
@@ -265,6 +336,23 @@ export const crossDomain = ({ siteUrl }: { siteUrl: string }) => {
                 );
                 return;
               }
+              await ctx.context.internalAdapter.deleteVerificationByIdentifier(
+                oauthVerifierIdentifier(state)
+              );
+              const verifier = parseOAuthVerifier(
+                verifierRow.value,
+                siteOrigin
+              );
+              if (url.origin !== verifier.origin) {
+                ctx.context.logger.warn(
+                  `Not handing off the session: the callback URL is on ${url.origin}, but the OAuth flow was started from ${verifier.origin}`
+                );
+                return;
+              }
+              verifierHash = verifier.hash;
+            } else if (url.origin !== siteOrigin) {
+              // Magic link: only to the app at siteUrl
+              return;
             }
             const token = generateRandomString(32);
             const expiresAt = new Date(Date.now() + 3 * 60 * 1000);
@@ -323,7 +411,7 @@ export const crossDomain = ({ siteUrl }: { siteUrl: string }) => {
             // navigation, so redirect to the error callback URL like Better
             // Auth does for OAuth errors, or to its error page.
             ctx.context.logger.error(
-              `OAuth sign-in was started with \`Origin: null\`, which happens when ${siteOrigin} sets a strict referrer policy such as no-referrer. Use a policy that sends the origin, such as strict-origin-when-cross-origin, or pass \`setReferrerPolicy: true\` to crossDomainClient.`
+              `OAuth sign-in was started with \`Origin: null\`, which happens when the app sets a strict referrer policy such as no-referrer. Use a policy that sends the origin, such as strict-origin-when-cross-origin, or pass \`setReferrerPolicy: true\` to crossDomainClient.`
             );
             const url = new URL(
               pending?.errorCallbackURL ??
@@ -334,7 +422,10 @@ export const crossDomain = ({ siteUrl }: { siteUrl: string }) => {
             url.searchParams.set("error", "missing_or_null_origin");
             throw ctx.redirect(url.toString());
           }
-          if (origin !== siteOrigin) {
+          // Like Better Auth's oauth-popup, any trusted origin may start a
+          // flow, but only exact entries: a wildcard such as *.vercel.app
+          // also matches sites anyone can deploy.
+          if (!origin || !(await getAppOrigins(ctx)).has(origin)) {
             throw ctx.error("FORBIDDEN", { message: "Invalid origin" });
           }
           if (!pending) {
@@ -343,9 +434,13 @@ export const crossDomain = ({ siteUrl }: { siteUrl: string }) => {
           await ctx.context.internalAdapter.deleteVerificationByIdentifier(
             oauthStartIdentifier(state)
           );
+          const stored: OAuthVerifier = {
+            hash: await sha256(verifier),
+            origin,
+          };
           await ctx.context.internalAdapter.createVerificationValue({
             identifier: oauthVerifierIdentifier(state),
-            value: await sha256(verifier),
+            value: JSON.stringify(stored),
             expiresAt: new Date(Date.now() + 10 * 60 * 1000),
           });
           // Same cookie Better Auth sets when it generates the state

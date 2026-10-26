@@ -158,8 +158,9 @@ description: Install and configure Convex + Better Auth for React.
     ```
 
     <Callout type="warn">
-      Sign-in only completes for your app at `siteUrl`. Other origins, even
-      trusted ones like `https://*.vercel.app`, are redirected to without a
+      Sign-in only completes for your app at `siteUrl`, and for OAuth also for
+      other apps listed exactly in `trustedOrigins`. Origins matched by a
+      wildcard like `https://*.vercel.app` are redirected to without a
       session. For preview deployments, set `SITE_URL` per preview, for
       example in the Vercel build command:
 
@@ -313,6 +314,8 @@ const { data } = await authClient.signIn.social({
 await authClient.startOAuthRedirect(data.url);
 ```
 
-The session is only handed to your app at `siteUrl`. Callback URLs on other
-origins, even trusted ones, are redirected to without a session. See
-[Security notes](/security) for more.
+An OAuth sign-in hands the session back to the app that started it, if that app
+is at `siteUrl` or listed exactly in `trustedOrigins`, like Better Auth's
+`oauth-popup` plugin does. A magic link only hands it to `siteUrl`. Callback
+URLs on other origins are redirected to without a session. See
+[Security notes](/security#who-receives-a-session) for more.
