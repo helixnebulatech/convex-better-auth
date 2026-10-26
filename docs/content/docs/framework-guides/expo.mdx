@@ -326,6 +326,18 @@ export const createAuthOptions = (ctx: GenericCtx<DataModel>) =>
   }) satisfies BetterAuthOptions;
 ```
 
+<Callout type="warn">
+  Web sign-in only completes for your app at `siteUrl`. Other origins, even
+  trusted ones, are redirected to without a session. Native sign-in via
+  `your-scheme://` is unaffected. For web previews, set `SITE_URL` per
+  preview:
+
+```sh
+npx convex deploy --cmd 'npx convex env set --preview-name "$VERCEL_GIT_COMMIT_REF" SITE_URL "https://$VERCEL_URL" && npm run build'
+```
+
+</Callout>
+
 </div>
 
 <div className="fd-step">

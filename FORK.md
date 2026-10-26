@@ -11,7 +11,7 @@ the latest Better Auth without waiting for upstream releases.
 | 0.13.3 | `>=1.7.5 <1.8.0` | 0.13.2 + security fixes                                                        |
 | 0.13.4 | `>=1.7.5 <1.8.0` | 0.13.3 + dates returned to Better Auth as `Date` objects                       |
 | 0.13.5 | `>=1.7.5 <1.8.0` | 0.13.4 + missing indexes, single row lookups without an index                  |
-| 0.13.6 | `>=1.7.5 <1.8.0` | 0.13.5 + ids chosen by Better Auth, tested with Better Auth 1.7.13             |
+| 0.13.6 | `>=1.7.5 <1.8.0` | 0.13.5 + upstream `0.12.6`, ids chosen by Better Auth, tested with 1.7.13      |
 
 ## Use it in an app
 
@@ -68,9 +68,9 @@ Then follow the
   - Null comparisons match Better Auth's SQL adapters.
   - The Next.js example and docs snippets no longer expose other users' data.
   - Where the component behaves as Better Auth does on purpose (magic links
-    aren't tied to a browser, forwarded host headers, adapter calls without a
-    `where` clause), the [security notes](./docs/content/docs/security.mdx)
-    document it. See [SECURITY.md](./SECURITY.md) to report a vulnerability.
+    aren't tied to a browser, adapter calls without a `where` clause), the
+    [security notes](./docs/content/docs/security.mdx) document it. See
+    [SECURITY.md](./SECURITY.md) to report a vulnerability.
 - Indexes and lookups, from our own audit of every lookup Better Auth 1.7 and
   its official plugins make:
   - Indexes for lookups that had none, such as the credential account lookup
@@ -80,6 +80,14 @@ Then follow the
     table doesn't have.
   - Single row lookups without an index read the whole table instead of stopping
     after 200 rows and reporting the row as missing.
+- Upstream `0.12.6` merged, with its two security fixes adapted:
+  - Forwarded host (GHSA-pgx2-m66h-x29f): taken, but the component matches the
+    full origin (protocol and host) against the exact trusted origins, not only
+    the host, and the framework handlers also drop an incoming
+    `x-forwarded-proto`.
+  - Cross domain one-time tokens (GHSA-j8qq-g9pm-v3c2): ours kept. Upstream
+    hands tokens to any origin listed exactly in `trustedOrigins`, ours only to
+    `siteUrl`.
 - Ids chosen by Better Auth: since Better Auth 1.7.8, magic link and email OTP
   sign-in for unverified users, SIWE email claims and the OAuth provider's
   `private_key_jwt` replay check create rows with an id Better Auth picks and
