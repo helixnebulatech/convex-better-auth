@@ -27,6 +27,27 @@ pnpm add @convex-dev/better-auth@npm:@helixnebulatech/convex-better-auth@^0.13.6
 Then follow the
 [0.13 migration guide](./docs/content/docs/migrations/migrate-to-0-13.mdx).
 
+## How we decide
+
+When a fix or a feature can be done in more than one way, we do what Better Auth
+core or its official plugins do in the same situation, and we check it in their
+source for the Better Auth version we support, not from memory. Where Convex
+needs something Better Auth doesn't have, we follow the closest official plugin.
+For example, the cross domain plugin hands an OAuth session back to the app that
+started the flow because `oauth-popup` and `oauth-proxy` do, and only hands a
+magic link session to `siteUrl` because no official plugin hands one to another
+web origin.
+
+- We can be stricter than Better Auth when its behaviour would be unsafe in a
+  Convex setup, for example because the Convex site is always publicly
+  reachable. We are never looser.
+- Upstream fixes are compared against the same rule. When upstream and Better
+  Auth disagree, we follow Better Auth.
+- Every choice is written down where users and reviewers see it: the
+  [security notes](./docs/content/docs/security.mdx) say which Better Auth
+  behaviour each rule matches and where we are stricter, and the changeset says
+  why the option was chosen over the others.
+
 ## Differences from upstream
 
 - Better Auth 1.7.x support, from upstream PR #444.
@@ -56,8 +77,10 @@ Then follow the
     the Next.js helpers (#359).
 - Security fixes from our own audit, matching Better Auth's native behaviour:
   - Cross domain: OAuth sign-in and account linking are tied to the browser that
-    started them (the state cookie check is back), OAuth one-time tokens can
-    only be redeemed by that browser, and one-time tokens are only handed to
+    started them (the state cookie check is back), and OAuth one-time tokens can
+    only be redeemed by that browser. An OAuth session is only handed back to
+    the app that started the flow, at `siteUrl` or an exact entry of
+    `trustedOrigins`, like `oauth-popup`. A magic link session is only handed to
     `siteUrl`.
   - `jwtCache`: the cached JWT is verified, and `isAuthenticated()` always
     checks the session.

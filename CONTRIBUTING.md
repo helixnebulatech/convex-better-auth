@@ -4,6 +4,12 @@ This repo uses [pnpm](https://pnpm.io). The version is pinned in the
 `packageManager` field of `package.json`, and pnpm switches to it on its own
 inside the repo.
 
+## Matching Better Auth
+
+Before choosing how to implement a fix or a feature, look at what Better Auth
+core and its official plugins do in the same situation, in their source, and do
+the same. See [How we decide](./FORK.md#how-we-decide).
+
 ## Running locally
 
 The examples, `e2e` and `docs` are pnpm workspace packages, so one install at
