@@ -117,6 +117,13 @@ web origin.
   rely on the primary key to reject a duplicate. The `verification` and
   `oauthClientAssertion` tables keep that id in an indexed `customId` field, and
   the component enforces it like a primary key.
+- Plugin endpoint keys are unique across Better Auth's official plugins, as
+  theirs are. Better Auth merges every plugin's endpoints by key, so a shared
+  key silently replaced the other plugin's endpoint:
+  - Cross domain used `verifyOneTimeToken`, the key of Better Auth's
+    `oneTimeToken` plugin, and its token storage. With both plugins, one of the
+    two verify endpoints disappeared, and the official one could redeem an OAuth
+    one-time token without the browser's verifier.
 - Not taken: #400 (breaks existing data), #405 (no Better Auth flow uses it),
   #418 (breaks sync storage), #438 (caching the JWKS by default breaks key
   rotation), #445 (performance only).

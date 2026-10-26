@@ -2,7 +2,6 @@ import type { BetterAuthPlugin } from "better-auth";
 import { setSessionCookie } from "better-auth/cookies";
 import { generateRandomString } from "better-auth/crypto";
 import { createAuthEndpoint, createAuthMiddleware } from "better-auth/api";
-import { oneTimeToken as oneTimeTokenPlugin } from "better-auth/plugins/one-time-token";
 import { z } from "zod";
 import { VERSION } from "../../version.js";
 
@@ -11,6 +10,9 @@ const oauthStartIdentifier = (state: string) => `cross-domain-oauth:${state}`;
 // Hash of the client verifier for an OAuth flow, keyed by OAuth state
 const oauthVerifierIdentifier = (state: string) =>
   `cross-domain-oauth-verifier:${state}`;
+// One-time token that hands a session to the app. Its own prefix, so the
+// official one-time-token plugin can't redeem it.
+const ottIdentifier = (token: string) => `cross-domain-ott:${token}`;
 // Hash of the client verifier an OAuth one-time token is bound to
 const ottVerifierIdentifier = (token: string) =>
   `cross-domain-ott-verifier:${token}`;
@@ -85,7 +87,6 @@ const getOAuthState = (url: string) => {
 };
 
 export const crossDomain = ({ siteUrl }: { siteUrl: string }) => {
-  const oneTimeToken = oneTimeTokenPlugin();
   const siteOrigin = new URL(siteUrl).origin;
 
   // Origins that may start an OAuth flow and receive its session: siteUrl
@@ -297,7 +298,6 @@ export const crossDomain = ({ siteUrl }: { siteUrl: string }) => {
             );
           },
           handler: createAuthMiddleware(async (ctx) => {
-            // Mostly copied from the one-time-token plugin
             const session = ctx.context.newSession;
             // No new session is expected on some callbacks, e.g. linkSocial
             // (the user is already signed in) or error redirects. There is
@@ -358,7 +358,7 @@ export const crossDomain = ({ siteUrl }: { siteUrl: string }) => {
             const expiresAt = new Date(Date.now() + 3 * 60 * 1000);
             await ctx.context.internalAdapter.createVerificationValue({
               value: session.session.token,
-              identifier: `one-time-token:${token}`,
+              identifier: ottIdentifier(token),
               expiresAt,
             });
             if (verifierHash) {
@@ -374,11 +374,14 @@ export const crossDomain = ({ siteUrl }: { siteUrl: string }) => {
         },
       ],
     },
+    // Endpoint keys are unique across Better Auth's plugins, as theirs are.
+    // Better Auth merges every plugin's endpoints by key, so a shared key
+    // silently replaces the other plugin's endpoint.
     endpoints: {
       // Starts an OAuth redirect in the browser, as a form POST from the app,
       // so the state cookie is set in the browser like Better Auth does when
       // the app and the auth server share a site.
-      startOAuth: createAuthEndpoint(
+      crossDomainOAuthStart: createAuthEndpoint(
         "/cross-domain/oauth/start",
         {
           method: "POST",
@@ -456,7 +459,7 @@ export const crossDomain = ({ siteUrl }: { siteUrl: string }) => {
           throw ctx.redirect(pending.url);
         }
       ),
-      verifyOneTimeToken: createAuthEndpoint(
+      crossDomainVerifyOneTimeToken: createAuthEndpoint(
         "/cross-domain/one-time-token/verify",
         {
           method: "POST",
@@ -482,14 +485,27 @@ export const crossDomain = ({ siteUrl }: { siteUrl: string }) => {
               ottVerifierIdentifier(ctx.body.token)
             );
           }
-          const response = await oneTimeToken.endpoints.verifyOneTimeToken({
-            ...ctx,
-            asResponse: false,
-            returnHeaders: false,
-            returnStatus: false,
-          });
-          await setSessionCookie(ctx, response);
-          return response;
+          // Same steps as the one-time-token plugin's verify endpoint
+          const verification =
+            await ctx.context.internalAdapter.consumeVerificationValue(
+              ottIdentifier(ctx.body.token)
+            );
+          if (!verification) {
+            throw ctx.error("BAD_REQUEST", { message: "Invalid token" });
+          }
+          const session = await ctx.context.internalAdapter.findSession(
+            verification.value
+          );
+          if (!session) {
+            throw ctx.error("BAD_REQUEST", { message: "Session not found" });
+          }
+          // The plugin sets the cookie before this check, but an expired
+          // session shouldn't be set at all
+          if (session.session.expiresAt < new Date()) {
+            throw ctx.error("BAD_REQUEST", { message: "Session expired" });
+          }
+          await setSessionCookie(ctx, session);
+          return ctx.json(session);
         }
       ),
     },

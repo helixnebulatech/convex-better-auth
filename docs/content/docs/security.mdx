@@ -42,6 +42,9 @@ redeems it automatically.
   [Referrer policy](/framework-guides/react#referrer-policy).
 - One-time tokens are only handed to the apps listed below. Callback URLs on
   other origins are redirected to without a session.
+- The one-time tokens have their own endpoint and storage, separate from Better
+  Auth's `oneTimeToken` plugin, so the two can be used together and neither can
+  redeem the other's tokens.
 - `crossDomainClient` keeps the session cookie in `localStorage` by default, so
   any XSS in your app can read it. Use the `storage` option to store it
   elsewhere.

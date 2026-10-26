@@ -6,6 +6,7 @@ import { memoryAdapter } from "better-auth/adapters/memory";
 import type { MemoryDB } from "better-auth/adapters/memory";
 import { genericOAuth } from "better-auth/plugins/generic-oauth";
 import { magicLink } from "better-auth/plugins/magic-link";
+import { oneTimeToken } from "better-auth/plugins/one-time-token";
 import { crossDomain } from "./index.js";
 
 const AUTH = "https://deploy.convex.site";
@@ -23,6 +24,8 @@ const build = (
   opts: {
     crossDomain?: boolean;
     trustedOrigins?: string[] | ((request?: Request) => Promise<string[]>);
+    // Better Auth's one-time-token plugin, registered before or after
+    oneTimeToken?: "before" | "after";
   } = {}
 ) => {
   const db: MemoryDB = { user: [], session: [], account: [], verification: [] };
@@ -58,7 +61,9 @@ const build = (
           magicLinks.push(url);
         },
       }),
+      ...(opts.oneTimeToken === "before" ? [oneTimeToken()] : []),
       ...(opts.crossDomain === false ? [] : [crossDomain({ siteUrl: SITE })]),
+      ...(opts.oneTimeToken === "after" ? [oneTimeToken()] : []),
     ],
   });
   return { auth, db, magicLinks };
@@ -218,7 +223,7 @@ describe("cross domain OAuth", () => {
       expect(res.headers.get("location")).not.toContain("ott=");
     }
     expect(
-      db.verification.some((v) => v.identifier.startsWith("one-time-token:"))
+      db.verification.some((v) => v.identifier.startsWith("cross-domain-ott:"))
     ).toBe(false);
   });
 
@@ -557,7 +562,7 @@ describe("cross domain OAuth from other app origins", () => {
     });
     expect(toAdmin.headers.get("location")).not.toContain("ott=");
     expect(
-      db.verification.some((v) => v.identifier.startsWith("one-time-token:"))
+      db.verification.some((v) => v.identifier.startsWith("cross-domain-ott:"))
     ).toBe(false);
   });
 
@@ -615,4 +620,42 @@ describe("cross domain OAuth from other app origins", () => {
     expect(new URL(res.headers.get("location")!).origin).toBe(SITE);
     expect((await redeem(auth, ottOf(res)!, VERIFIER)).status).toBe(200);
   });
+});
+
+describe("cross domain with Better Auth's one-time-token plugin", () => {
+  for (const order of ["before", "after"] as const) {
+    it(`keeps both plugins working with one-time-token registered ${order}`, async () => {
+      const { auth } = build({ oneTimeToken: order });
+      const ott = ottOf(await browserSignIn(auth, "codeA"))!;
+      // The official endpoint can't redeem the cross domain token, so it
+      // can't skip the verifier
+      const official = (token: string) =>
+        auth.handler(
+          new Request(`${BASE}/one-time-token/verify`, {
+            method: "POST",
+            headers: clientHeaders(),
+            body: JSON.stringify({ token }),
+          })
+        );
+      expect((await official(ott)).status).toBe(400);
+      expect((await redeem(auth, ott)).status).toBe(400);
+      const signedIn = await redeem(auth, ott, VERIFIER);
+      expect(signedIn.status).toBe(200);
+
+      // The official plugin keeps its own endpoints
+      const cookie = signedIn.headers
+        .get("set-better-auth-cookie")!
+        .split(";")[0]!;
+      const generated = await auth.handler(
+        new Request(`${BASE}/one-time-token/generate`, {
+          headers: clientHeaders(cookie),
+        })
+      );
+      expect(generated.status).toBe(200);
+      const { token } = await generated.json();
+      // and its tokens aren't redeemable through the cross domain endpoint
+      expect((await redeem(auth, token)).status).toBe(400);
+      expect((await official(token)).status).toBe(200);
+    });
+  }
 });
