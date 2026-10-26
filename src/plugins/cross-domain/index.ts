@@ -293,7 +293,11 @@ export const crossDomain = ({ siteUrl }: { siteUrl: string }) => {
           matcher: (ctx) => {
             return Boolean(
               (ctx.path?.startsWith("/callback") ||
-                ctx.path?.startsWith("/magic-link/verify")) &&
+                ctx.path?.startsWith("/magic-link/verify") ||
+                // Creates a session with autoSignInAfterVerification, and
+                // when confirming an email change. Better Auth's expo plugin
+                // hands it to the app from here too.
+                ctx.path?.startsWith("/verify-email")) &&
               !isExpoNative(ctx)
             );
           },
@@ -307,7 +311,10 @@ export const crossDomain = ({ siteUrl }: { siteUrl: string }) => {
             }
             const redirectTo = ctx.context.responseHeaders?.get("location");
             if (!redirectTo) {
-              ctx.context.logger.error("No redirect to found");
+              // /verify-email without a callbackURL answers with JSON
+              if (!ctx.path?.startsWith("/verify-email")) {
+                ctx.context.logger.error("No redirect to found");
+              }
               return;
             }
             const url = new URL(redirectTo, siteUrl);
@@ -315,8 +322,8 @@ export const crossDomain = ({ siteUrl }: { siteUrl: string }) => {
             // Its plugins only hand a session to another web origin when
             // that origin started the flow in the same browser (oauth-popup,
             // oauth-proxy), and never for a magic link, which anyone can
-            // request with any callback URL. The one-time token follows the
-            // same rules.
+            // request with any callback URL. Email verification links are the
+            // same. The one-time token follows the same rules.
             let verifierHash: string | undefined;
             if (ctx.path?.startsWith("/callback")) {
               // OAuth: only to the app that started the flow, and only
@@ -351,7 +358,8 @@ export const crossDomain = ({ siteUrl }: { siteUrl: string }) => {
               }
               verifierHash = verifier.hash;
             } else if (url.origin !== siteOrigin) {
-              // Magic link: only to the app at siteUrl
+              // Magic link and email verification: only to the app at
+              // siteUrl, as expo only hands them to the app's scheme
               return;
             }
             const token = generateRandomString(32);

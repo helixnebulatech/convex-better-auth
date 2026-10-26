@@ -367,3 +367,10 @@ and magic links still only hand the session to `siteUrl`. See
 Relative `callbackURL`, `newUserCallbackURL` and `errorCallbackURL` values of an
 OAuth sign-in now resolve against the app that started it. Apps that only run at
 `siteUrl` see no change.
+
+### Sign-in after email verification
+
+With the cross domain plugin and `autoSignInAfterVerification`, opening the
+verification link now signs the user in to the app at `siteUrl`, like a magic
+link. The same applies when confirming an email change. Before, Better Auth
+created the session but the app never received it.

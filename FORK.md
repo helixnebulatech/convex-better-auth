@@ -81,7 +81,8 @@ web origin.
     only be redeemed by that browser. An OAuth session is only handed back to
     the app that started the flow, at `siteUrl` or an exact entry of
     `trustedOrigins`, like `oauth-popup`. A magic link session is only handed to
-    `siteUrl`.
+    `siteUrl`, and so is the session created when an email verification link
+    signs the user in.
   - `jwtCache`: the cached JWT is verified, and `isAuthenticated()` always
     checks the session.
   - `verbose` header logs redact cookies and tokens. Better Auth's adapter debug
