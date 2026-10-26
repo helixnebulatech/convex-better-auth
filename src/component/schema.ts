@@ -72,9 +72,11 @@ export const tables = {
     expiresAt: v.number(),
     createdAt: v.number(),
     updatedAt: v.number(),
+    customId: v.optional(v.string()),
   })
     .index("expiresAt", ["expiresAt"])
-    .index("identifier", ["identifier"]),
+    .index("identifier", ["identifier"])
+    .index("customId", ["customId"]),
   twoFactor: defineTable({
     secret: v.string(),
     backupCodes: v.string(),

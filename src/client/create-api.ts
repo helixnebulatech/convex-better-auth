@@ -11,12 +11,15 @@ import { partial } from "convex-helpers/validators";
 import {
   adapterWhereValidator,
   checkUniqueFields,
+  getDocById,
+  hasCustomIdIndex,
   hasUniqueFields,
   listOne,
   paginate,
   selectFields,
 } from "./adapter-utils.js";
 import { getAuthTables } from "better-auth/db";
+import { customIdField } from "./create-schema.js";
 import type { TableNames } from "../component/_generated/dataModel.js";
 import type { BetterAuthOptions } from "better-auth/minimal";
 
@@ -70,7 +73,11 @@ export const createApi = <Schema extends SchemaDefinition<any, any>>(
           ...Object.entries(schema.tables).map(([model, table]) =>
             v.object({
               model: v.literal(model),
-              data: v.object((table as any).validator.fields),
+              data: v.object({
+                ...(table as any).validator.fields,
+                // An id Better Auth chose (forceAllowId), stored in customId
+                _id: v.optional(v.string()),
+              }),
             })
           )
         ),
@@ -78,17 +85,33 @@ export const createApi = <Schema extends SchemaDefinition<any, any>>(
         onCreateHandle: v.optional(v.string()),
       },
       handler: async (ctx, args) => {
+        const { _id: chosenId, ...data } = args.input.data as Record<
+          string,
+          any
+        >;
+        if (chosenId !== undefined) {
+          if (!hasCustomIdIndex(schema, args.input.model)) {
+            throw new Error(
+              `Better Auth created a ${args.input.model} with its own id, but the ${args.input.model} table has no ${customIdField} field. Regenerate the Better Auth schema.`
+            );
+          }
+          // Like a primary key: the insert fails if the id is taken. This
+          // runs in the same mutation as the insert, so it's atomic.
+          if (await getDocById(ctx, schema, args.input.model, chosenId)) {
+            throw new Error(
+              `A ${args.input.model} with id ${chosenId} already exists`
+            );
+          }
+          data[customIdField] = chosenId;
+        }
         await checkUniqueFields(
           ctx,
           schema,
           betterAuthSchema,
           args.input.model,
-          args.input.data
+          data
         );
-        const id = await ctx.db.insert(
-          args.input.model as any,
-          args.input.data
-        );
+        const id = await ctx.db.insert(args.input.model as any, data);
         const doc = await ctx.db.get(args.input.model, id);
         if (!doc) {
           throw new Error(`Failed to create ${args.input.model}`);
