@@ -352,3 +352,18 @@ The `verification` and `oauthClientAssertion` tables now have an optional
 rejects a second row with the same id, like a primary key. Until a Local Install
 app regenerates its schema, these flows keep failing, with an error that asks to
 regenerate the schema.
+
+## Upgrading to 0.13.7
+
+### OAuth sign-in from other apps
+
+With the cross domain plugin, an OAuth sign-in can now start from any app listed
+exactly in `trustedOrigins`, not only from `siteUrl`, and the session is handed
+back to the app that started it. This is what Better Auth's `oauth-popup` plugin
+does. Wildcard entries such as `https://*.vercel.app` still can't start a flow,
+and magic links still only hand the session to `siteUrl`. See
+[Who receives a session](/security#who-receives-a-session).
+
+Relative `callbackURL`, `newUserCallbackURL` and `errorCallbackURL` values of an
+OAuth sign-in now resolve against the app that started it. Apps that only run at
+`siteUrl` see no change.

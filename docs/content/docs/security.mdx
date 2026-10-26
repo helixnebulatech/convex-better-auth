@@ -8,6 +8,15 @@ The component aims to behave exactly like Better Auth with a database adapter.
 This page lists where that needs care, and the few places where behaviour is
 inherited from Better Auth rather than changed by the component.
 
+## How the component decides
+
+When a behaviour can be implemented in more than one way, the component does
+what Better Auth core or its official plugins do in the same situation. Where
+Convex needs something Better Auth doesn't have, such as handing a session to an
+app on another domain, it follows the closest official plugin. It may be
+stricter than Better Auth, never looser, and each such case is listed on this
+page with the Better Auth behaviour it's based on.
+
 ## Cross domain sessions
 
 With the [cross domain plugin](/framework-guides/react), your app and your
@@ -31,12 +40,33 @@ redeems it automatically.
   so a referrer policy such as `no-referrer` makes sign-in fail with
   `missing_or_null_origin`. See
   [Referrer policy](/framework-guides/react#referrer-policy).
-- One-time tokens are only handed to `siteUrl`. Callback URLs on other origins,
-  even trusted ones such as a custom scheme or a wildcard domain, are redirected
-  to without a session.
+- One-time tokens are only handed to the apps listed below. Callback URLs on
+  other origins are redirected to without a session.
 - `crossDomainClient` keeps the session cookie in `localStorage` by default, so
   any XSS in your app can read it. Use the `storage` option to store it
   elsewhere.
+
+### Who receives a session
+
+Better Auth keeps the session in a cookie of the auth server. Its official
+plugins hand it to another place only in these cases, and the cross domain
+plugin follows the same rules:
+
+| Flow                 | Better Auth                                                                                                                                                        | Cross domain plugin                                                                                                                                          |
+| -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| OAuth from a web app | `oauth-popup` and `oauth-proxy` hand it back to the trusted origin that started the flow, in the browser that started it                                           | Handed back to the origin that started the flow, if it's `siteUrl` or an exact entry of `trustedOrigins`, and only redeemable by the browser that started it |
+| Magic link           | Core keeps it on the auth server. `expo` hands it only to the app's own scheme, never to another web origin, since anyone can request a link with any callback URL | Only handed to `siteUrl`, your app, as `expo` does with the app's scheme                                                                                     |
+| Native app           | `expo` hands it to a trusted custom scheme such as `myapp://`                                                                                                      | Left to the `expo` plugin                                                                                                                                    |
+
+Two differences make the plugin stricter than Better Auth:
+
+- Wildcard entries such as `https://*.vercel.app` can't start an OAuth flow.
+  `oauth-popup` accepts them, but they also match sites anyone can deploy, which
+  would receive the session of a user who signs in from them.
+- An OAuth callback URL on another origin than the one that started the flow
+  gets no session, even if that origin is trusted. Better Auth's `oauth-popup`
+  always hands the session to the page that opened the popup, whatever the
+  callback URL.
 
 ## Forwarded host headers
 
