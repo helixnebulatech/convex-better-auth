@@ -315,3 +315,40 @@ sort them alphabetically, which put range fields such as `expiresAt` before the
 equality fields and made the index unusable. If you add your own indexes, list
 the fields compared with equality first, then the field compared with a range
 (`lt`, `gt`...), then the field you sort by.
+
+## Upgrading to 0.13.6
+
+0.13.6 is tested with Better Auth 1.7.13:
+
+```npm
+npm install better-auth@~1.7.13
+```
+
+Apps using the default install get the schema change below on their next deploy.
+Apps using [Local Install](/local-install) need to regenerate their schema and
+deploy:
+
+```npm
+cd convex/betterAuth
+npx auth generate
+```
+
+### Ids chosen by Better Auth
+
+Since Better Auth 1.7.8, some flows create a row with an id Better Auth derives
+from a value, and rely on the database rejecting a second row with the same id.
+Convex picks `_id` itself, so earlier 0.13 releases rejected these rows and the
+flows failed:
+
+- Magic link and email OTP sign-in for a user whose email isn't verified yet,
+  for example someone who signed up with a password and never verified the
+  email. Better Auth removes the accounts and sessions the user had before
+  proving the email, and the request failed with a 500.
+- SIWE sign-in that claims an email.
+- `private_key_jwt` client authentication in the OAuth provider plugin.
+
+The `verification` and `oauthClientAssertion` tables now have an optional
+`customId` field with an index. The component stores the chosen id there and
+rejects a second row with the same id, like a primary key. Until a Local Install
+app regenerates its schema, these flows keep failing, with an error that asks to
+regenerate the schema.

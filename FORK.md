@@ -11,6 +11,7 @@ the latest Better Auth without waiting for upstream releases.
 | 0.13.3 | `>=1.7.5 <1.8.0` | 0.13.2 + security fixes                                                        |
 | 0.13.4 | `>=1.7.5 <1.8.0` | 0.13.3 + dates returned to Better Auth as `Date` objects                       |
 | 0.13.5 | `>=1.7.5 <1.8.0` | 0.13.4 + missing indexes, single row lookups without an index                  |
+| 0.13.6 | `>=1.7.5 <1.8.0` | 0.13.5 + ids chosen by Better Auth, tested with Better Auth 1.7.13             |
 
 ## Use it in an app
 
@@ -18,9 +19,9 @@ Install it under the upstream name with a package alias, so no imports change:
 
 ```sh
 # npm
-npm install @convex-dev/better-auth@npm:@helixnebulatech/convex-better-auth@^0.13.5 better-auth@~1.7.7
+npm install @convex-dev/better-auth@npm:@helixnebulatech/convex-better-auth@^0.13.6 better-auth@~1.7.13
 # pnpm
-pnpm add @convex-dev/better-auth@npm:@helixnebulatech/convex-better-auth@^0.13.5 better-auth@~1.7.7
+pnpm add @convex-dev/better-auth@npm:@helixnebulatech/convex-better-auth@^0.13.6 better-auth@~1.7.13
 ```
 
 Then follow the
@@ -79,6 +80,12 @@ Then follow the
     table doesn't have.
   - Single row lookups without an index read the whole table instead of stopping
     after 200 rows and reporting the row as missing.
+- Ids chosen by Better Auth: since Better Auth 1.7.8, magic link and email OTP
+  sign-in for unverified users, SIWE email claims and the OAuth provider's
+  `private_key_jwt` replay check create rows with an id Better Auth picks and
+  rely on the primary key to reject a duplicate. The `verification` and
+  `oauthClientAssertion` tables keep that id in an indexed `customId` field, and
+  the component enforces it like a primary key.
 - Not taken: #400 (breaks existing data), #405 (no Better Auth flow uses it),
   #418 (breaks sync storage), #438 (caching the JWKS by default breaks key
   rotation), #445 (performance only).
