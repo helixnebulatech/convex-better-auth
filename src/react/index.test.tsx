@@ -246,3 +246,45 @@ describe("ConvexBetterAuthProvider", () => {
     expect(token).toHaveBeenCalledTimes(1);
   });
 });
+
+describe("ConvexBetterAuthProvider one-time token", () => {
+  it("redeems ?ott= and removes it, keeping the URL and history state", async () => {
+    vi.resetModules();
+    const { ConvexBetterAuthProvider } = await import("./index.js");
+    window.history.replaceState(
+      { router: "state" },
+      "",
+      "/dashboard?tab=1&ott=one-time"
+    );
+    const verify = vi.fn(async () => ({
+      data: { session: { token: "session-token" } },
+    }));
+    const getSession = vi.fn(async () => ({ data: null }));
+    const updateSession = vi.fn();
+    const authClient = {
+      convex: { token: vi.fn(async () => ({ data: { token: undefined } })) },
+      useSession: () => signedOut,
+      crossDomain: { oneTimeToken: { verify } },
+      getSession,
+      updateSession,
+    } as unknown as AuthClient;
+    const { client } = createClient();
+    await act(async () => {
+      render(
+        <ConvexBetterAuthProvider authClient={authClient} client={client}>
+          <></>
+        </ConvexBetterAuthProvider>
+      );
+    });
+    await flush();
+    expect(verify).toHaveBeenCalledWith({ token: "one-time" });
+    expect(window.location.pathname + window.location.search).toBe(
+      "/dashboard?tab=1"
+    );
+    expect(window.history.state).toEqual({ router: "state" });
+    expect(getSession).toHaveBeenCalledWith({
+      fetchOptions: { headers: { Authorization: "Bearer session-token" } },
+    });
+    expect(updateSession).toHaveBeenCalled();
+  });
+});
