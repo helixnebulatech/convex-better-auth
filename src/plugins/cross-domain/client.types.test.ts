@@ -16,4 +16,22 @@ it("composes with Better Auth client plugins and infers cross-domain actions", (
   });
 
   expectTypeOf(authClient.getCookie).toEqualTypeOf<() => string>();
+  expectTypeOf(authClient.startOAuthRedirect).toEqualTypeOf<
+    (url: string) => Promise<void>
+  >();
+  // Inferred from the server plugin's endpoint path
+  expectTypeOf(authClient.crossDomain.oneTimeToken.verify).toBeFunction();
+  // Type checked, not run: the client calls it with the token, and with the
+  // verifier of the browser that started an OAuth flow
+  const redeem = async () => {
+    const { data } = await authClient.crossDomain.oneTimeToken.verify({
+      token: "token",
+    });
+    await authClient.crossDomain.oneTimeToken.verify({
+      token: "token",
+      verifier: "verifier",
+    });
+    return data?.session.token;
+  };
+  expectTypeOf(redeem).returns.resolves.toEqualTypeOf<string | undefined>();
 });
