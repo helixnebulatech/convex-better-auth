@@ -368,6 +368,17 @@ Relative `callbackURL`, `newUserCallbackURL` and `errorCallbackURL` values of an
 OAuth sign-in now resolve against the app that started it. Apps that only run at
 `siteUrl` see no change.
 
+### SCIM list indexes
+
+Apps using the SCIM plugin with [Local Install](/local-install) get
+`connectionId_orderKey` indexes on `scimUser` and `scimGroup`, for the `/Users`
+and `/Groups` lists. Regenerate the schema and deploy:
+
+```npm
+cd convex/betterAuth
+npx auth generate
+```
+
 ### Sign-in after email verification
 
 With the cross domain plugin and `autoSignInAfterVerification`, opening the

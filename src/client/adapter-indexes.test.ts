@@ -209,6 +209,33 @@ describe("indexed queries issued by Better Auth", () => {
     }
   });
 
+  // @better-auth/scim lists /Users and /Groups of a connection sorted by
+  // orderKey. Tables as the scim plugin 1.7.13 declares them, since it isn't
+  // a dependency here.
+  it("generates the SCIM list indexes", async () => {
+    const scimTable = (modelName: string) => ({
+      modelName,
+      fields: {
+        connectionId: { type: "string" as const, required: true, index: true },
+        orderKey: { type: "string" as const, required: true, unique: true },
+      },
+    });
+    const { code } = await createSchema({
+      tables: {
+        scimUser: scimTable("scimUser"),
+        scimGroup: scimTable("scimGroup"),
+      },
+      file: "src/component/schema.ts",
+    });
+    const tables = code.split(/\n {2}\w+: defineTable/);
+    for (const table of tables.slice(1)) {
+      expect(table).toContain(
+        '.index("connectionId_orderKey", ["connectionId","orderKey"])'
+      );
+    }
+    expect(tables).toHaveLength(3);
+  });
+
   it("generates the shipped component schema", async () => {
     const { code } = await createSchema({
       tables: getAuthTables(options),

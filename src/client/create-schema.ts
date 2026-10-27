@@ -92,7 +92,12 @@ export const indexFields = {
     ["connectionRecordId", "status"],
   ],
   scimProjectionGrant: [["provisioningDomainId", "userId"]],
-  scimUser: [["provisioningDomainId", "userId"]],
+  // /Users and /Groups list a connection's resources sorted by orderKey
+  scimGroup: [["connectionId", "orderKey"]],
+  scimUser: [
+    ["provisioningDomainId", "userId"],
+    ["connectionId", "orderKey"],
+  ],
 };
 
 // Tables where Better Auth creates rows with an id it chooses (forceAllowId)
