@@ -771,6 +771,17 @@ describe("cross domain with Better Auth's one-time-token plugin", () => {
 });
 
 describe("cross domain one-time token redemption race", () => {
+  // Redeeming consumes the token atomically, so one token gives one session
+  it("lets only one of two concurrent redemptions with the verifier succeed", async () => {
+    const { auth } = build();
+    const ott = ottOf(await browserSignIn(auth, "codeA"))!;
+    const results = await Promise.all([
+      redeem(auth, ott, VERIFIER),
+      redeem(auth, ott, VERIFIER),
+    ]);
+    expect(results.map((res) => res.status).sort()).toEqual([200, 400]);
+  });
+
   it("doesn't redeem an OAuth token without the verifier while the browser redeems it", async () => {
     const { auth } = build();
     const ott = ottOf(await browserSignIn(auth, "codeA"))!;
