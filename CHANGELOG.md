@@ -1,5 +1,440 @@
 # Changelog
 
+## 0.13.7
+
+### Patch Changes
+
+- 79bf2e0: Match ids chosen by Better Auth in every `id` comparison, and allow
+  `id` with `ne`.
+
+  Rows created with an id Better Auth chose keep it in `customId`, and lookups
+  by `id` with `eq` and `in` found them. `not_in` only compared the Convex
+  `_id`, so `id not_in [chosenId]` still returned that row. Every `id`
+  comparison now matches either, like a primary key. `ne` on `id` was rejected;
+  it's now accepted, as by any SQL adapter. No Better Auth 1.7 flow uses these
+  operators on `id`.
+
+- 79bf2e0: Match SQL for repeated `in` values and `createdAt` ranges next to an
+  equality.
+
+  - An `in` clause listing a value twice returned its row twice, and counted it
+    twice. Repeated values now match once, as SQL `IN` does.
+  - A `createdAt` range combined with an equality on an indexed field, such as
+    sessions of a user created before a date, threw
+    `Cannot use lt on field 'createdAt'`. The equality still uses the index, and
+    the range is applied to the stored `createdAt`.
+
+  No Better Auth 1.7 flow sends these queries, but any SQL adapter handles them.
+
+- 79bf2e0: Fix `in` on a non-unique field whose index has more fields.
+
+  An `in` clause on a field that isn't unique reads one stream per value through
+  the field's index and merges them. The merge assumed the streams were ordered
+  by creation time, but an index such as `session.userId_expiresAt` orders them
+  by `expiresAt` first, so the query threw
+  `indexFields must be some sequence of fields the stream is ordered by`, even
+  with a single value. The merge now follows the index's order. No Better Auth
+  1.7 flow sends such a query, but any SQL adapter handles it.
+
+- 79bf2e0: Allow any number of rows with a null unique field.
+
+  The component checks unique fields itself, since Convex has no unique
+  constraints. It skipped unset fields but treated `null` as a value, so once
+  one row had a null unique field, the next one was rejected. With the
+  `username` plugin, after one user signed up with `username: null`, every later
+  sign-up sending `username: null` failed with 422 "Failed to create user". The
+  same applied to `phoneNumber` and to `updateMany` setting a unique field to
+  null.
+
+  Why this option: in the SQL databases behind Better Auth's Drizzle, Prisma and
+  Kysely adapters, NULL in a unique column never conflicts with another NULL.
+  Lookups already treat null this way since 0.13.3.
+
+- 79bf2e0: Map renamed fields in `sortBy` and `select`.
+
+  Better Auth passes `sortBy` and `select` with its own field names. The adapter
+  passed them to the component unchanged, so with a renamed field, such as
+  `user.fields.email: "email_address"`, sorting by it sorted by a field that
+  doesn't exist and selecting it returned `undefined`. Better Auth 1.7 itself
+  only sorts by `createdAt` and doesn't use `select` in its core flows, so this
+  mostly affects plugins and direct adapter calls.
+
+  Why this option: Better Auth's Drizzle and MongoDB adapters map both through
+  `getFieldName`, as the adapter already did for where clauses.
+
+- 79bf2e0: Honour `sortBy` when no index covers the sort field.
+
+  The component reads rows in index order. Without an index ending in the sort
+  field, it read them in creation order and applied the limit to that, so
+  `findMany` returned the wrong rows. For example, admin `listUsers` sorted by
+  `role`, organization member lists and API key lists sorted by a field without
+  an index. OR queries, sorted again on the client, ordered null values
+  inconsistently.
+
+  Now, when no index covers the sort, the component reads every row matching the
+  query, sorts them and applies the limit. OR queries are sorted the same way on
+  the client. Nulls and unset values come first ascending, as in a Convex index.
+  Sorting by an indexed field, or by `createdAt`, is unchanged.
+
+  Why this option: Better Auth's Drizzle, Prisma, Kysely, MongoDB and memory
+  adapters always honour `sortBy`; SQL sorts with `ORDER BY` even without an
+  index. Reading every matching row can hit Convex's read limit on a large
+  table, which fails the query instead of returning the wrong rows, as unindexed
+  single row lookups do since 0.13.5.
+
+- 79bf2e0: Keep ids chosen by Better Auth with
+  `advanced.database.generateId: "uuid"`.
+
+  The 0.13.6 fix stores the id Better Auth chooses for single-use rows in
+  `customId` and rejects a duplicate like a primary key. With
+  `generateId: "uuid"`, Better Auth dropped that id before it reached the
+  component, because the adapter declared `disableIdGeneration`, so nothing was
+  stored or checked. `reserveVerificationValue` returned `true` every time,
+  removing the guard on magic link and email OTP sign-in for unverified users
+  and on SIWE email claims, and the OAuth provider's `private_key_jwt` replay
+  check accepted a reused assertion.
+
+  In `"uuid"` mode the adapter now declares native UUID support instead. Better
+  Auth still generates no ids, since Convex picks `_id`, and keeps the UUID it
+  derives for these rows, which the component stores in `customId`. Other modes
+  are unchanged.
+
+  Why this option: with `"uuid"`, Better Auth derives a UUID for these rows so
+  that the SQL adapters keep it as the primary key, and only gives the checks up
+  with `"serial"`, with a warning. Ignoring the `"uuid"` setting, as the adapter
+  does for `joins`, would also have worked, but would change a setting the app
+  chose.
+
+- 79bf2e0: Convex plugin: sign the Convex JWT only where Better Auth's `jwt`
+  plugin signs, never on sign-in. Fixes a two-factor bypass when `convex()` is
+  listed before `twoFactor()`.
+
+  The plugin signed the JWT in an after hook on every sign-in path and stored it
+  in the `convex_jwt` cookie. Better Auth runs plugin hooks in plugin order, so
+  with `convex()` before `twoFactor()` it signed for the new session before
+  `twoFactor` cancelled it to ask for the second factor. The sign-in response
+  then carried a valid JWT, and anyone with only the password could call Convex
+  functions that rely on `ctx.auth.getUserIdentity()` until it expired (15
+  minutes by default). With `twoFactor()` first, the order in the examples, no
+  JWT was set.
+
+  Now the JWT is signed only by `/convex/token`, which requires a session, and
+  after `/get-session` returns one, as Better Auth's `jwt` plugin does with
+  `/token` and its `/get-session` hook. Also:
+
+  - `/get-session` signs from the session it returns. It no longer signs for an
+    expired session, which Better Auth deletes and answers with `null`, and it
+    clears the cookie then.
+  - Sign-in, sign-up and any other request that starts a new session clear the
+    `convex_jwt` cookie, so a JWT of a previous session in the same browser
+    isn't reused by server-side rendering with `jwtCache`.
+  - The hook no longer calls the token endpoint with empty headers, which logged
+    `INTERNAL_SERVER_ERROR` on sign-ins that didn't create a session.
+
+  After a sign-in, the cookie is set by the first `/get-session` call, which the
+  client makes right away. Server-side helpers without the cookie fetch the
+  token from `/convex/token`, as they already did.
+
+  Why this option: Better Auth's `jwt` plugin never signs on sign-in, only from
+  a session that `/token` or `/get-session` has checked. Signing on sign-in
+  can't be made safe by plugin order alone, since nothing enforces it. Clearing
+  the cookie when a new session starts is stricter than Better Auth, which has
+  no JWT cookie.
+
+- 79bf2e0: Convex plugin: always sign the Convex JWT with the algorithm in the
+  Convex auth config, and leave other plugins' keys alone.
+
+  The Convex plugin and Better Auth's `jwt` plugin, which `oauthProvider`
+  requires, keep their keys in the same `jwks` table. Without a pinned
+  algorithm, Better Auth signs with the latest key of any algorithm when there's
+  none in the configured one. So if the `jwt` plugin created the first key, the
+  Convex JWT was signed with EdDSA, which Convex rejects since its auth config
+  expects RS256, and nobody could sign in to Convex. Also, `rotateKeys` and
+  `jwksRotateOnTokenGenerationError` deleted every key in the table, including
+  the `jwt` plugin's, and `getLatestJwks` could export the `jwt` plugin's key
+  labelled as RS256.
+
+  Now:
+
+  - The JWT is signed with `signingAlgorithm` set to the configured algorithm,
+    so Better Auth uses or creates a key of that algorithm.
+  - `/convex/jwks` publishes only the keys of that algorithm.
+  - `rotateKeys`, `getLatestJwks` and `jwksRotateOnTokenGenerationError` only
+    use and delete those keys.
+
+  Keys without an `alg`, saved before Better Auth added the column, count as the
+  configured algorithm, as in Better Auth. The `jwks` table doesn't record which
+  plugin created a key, so keys are told apart by algorithm only: if the `jwt`
+  plugin is configured with the same algorithm as Convex, both plugins share
+  those keys, and `rotateKeys` affects both.
+
+  Why this option: Better Auth's `oauthProvider` pins `signingAlgorithm` when an
+  audience needs a specific algorithm, and Better Auth then picks or creates a
+  key of that algorithm, which is what Convex needs. Publishing only those keys
+  is stricter than Better Auth's `jwt` plugin, which publishes every key, since
+  Convex only accepts one algorithm.
+
+- 79bf2e0: Convex plugin: endpoint keys of its own, so Better Auth's `jwt` and
+  `oauthProvider` plugins can be used alongside it.
+
+  The plugin registered `/convex/token` and `/convex/jwks` under `getToken` and
+  `getJwks`, the keys of Better Auth's `jwt` plugin, and
+  `/convex/.well-known/openid-configuration` under `getOpenIdConfig`, the key of
+  the `oauthProvider` plugin, which requires `jwt`. Better Auth merges plugin
+  endpoints by key and only warns about shared paths, so the plugin registered
+  last silently replaced the other's endpoint. With `jwt()` after `convex()`,
+  `/convex/token` and `/convex/jwks` returned 404 and Convex sign-in stopped
+  working. With `jwt()` first, its own `/token` and `/jwks` returned 404.
+
+  The keys are now `getConvexToken`, `getConvexJwks` and `getConvexOpenIdConfig`
+  in `auth.api`. The paths don't change, and neither do `getLatestJwks` and
+  `rotateKeys`. If you called `auth.api.getToken()` to get the Convex JWT on the
+  server, call `auth.api.getConvexToken()`.
+
+  Why this option: Better Auth's official plugins each use endpoint keys of
+  their own, so plugins don't replace each other.
+
+- 79bf2e0: Cross domain client: a late empty `get-session` answer no longer
+  clears a session stored meanwhile.
+
+  When `/get-session` answered `null`, `crossDomainClient` removed the stored
+  session cookies. On a page loaded with `?ott=`, `useSession` can ask for the
+  session before the provider redeems the token. If that empty answer arrived
+  after the redemption stored the new session cookie, it removed it and the user
+  was signed out. Now the cookies are only cleared if the stored cookie is still
+  the one sent with that request.
+
+  Why this option: Better Auth's `expo` client never clears cookies on an empty
+  `get-session` answer, only on sign-out. The client keeps clearing a stale
+  session the server rejected, but not one it didn't ask about.
+
+- 79bf2e0: Cross domain client: keep the OAuth verifier until a one-time token
+  is redeemed.
+
+  `crossDomainClient` sent the stored verifier with every one-time token
+  redemption and cleared it before the response arrived. If the redemption
+  failed, for example on a network error, a retry had no verifier and the OAuth
+  sign-in failed with "Invalid token". The verifier is now cleared only after a
+  successful redemption.
+
+- 79bf2e0: Cross domain: close a race that let an OAuth one-time token be
+  redeemed without the browser's verifier.
+
+  An OAuth one-time token is bound to the verifier of the browser that started
+  the flow. Redeeming it deleted that binding before consuming the token, and
+  issuing it created the token before the binding. In either gap, a request with
+  only the token, for example from a leaked URL, found no binding and could take
+  the session. The binding is now created before the token and deleted only
+  after the token is consumed, so the token is never redeemable without it.
+
+- 79bf2e0: Cross domain: the one-time token has its own endpoint key and
+  storage, so Better Auth's `oneTimeToken` plugin can be used alongside it.
+
+  The cross domain plugin registered its verify endpoint under
+  `verifyOneTimeToken`, the same key as Better Auth's `oneTimeToken` plugin, and
+  stored its tokens as `one-time-token:<token>`, like that plugin. Better Auth
+  merges plugin endpoints by key and only warns about shared paths, so with both
+  plugins the one registered last silently replaced the other's verify endpoint:
+
+  - With `oneTimeToken()` after `crossDomain()`,
+    `/cross-domain/one-time-token/verify` returned 404, so cross domain sign-in
+    failed, and `/one-time-token/verify` redeemed an OAuth one-time token
+    without the verifier of the browser that started the flow (with the default
+    `storeToken: "plain"`).
+  - With `oneTimeToken()` first, `/one-time-token/verify` returned 404.
+
+  The endpoints are now `crossDomainOAuthStart` and
+  `crossDomainVerifyOneTimeToken` in `auth.api`, the paths and the client don't
+  change. Tokens are stored as `cross-domain-ott:<token>` and redeemed by the
+  plugin itself, with the same steps as the `oneTimeToken` plugin, except that
+  an expired session is rejected before its cookie is set. A token issued in the
+  3 minutes before the upgrade can't be redeemed after it, and the user has to
+  sign in again.
+
+  Why this option: Better Auth's official plugins each use endpoint keys and
+  verification identifiers of their own (`magicLinkVerify`, `oauthPopupStart`),
+  so plugins don't replace each other. Tokens issued before the upgrade aren't
+  accepted under the old prefix, since that would let the cross domain endpoint
+  redeem tokens of the `oneTimeToken` plugin.
+
+- 79bf2e0: Cross domain client: read the referrer policy from the last meta tag,
+  and add only one with `setReferrerPolicy`.
+
+  The warning about a referrer policy that makes OAuth sign-in fail read the
+  first `<meta name="referrer">`, but the last one inserted sets the page's
+  policy. With `setReferrerPolicy: true`, every sign-in added another meta tag.
+  It now reuses its own tag and moves it last.
+
+- 08ad67b: Cross domain: an OAuth sign-in can start from any app listed exactly
+  in `trustedOrigins`, and the session is handed back to the app that started
+  it.
+
+  Until now the session was only handed to `siteUrl`, so a second app on another
+  origin sharing the same Convex backend couldn't sign in with OAuth. Now:
+
+  - `/cross-domain/oauth/start` accepts `siteUrl` and the exact entries of
+    `trustedOrigins`, including those returned by a `trustedOrigins` function.
+    Wildcard entries such as `https://*.vercel.app` are still rejected.
+  - The one-time token is only issued when the callback URL is on the origin
+    that started the flow, and is still only redeemable by the browser that
+    started it.
+  - Relative `callbackURL`, `newUserCallbackURL` and `errorCallbackURL` values
+    of an OAuth sign-in resolve against the app that started it. Sign-ins from
+    `siteUrl`'s origin keep resolving against `siteUrl`, path included.
+  - Magic links still only hand the session to `siteUrl`.
+
+  Why this option: Better Auth keeps the session on the auth server, and its
+  official plugins only hand it to another web origin when that origin started
+  the flow in the same browser (`oauth-popup`, `oauth-proxy`). No official
+  plugin hands a magic link session to another web origin, since anyone can
+  request a link with any callback URL, so magic links stay on `siteUrl`, your
+  app, as `expo` only hands them to the app's scheme. Upstream 0.12.6 instead
+  hands the token to any exact trusted origin in the callback URL, for magic
+  links too, which goes further than Better Auth does. The plugin stays stricter
+  than `oauth-popup` in two ways: wildcard origins can't start a flow, and a
+  callback URL on another origin than the one that started the flow gets no
+  session.
+
+- 79bf2e0: Cross domain: hand the session created by email verification to the
+  app at `siteUrl`.
+
+  With `autoSignInAfterVerification`, and when confirming an email change,
+  Better Auth creates a session for whoever opens the verification link and sets
+  it as a cookie of the auth server. With the cross domain plugin that cookie is
+  on your Convex site, so the user reached the app signed out and the session
+  was left unused. Opening the link now redirects with a one-time token, like a
+  magic link.
+
+  Why this option: Better Auth's `expo` plugin hands the session from
+  `/verify-email` to the app, as it does for magic links and OAuth callbacks,
+  and only to the app's own scheme, never to another web origin. Verification
+  links are sent by email and can be requested with any trusted callback URL,
+  so, like magic links, the token only goes to `siteUrl` and isn't tied to a
+  browser.
+
+- 79bf2e0: The component no longer passes unchecked `x-forwarded-*` headers to
+  Better Auth. Fixes the forwarded host issue (GHSA-pgx2-m66h-x29f) on
+  self-hosted Convex.
+
+  When no valid `x-better-auth-forwarded-*` headers arrived, the component
+  passed the request's `x-forwarded-host` and `x-forwarded-proto` to Better Auth
+  as they were. Convex's cloud edge replaces those a client sends with its own,
+  so there they were safe. A self-hosted Convex backend passes them through, and
+  builds the request URL from them. With `advanced.trustedProxyHeaders` and a
+  dynamic `baseURL` whose `allowedHosts` has a wildcard, anyone could call the
+  Convex site directly with `x-forwarded-host: attacker.vercel.app` and get
+  password reset, verification and magic links pointing to their host.
+
+  Now the component sets both headers itself on every request: from
+  `x-better-auth-forwarded-*`, or else from the incoming `x-forwarded-*`, only
+  if they form an origin listed exactly in the trusted origins. Otherwise it
+  removes them, and Better Auth falls back to the `Host` header and the request
+  URL. On Convex's cloud this changes nothing for apps: `Host` is the same host
+  the edge put in `x-forwarded-host`.
+
+  Why this option: Better Auth trusts `x-forwarded-*` with `trustedProxyHeaders`
+  because the proxy in front of it sets them. Here that proxy is the component,
+  so it owns those headers instead of trusting whatever arrived. Verified
+  against a Convex Cloud deployment, which replaced spoofed headers, and the
+  self-hosted backend, which passed them through.
+
+- 79bf2e0: Don't evaluate `trustedOrigins` for forwarded headers that change
+  nothing.
+
+  Since the forwarded host fix in this release, the component checked the
+  incoming `x-forwarded-*` against the trusted origins on every request, which
+  on Convex's cloud is every request, since the edge always sends them, and ran
+  the app's `trustedOrigins` function each time. When they match the `Host`
+  header and the request URL, which is what the edge sends, keeping or removing
+  them gives Better Auth the same host and protocol, so they're now left as they
+  arrived without the check. Everything else is checked as before.
+
+- 79bf2e0: `getToken` no longer sends `x-forwarded-proto` to the Convex site.
+
+  Like the Next.js and TanStack Start handlers, the server helpers that fetch
+  the Convex token (`fetchAuthQuery`, `isAuthenticated` and the rest) now move
+  the inbound `x-forwarded-proto` to `x-better-auth-forwarded-proto` and drop
+  it, as they already did with `x-forwarded-host`. Only the
+  `x-better-auth-forwarded-*` headers carry the app's host and protocol, which
+  the component restores for exact trusted origins.
+
+- 79bf2e0: `getToken` takes the forwarded host only from the platform's headers.
+
+  The server helpers that fetch the Convex token moved the inbound
+  `x-forwarded-host` and `x-forwarded-proto` to the `x-better-auth-forwarded-*`
+  headers, unless the request already had those. Anyone can send
+  `x-better-auth-forwarded-*` to the app, so a client-sent value won over the
+  one the hosting platform set. They now always use the platform's values, and
+  drop client-sent ones, as the Next.js and TanStack Start handlers do. The
+  impact was small: it only affected the sender's own request, and the component
+  only restores exact trusted origins.
+
+  Why this option: a proxy that Better Auth trusts with `trustedProxyHeaders`
+  overwrites the forwarded headers a client sends, which is what makes them
+  trustworthy. The framework handlers already did.
+
+- 79bf2e0: Order the equality fields of table-level indexes the same way in the
+  schema generator and in the adapter.
+
+  The generator sorted the fields of the table-level indexes Better Auth
+  declares by code unit, and the adapter looked equality fields up in
+  `localeCompare` order. They differ when field names differ only by case, such
+  as `orgId` and `organizationId`, so the adapter didn't find the generated
+  index and scanned the table. Both now use code unit order, which doesn't
+  depend on the locale. No index Better Auth 1.7 or the generated schemas
+  declare today changes order.
+
+- 79bf2e0: Next.js and TanStack Start handlers: drop hop-by-hop request headers
+  before forwarding to Convex.
+
+  The handlers removed `transfer-encoding`, `content-length` and `connection`
+  from the request they forward, but kept `expect`, `keep-alive` and `upgrade`,
+  which Node's fetch rejects. A request carrying one of them, for example a
+  large POST from curl, which sends `Expect: 100-continue`, failed with a 500.
+  The handlers now drop every hop-by-hop header (RFC 9110 section 7.6.1), the
+  ones listed in `Connection`, and `expect`, as they already did for the
+  response.
+
+- 79bf2e0: `ConvexBetterAuthProvider` keeps the router's history state when it
+  removes `?ott=` from the URL.
+
+  It replaced the history entry with an empty state, which drops what routers
+  such as TanStack Router and the Next.js app router keep there. It now keeps
+  the current state and only changes the URL.
+
+- 79bf2e0: TanStack Start: add `isAuthenticated()`, which checks the session
+  with the server.
+
+  The JWT caching docs said `isAuthenticated()` always checks the session, but
+  only the Next.js helpers had it. In TanStack Start, `getToken()` returns the
+  JWT cached in the `convex_jwt` cookie when `jwtCache` is enabled, which stays
+  valid after the session ends. `convexBetterAuthReactStart` now returns
+  `isAuthenticated()`, which always fetches a fresh token, as the Next.js helper
+  does and as Better Auth's `getSession` checks the session.
+
+- 79bf2e0: Schema generation: `connectionId_orderKey` indexes on `scimUser` and
+  `scimGroup`.
+
+  The SCIM plugin lists a connection's users and groups sorted by `orderKey`.
+  With an index on `connectionId` and another on `orderKey` but none on both,
+  each page read every user or group of the connection. Local Install apps with
+  the SCIM plugin get the indexes when they regenerate their schema.
+
+- 79bf2e0: Static JWKS: drop expired keys, as Better Auth's JWKS endpoint does.
+
+  With a static `JWKS`, the public key set for the Convex auth config and for
+  `jwtCache` verification kept every key, so a key past its `expiresAt` was
+  accepted forever. Keys past `expiresAt` plus the 30-day grace period are now
+  left out, as `/convex/jwks` and Better Auth's `/jwks` already do. For the
+  Convex auth config this is evaluated when you deploy.
+
+- 79bf2e0: `verbose` logs also remove the query string of the `referer` header.
+
+  Requests through the Next.js and TanStack Start handlers carry the page the
+  user was on in `referer`, which can hold a token, such as a reset password
+  page with `?token=`. Its query string is now redacted, as `location`'s already
+  was.
+
 ## 0.13.6
 
 ### Patch Changes
