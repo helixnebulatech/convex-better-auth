@@ -1,3 +1,5 @@
+import { createServer } from "node:http";
+import type { AddressInfo } from "node:net";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { convexBetterAuthNextJs } from "./index.js";
 
@@ -218,5 +220,43 @@ describe("convexBetterAuthNextJs Convex helpers", () => {
     )?.[2];
     expect(options).toEqual({ token: "jwt" });
     expect(options).not.toHaveProperty("url");
+  });
+});
+
+// Node's fetch, not a mock: it rejects some request headers outright
+describe("proxy handler against a real server", () => {
+  it("forwards requests carrying expect, keep-alive and upgrade", async () => {
+    vi.restoreAllMocks();
+    const server = createServer((req, res) => {
+      req.resume();
+      req.on("end", () => res.end("ok"));
+    });
+    await new Promise<void>((resolve) => server.listen(0, resolve));
+    const siteUrl = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+    try {
+      const { handler } = convexBetterAuthNextJs({
+        convexUrl: CONVEX_URL,
+        convexSiteUrl: siteUrl,
+      });
+      const request = new Request(
+        "https://app.example.com/api/auth/sign-in/email",
+        {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            expect: "100-continue",
+            "keep-alive": "timeout=5",
+            upgrade: "h2c",
+            connection: "keep-alive, upgrade",
+          },
+          body: JSON.stringify({ email: "test@example.com" }),
+        }
+      );
+      const res = await handler.POST(request);
+      expect(res.status).toBe(200);
+      expect(await res.text()).toBe("ok");
+    } finally {
+      server.close();
+    }
   });
 });
