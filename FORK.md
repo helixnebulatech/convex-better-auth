@@ -12,6 +12,7 @@ the latest Better Auth without waiting for upstream releases.
 | 0.13.4 | `>=1.7.5 <1.8.0` | 0.13.3 + dates returned to Better Auth as `Date` objects                       |
 | 0.13.5 | `>=1.7.5 <1.8.0` | 0.13.4 + missing indexes, single row lookups without an index                  |
 | 0.13.6 | `>=1.7.5 <1.8.0` | 0.13.5 + upstream `0.12.6`, ids chosen by Better Auth, tested with 1.7.13      |
+| 0.13.7 | `>=1.7.5 <1.8.0` | 0.13.6 + fixes from a full review: JWT on sign-in, forwarded headers, adapter  |
 
 ## Use it in an app
 
@@ -19,9 +20,9 @@ Install it under the upstream name with a package alias, so no imports change:
 
 ```sh
 # npm
-npm install @convex-dev/better-auth@npm:@helixnebulatech/convex-better-auth@^0.13.6 better-auth@~1.7.13
+npm install @convex-dev/better-auth@npm:@helixnebulatech/convex-better-auth@^0.13.7 better-auth@~1.7.13
 # pnpm
-pnpm add @convex-dev/better-auth@npm:@helixnebulatech/convex-better-auth@^0.13.6 better-auth@~1.7.13
+pnpm add @convex-dev/better-auth@npm:@helixnebulatech/convex-better-auth@^0.13.7 better-auth@~1.7.13
 ```
 
 Then follow the
@@ -91,6 +92,13 @@ web origin.
     fields.
   - Null comparisons match Better Auth's SQL adapters.
   - The Next.js example and docs snippets no longer expose other users' data.
+  - The Convex JWT is signed only where Better Auth's `jwt` plugin signs, never
+    on sign-in, so a plugin that holds a sign-in back, such as `twoFactor`,
+    can't leave a JWT behind whatever the plugin order.
+  - The component sets `x-forwarded-*` itself on every request, only for exact
+    trusted origins, since a self-hosted Convex backend passes a client's
+    through. `getToken` takes the forwarded host only from the platform's
+    headers.
   - Where the component behaves as Better Auth does on purpose (magic links
     aren't tied to a browser, adapter calls without a `where` clause), the
     [security notes](./docs/content/docs/security.mdx) document it. See
@@ -130,6 +138,10 @@ web origin.
     `jwt` plugin, and `getOpenIdConfig`, the key of `oauthProvider`, which needs
     `jwt`. With either plugin, one of the token, JWKS or discovery endpoints
     disappeared, and without the Convex ones Convex can't validate its JWT.
+- Database adapter behaviour matching Better Auth's SQL adapters: null unique
+  fields don't conflict, `sortBy` is honoured without an index, renamed fields
+  work in `sortBy` and `select`, and ids chosen by Better Auth are kept with
+  `generateId: "uuid"`.
 - Not taken: #400 (breaks existing data), #405 (no Better Auth flow uses it),
   #418 (breaks sync storage), #438 (caching the JWKS by default breaks key
   rotation), #445 (performance only).

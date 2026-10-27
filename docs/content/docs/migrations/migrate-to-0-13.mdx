@@ -355,6 +355,52 @@ regenerate the schema.
 
 ## Upgrading to 0.13.7
 
+0.13.7 includes security fixes. See the [security notes](/security) for how the
+component behaves now.
+
+### Convex JWT cookie
+
+The Convex JWT is no longer signed on sign-in, only by `/convex/token` and after
+`/get-session` returns a session, as Better Auth's `jwt` plugin does. This fixes
+a two-factor bypass when `convex()` was listed before `twoFactor()`. After a
+sign-in, the `convex_jwt` cookie is set by the first `/get-session` call, which
+the client makes right away; server-side helpers without the cookie fetch the
+token from `/convex/token`, as before. Requests that start a new session clear
+the cookie.
+
+The Convex JWT is now always signed with the algorithm in your Convex auth
+config. `rotateKeys` and `getLatestJwks` only touch those keys, so they no
+longer delete or export keys of Better Auth's `jwt` plugin.
+
+### Forwarded headers
+
+The component now sets `x-forwarded-host` and `x-forwarded-proto` itself before
+calling Better Auth: only for an origin listed exactly in your trusted origins,
+and otherwise it removes them. On Convex's cloud nothing changes for apps. On
+self-hosted Convex, see [Self-hosted Convex](/security#self-hosted-convex). If
+your app uses `advanced.trustedProxyHeaders` with a wildcard in `allowedHosts`,
+list the hosts exactly.
+
+### TanStack Start `isAuthenticated`
+
+`convexBetterAuthReactStart` now returns `isAuthenticated()`, which checks the
+session with the server. With `jwtCache`, `getToken()` can return a cached JWT
+that stays valid after the session ends, so use `isAuthenticated()` where the
+session must be checked.
+
+### Database adapter
+
+These now behave as with Better Auth's SQL adapters:
+
+- Any number of rows can have a null unique field, such as users without a
+  `username`.
+- `sortBy` is honoured when no index ends in the sort field. The component reads
+  the matching rows and sorts them, so add an index for lists you sort often on
+  large tables.
+- Ids chosen by Better Auth are kept with
+  `advanced.database.generateId: "uuid"`.
+- Renamed fields work in `sortBy` and `select`.
+
 ### OAuth sign-in from other apps
 
 With the cross domain plugin, an OAuth sign-in can now start from any app listed
