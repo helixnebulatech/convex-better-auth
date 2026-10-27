@@ -119,8 +119,9 @@ registered by `registerRoutes()` and `registerRoutesLazy()` copy them to
 `x-forwarded-host` and `x-forwarded-proto` before calling Better Auth, only when
 together they form an origin listed exactly in `trustedOrigins`,
 `BETTER_AUTH_TRUSTED_ORIGINS` or the `allowedHosts` of a dynamic `baseURL`.
-Wildcard entries such as `*.vercel.app` don't count. Otherwise both headers are
-left as they arrived.
+Wildcard entries such as `*.vercel.app` don't count. Without such headers, an
+incoming `x-forwarded-*` that forms an exact trusted origin is kept, and
+otherwise both are removed.
 
 Better Auth only reads these headers with `advanced.trustedProxyHeaders`
 enabled. To build links in emails from the host the user is on, enable it and

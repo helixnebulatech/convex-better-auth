@@ -103,6 +103,16 @@ describe("forwarded host restore with dynamic baseURL", async () => {
     expect(url.host).toBe(ADMIN_HOST);
   });
 
+  // A self-hosted Convex backend passes a client's x-forwarded-* through to
+  // the HTTP action, unlike Convex's cloud edge, which replaces them
+  it("ignores an x-forwarded-host a client sent straight to the backend", async () => {
+    const url = await requestReset({
+      "x-forwarded-host": PREVIEW_HOST,
+      "x-forwarded-proto": "https",
+    });
+    expect(url.host).toBe(APP_HOST);
+  });
+
   it("ignores an original host that only matches a wildcard", async () => {
     const url = await requestReset({
       "x-better-auth-forwarded-host": PREVIEW_HOST,

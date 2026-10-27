@@ -153,40 +153,67 @@ const exactTrustedOrigins = async (
   return result;
 };
 
-// The framework handlers send the app's host and protocol in
-// x-better-auth-forwarded-* headers. Anyone can call the Convex site with
-// these headers, so they are restored into x-forwarded-* only when together
-// they form an origin listed exactly in trustedOrigins. Both are restored or
-// neither is.
+// The value of a host and protocol pair as an origin, or undefined if it
+// isn't a plain http(s) host
+const toOrigin = (host: string | null, proto: string | null) => {
+  if (!host || (proto !== "http" && proto !== "https")) {
+    return undefined;
+  }
+  try {
+    const url = new URL(`${proto}://${host}`);
+    // Reject values carrying a path, credentials or anything besides a host
+    return url.host === host.toLowerCase() ? url.origin : undefined;
+  } catch {
+    return undefined;
+  }
+};
+
+// Better Auth trusts x-forwarded-* (with trustedProxyHeaders) because the
+// proxy in front of it sets them. Here that proxy is the component, so it
+// decides them on every request:
+// - the app's host and protocol the framework handlers send in
+//   x-better-auth-forwarded-*, or else the x-forwarded-* the request arrived
+//   with, if together they form an origin listed exactly in trustedOrigins;
+// - otherwise neither, and Better Auth falls back to the Host header and the
+//   request URL, as without a trusted proxy.
+// Convex's cloud edge replaces any x-forwarded-* a client sends with its own,
+// but a self-hosted backend passes them through, and builds the request URL
+// from them, so they can't be trusted unchecked.
 const restoreOriginalForwardedHeaders = async (
   auth: Parameters<typeof exactTrustedOrigins>[0],
   request: Request
 ) => {
-  const originalHost = request.headers.get("x-better-auth-forwarded-host");
-  const originalProto = request.headers.get("x-better-auth-forwarded-proto");
-  if (
-    !originalHost ||
-    (originalProto !== "http" && originalProto !== "https")
-  ) {
-    return request;
-  }
-  let origin: string;
-  try {
-    const url = new URL(`${originalProto}://${originalHost}`);
-    // Reject values carrying a path, credentials or anything besides a host
-    if (url.host !== originalHost.toLowerCase()) {
-      return request;
+  const candidates = [
+    [
+      request.headers.get("x-better-auth-forwarded-host"),
+      request.headers.get("x-better-auth-forwarded-proto"),
+    ],
+    [
+      request.headers.get("x-forwarded-host"),
+      request.headers.get("x-forwarded-proto"),
+    ],
+  ] as const;
+  let trusted: Set<string> | undefined;
+  let forwarded: readonly [string, string] | undefined;
+  for (const [host, proto] of candidates) {
+    const origin = toOrigin(host, proto);
+    if (!origin) {
+      continue;
     }
-    origin = url.origin;
-  } catch {
-    return request;
-  }
-  if (!(await exactTrustedOrigins(auth, request)).has(origin)) {
-    return request;
+    trusted ??= await exactTrustedOrigins(auth, request);
+    if (trusted.has(origin)) {
+      forwarded = [host!, proto!];
+      break;
+    }
   }
   const headers = new Headers(request.headers);
-  headers.set("x-forwarded-host", originalHost);
-  headers.set("x-forwarded-proto", originalProto);
+  if (forwarded) {
+    headers.set("x-forwarded-host", forwarded[0]);
+    headers.set("x-forwarded-proto", forwarded[1]);
+  } else {
+    headers.delete("x-forwarded-host");
+    headers.delete("x-forwarded-proto");
+  }
   return new Request(request, { headers });
 };
 

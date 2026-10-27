@@ -84,12 +84,18 @@ in `x-better-auth-forwarded-host` and `x-better-auth-forwarded-proto` instead,
 and don't send `x-forwarded-*`. Like any proxy, they set these headers from the
 request URL or the platform's headers, and replace values a client sent.
 
-Your Convex site URL is publicly reachable, so any client can set these headers.
-The component restores them as `x-forwarded-host` and `x-forwarded-proto` only
-when together they form an origin listed exactly in `trustedOrigins`,
+Your Convex site URL is publicly reachable, so any client can set these headers,
+and `x-forwarded-*` too. Convex's cloud edge replaces the `x-forwarded-*` a
+client sends with its own, but a self-hosted Convex backend passes them through
+to your HTTP actions. So the component, as the proxy in front of Better Auth,
+sets `x-forwarded-host` and `x-forwarded-proto` itself on every request, from
+`x-better-auth-forwarded-*` or else from the `x-forwarded-*` the request arrived
+with, only when together they form an origin listed exactly in `trustedOrigins`,
 `BETTER_AUTH_TRUSTED_ORIGINS` or the `allowedHosts` of a dynamic `baseURL`.
-Wildcard entries such as `*.vercel.app` don't count, since anyone can deploy to
-a shared platform domain. Both headers are restored or neither is.
+Otherwise it removes them, and Better Auth falls back to the `Host` header and
+the request URL, as without a trusted proxy. Wildcard entries such as
+`*.vercel.app` don't count, since anyone can deploy to a shared platform domain.
+Both headers are set together or not at all.
 
 Better Auth ignores `x-forwarded-*` unless `advanced.trustedProxyHeaders` is
 enabled. With it, the base URL, and so the links in emails such as password

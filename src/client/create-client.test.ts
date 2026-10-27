@@ -159,8 +159,8 @@ describe("createClient route registration", () => {
           "x-better-auth-forwarded-proto": "https",
         }
       );
-      expect(headers.get("x-forwarded-host")).toBe("deployment.convex.site");
-      expect(headers.get("x-forwarded-proto")).toBe("https");
+      expect(headers.get("x-forwarded-host")).toBeNull();
+      expect(headers.get("x-forwarded-proto")).toBeNull();
     });
 
     it("ignores a trusted original host without a valid protocol", async () => {
@@ -169,17 +169,42 @@ describe("createClient route registration", () => {
         "x-forwarded-proto": "https",
         "x-better-auth-forwarded-host": "app.example.com",
       });
-      expect(headers.get("x-forwarded-host")).toBe("deployment.convex.site");
-      expect(headers.get("x-forwarded-proto")).toBe("https");
+      expect(headers.get("x-forwarded-host")).toBeNull();
+      expect(headers.get("x-forwarded-proto")).toBeNull();
     });
 
-    it("leaves incoming x-forwarded-* headers as they arrived", async () => {
+    // Not an exact trusted origin: Better Auth falls back to Host and the
+    // request URL, as without a trusted proxy
+    it("drops incoming x-forwarded-* that aren't an exact trusted origin", async () => {
       const headers = await callHandler(["https://app.example.com"], {
+        "x-forwarded-host": "deployment.convex.site",
+        "x-forwarded-proto": "https",
+      });
+      expect(headers.get("x-forwarded-host")).toBeNull();
+      expect(headers.get("x-forwarded-proto")).toBeNull();
+    });
+
+    it("keeps incoming x-forwarded-* that are an exact trusted origin", async () => {
+      // e.g. Convex's edge host, when it's the baseURL Better Auth trusts
+      const headers = await callHandler(["https://deployment.convex.site"], {
         "x-forwarded-host": "deployment.convex.site",
         "x-forwarded-proto": "https",
       });
       expect(headers.get("x-forwarded-host")).toBe("deployment.convex.site");
       expect(headers.get("x-forwarded-proto")).toBe("https");
+    });
+
+    // A self-hosted backend passes a client's x-forwarded-* through
+    it("drops x-forwarded-* a client sent for a wildcard origin", async () => {
+      const headers = await callHandler(
+        ["https://app.example.com", "https://*.vercel.app"],
+        {
+          "x-forwarded-host": "attacker.vercel.app",
+          "x-forwarded-proto": "https",
+        }
+      );
+      expect(headers.get("x-forwarded-host")).toBeNull();
+      expect(headers.get("x-forwarded-proto")).toBeNull();
     });
 
     it("honors exact origins returned by a trustedOrigins function", async () => {
@@ -204,8 +229,8 @@ describe("createClient route registration", () => {
         "x-better-auth-forwarded-host": "app.example.com",
         "x-better-auth-forwarded-proto": "http",
       });
-      expect(headers.get("x-forwarded-host")).toBe("deployment.convex.site");
-      expect(headers.get("x-forwarded-proto")).toBe("https");
+      expect(headers.get("x-forwarded-host")).toBeNull();
+      expect(headers.get("x-forwarded-proto")).toBeNull();
     });
 
     it("restores http for an exact http origin", async () => {
@@ -228,7 +253,7 @@ describe("createClient route registration", () => {
           "x-better-auth-forwarded-host": host,
           "x-better-auth-forwarded-proto": "https",
         });
-        expect(headers.get("x-forwarded-host")).toBe("deployment.convex.site");
+        expect(headers.get("x-forwarded-host")).toBeNull();
       }
     });
 
