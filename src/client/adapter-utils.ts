@@ -746,9 +746,11 @@ export const paginate = async <
       !isCreationSort(args.sortBy.field) &&
       !findIndex(schema, {
         model: args.model,
-        where: args.where?.map((w) =>
-          w === inWhere ? { ...w, operator: "eq" as const } : w
-        ),
+        // Without the eq null clauses, as generateQuery picks its index:
+        // an index range can't match unset fields
+        where: args.where
+          ?.filter((w) => !isEqNull(w))
+          .map((w) => (w === inWhere ? { ...w, operator: "eq" as const } : w)),
         sortBy: args.sortBy,
       })?.index
     );

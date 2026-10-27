@@ -7,6 +7,10 @@ import { api } from "../component/_generated/api.js";
 import schema from "../component/schema.js";
 import type { DataModel } from "../component/_generated/dataModel.js";
 import { createClient } from "./index.js";
+import { defineSchema, defineTable } from "convex/server";
+import { v } from "convex/values";
+import { getAuthTables } from "better-auth/db";
+import { paginate } from "./adapter-utils.js";
 
 // Better Auth's adapters always honour sortBy: the SQL ones with ORDER BY,
 // with or without an index. Convex can only order by an index, so without one
@@ -106,5 +110,34 @@ describe("sortBy without an index", () => {
       limit: 2,
     });
     expect(names(rows)).toEqual(["c", "b"]);
+  });
+});
+
+// generateQuery leaves eq null clauses out of its index choice, since an index
+// range can't match unset fields. The in-memory sort decision has to choose
+// the same way, or it trusts an index the query won't use.
+describe("sortBy with an eq null clause", () => {
+  it("sorts when only an index starting with the null field ends in the sort field", async () => {
+    const schema = defineSchema({
+      user: defineTable({
+        name: v.string(),
+        username: v.optional(v.union(v.null(), v.string())),
+      }).index("username_name", ["username", "name"]),
+    });
+    const t = convexTest(schema, import.meta.glob("../component/**/*.*s"));
+    const names = await t.run(async (ctx) => {
+      for (const name of ["c", "a", "b"]) {
+        await ctx.db.insert("user", { name, username: null });
+      }
+      const result = await paginate(ctx as any, schema, getAuthTables({}), {
+        model: "user",
+        where: [{ field: "username", operator: "eq", value: null }],
+        sortBy: { field: "name", direction: "asc" },
+        limit: 2,
+        paginationOpts: { numItems: 2, cursor: null },
+      } as any);
+      return result.page.map((doc: any) => doc.name);
+    });
+    expect(names).toEqual(["a", "b"]);
   });
 });
