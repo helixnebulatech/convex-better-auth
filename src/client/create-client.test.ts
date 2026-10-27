@@ -177,11 +177,48 @@ describe("createClient route registration", () => {
     // request URL, as without a trusted proxy
     it("drops incoming x-forwarded-* that aren't an exact trusted origin", async () => {
       const headers = await callHandler(["https://app.example.com"], {
-        "x-forwarded-host": "deployment.convex.site",
+        "x-forwarded-host": "proxy.example.com",
         "x-forwarded-proto": "https",
       });
       expect(headers.get("x-forwarded-host")).toBeNull();
       expect(headers.get("x-forwarded-proto")).toBeNull();
+    });
+
+    // Matching Host and the request URL, they lead Better Auth to the same
+    // host and protocol as without them, so trustedOrigins isn't evaluated.
+    // Convex's cloud edge sends these on every request.
+    it("leaves x-forwarded-* matching Host and the request URL unchecked", async () => {
+      const trustedOrigins = vi.fn(async () => ["https://app.example.com"]);
+      const headers = await callHandler(trustedOrigins, {
+        "x-forwarded-host": "Deployment.Convex.Site",
+        "x-forwarded-proto": "https",
+      });
+      expect(trustedOrigins).not.toHaveBeenCalled();
+      expect(headers.get("x-forwarded-host")).toBe("Deployment.Convex.Site");
+      expect(headers.get("x-forwarded-proto")).toBe("https");
+    });
+
+    it("checks x-forwarded-* when the protocol differs from the request URL", async () => {
+      const trustedOrigins = vi.fn(async () => ["https://app.example.com"]);
+      const headers = await callHandler(trustedOrigins, {
+        "x-forwarded-host": "deployment.convex.site",
+        "x-forwarded-proto": "http",
+      });
+      expect(trustedOrigins).toHaveBeenCalled();
+      expect(headers.get("x-forwarded-host")).toBeNull();
+      expect(headers.get("x-forwarded-proto")).toBeNull();
+    });
+
+    it("checks x-forwarded-* when the request came through the handlers", async () => {
+      const trustedOrigins = vi.fn(async () => ["https://app.example.com"]);
+      const headers = await callHandler(trustedOrigins, {
+        "x-forwarded-host": "deployment.convex.site",
+        "x-forwarded-proto": "https",
+        "x-better-auth-forwarded-host": "app.example.com",
+        "x-better-auth-forwarded-proto": "https",
+      });
+      expect(trustedOrigins).toHaveBeenCalled();
+      expect(headers.get("x-forwarded-host")).toBe("app.example.com");
     });
 
     it("keeps incoming x-forwarded-* that are an exact trusted origin", async () => {

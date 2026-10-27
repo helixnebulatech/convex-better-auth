@@ -183,15 +183,32 @@ const restoreOriginalForwardedHeaders = async (
   auth: Parameters<typeof exactTrustedOrigins>[0],
   request: Request
 ) => {
+  // Without trusted forwarded headers Better Auth uses the Host header and
+  // the request URL. If x-forwarded-* say the same, keeping or removing them
+  // gives Better Auth the same host and protocol, so there's nothing to check
+  // and trustedOrigins isn't evaluated. It's the case of every request on
+  // Convex's cloud that didn't come through the framework handlers: the edge
+  // puts its own host in both headers.
+  const incomingHost = request.headers.get("x-forwarded-host");
+  const incomingProto = request.headers.get("x-forwarded-proto");
+  const requestHost = request.headers.get("host");
+  if (
+    !request.headers.has("x-better-auth-forwarded-host") &&
+    !request.headers.has("x-better-auth-forwarded-proto") &&
+    incomingHost !== null &&
+    requestHost !== null &&
+    incomingHost.toLowerCase() === requestHost.toLowerCase() &&
+    (incomingProto === null ||
+      `${incomingProto}:` === new URL(request.url).protocol)
+  ) {
+    return request;
+  }
   const candidates = [
     [
       request.headers.get("x-better-auth-forwarded-host"),
       request.headers.get("x-better-auth-forwarded-proto"),
     ],
-    [
-      request.headers.get("x-forwarded-host"),
-      request.headers.get("x-forwarded-proto"),
-    ],
+    [incomingHost, incomingProto],
   ] as const;
   let trusted: Set<string> | undefined;
   let forwarded: readonly [string, string] | undefined;
