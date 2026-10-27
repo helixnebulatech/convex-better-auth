@@ -479,6 +479,12 @@ const generateQuery = (
               for (const [idx, value] of (values?.eq ?? []).entries()) {
                 q = q.eq(usableIndex.fields[idx], value);
               }
+              // createdAt isn't an index field, the index ends in
+              // _creationTime, which can differ from a createdAt Better Auth
+              // set. Its bounds are applied to the stored value below.
+              if (boundField === "createdAt") {
+                return q;
+              }
               if (values?.gt !== undefined) {
                 q = q.gt(boundField, values.gt);
               } else if (values?.gte !== undefined) {
@@ -529,6 +535,8 @@ const generateQuery = (
       (w) =>
         isEqNull(w) ||
         isRangeNull(w) ||
+        (w.field === "createdAt" &&
+          ["lt", "lte", "gt", "gte"].includes(w.operator ?? "")) ||
         (w.operator &&
           ["contains", "starts_with", "ends_with", "ne", "not_in"].includes(
             w.operator
@@ -766,11 +774,20 @@ export const paginate = async <
   // possible with the organization plugin listing all members with a high
   // limit. For cases like this we need to create proper convex queries in
   // the component as an alternative to using Better Auth api's.
-  const inWhere = args.where?.find((w) => w.operator === "in");
-  if (inWhere) {
-    if (!Array.isArray(inWhere.value)) {
+  const foundInWhere = args.where?.find((w) => w.operator === "in");
+  if (foundInWhere) {
+    if (!Array.isArray(foundInWhere.value)) {
       throw new Error("in clause value must be an array");
     }
+    // Like SQL IN, a value listed twice matches its rows once
+    const inWhere = {
+      ...foundInWhere,
+      value: [...new Set(foundInWhere.value as (string | number)[])],
+    } as typeof foundInWhere & { value: any[] };
+    args = {
+      ...args,
+      where: args.where?.map((w) => (w === foundInWhere ? inWhere : w)),
+    };
     // Ids and unique fields match at most one document per value, so look
     // each value up directly and apply the other clauses as static filters.
     // Streaming per value would need an index covering every other clause
