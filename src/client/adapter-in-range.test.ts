@@ -110,4 +110,34 @@ describe("in and createdAt clauses, as in SQL", () => {
     // createdAt as stored, not the insertion time
     expect(rows.map((row) => row.token)).toEqual(["old"]);
   });
+
+  it("checks a second in clause on an indexed stream", async () => {
+    const { adapter, user } = await setup();
+    const rows = await adapter.findMany<{ token: string }>({
+      model: "session",
+      where: [
+        { field: "userId", operator: "in", value: [user.id, "other"] },
+        { field: "token", operator: "in", value: ["new", "missing"] },
+      ],
+    });
+    expect(rows.map((row) => row.token)).toEqual(["new"]);
+  });
+
+  it("matches nothing with an empty in list, like SQL", async () => {
+    const { adapter } = await setup();
+    for (const field of ["userId", "token", "id"]) {
+      expect(
+        await adapter.findMany({
+          model: "session",
+          where: [{ field, operator: "in", value: [] }],
+        })
+      ).toEqual([]);
+    }
+    expect(
+      await adapter.count({
+        model: "session",
+        where: [{ field: "userId", operator: "in", value: [] }],
+      })
+    ).toBe(0);
+  });
 });
