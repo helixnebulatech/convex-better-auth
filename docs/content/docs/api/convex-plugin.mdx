@@ -31,6 +31,8 @@ It serves the Convex JWT at `/convex/token` and its keys at `/convex/jwks` and
 `/convex/.well-known/openid-configuration`. These are separate from the paths of
 Better Auth's `jwt` and `oauthProvider` plugins (`/token`, `/jwks`,
 `/.well-known/openid-configuration`), so those plugins can be used alongside it.
+Both plugins keep their keys in the `jwks` table. The Convex plugin only signs
+with, publishes and rotates keys of the algorithm in your Convex auth config.
 
 ### Options
 

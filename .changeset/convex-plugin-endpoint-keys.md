@@ -20,5 +20,4 @@ in `auth.api`. The paths don't change, and neither do `getLatestJwks` and
 server, call `auth.api.getConvexToken()`.
 
 Why this option: Better Auth's official plugins each use endpoint keys of their
-own, so plugins don't replace each other. Both plugins keep their keys in the
-`jwks` table, and each token verifies against the keys its own plugin publishes.
+own, so plugins don't replace each other.

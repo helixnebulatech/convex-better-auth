@@ -301,7 +301,7 @@ describe("convex plugin with Better Auth's jwt plugin", () => {
     const convexPlugin = convex({
       authConfig: { providers: [getAuthConfigProvider()] },
     });
-    return betterAuth({
+    const auth = betterAuth({
       baseURL,
       secret: "test-secret-at-least-thirty-two-characters-long",
       emailAndPassword: { enabled: true },
@@ -318,52 +318,95 @@ describe("convex plugin with Better Auth's jwt plugin", () => {
           ? [convexPlugin, jwtPlugin()]
           : [jwtPlugin(), convexPlugin],
     });
+    return { auth, db };
+  };
+  const signedIn = async (auth: ReturnType<typeof build>["auth"]) => {
+    const signUp = await auth.handler(
+      new Request(`${baseURL}/api/auth/sign-up/email`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          email: "both@example.com",
+          password: "testpassword123",
+          name: "Both",
+        }),
+      })
+    );
+    const cookie = signUp.headers
+      .getSetCookie()
+      .map((c) => c.split(";")[0])
+      .join("; ");
+    return (path: string) =>
+      auth.handler(
+        new Request(`${baseURL}/api/auth${path}`, { headers: { cookie } })
+      );
   };
 
+  // Either plugin may create the first key in the shared jwks table
   for (const order of ["convex,jwt", "jwt,convex"] as const) {
-    it(`keeps the endpoints of both plugins with ${order}`, async () => {
-      const auth = build(order);
-      const signUp = await auth.handler(
-        new Request(`${baseURL}/api/auth/sign-up/email`, {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({
-            email: "both@example.com",
-            password: "testpassword123",
-            name: "Both",
-          }),
-        })
-      );
-      const cookie = signUp.headers
-        .getSetCookie()
-        .map((c) => c.split(";")[0])
-        .join("; ");
-      const get = (path: string) =>
-        auth.handler(
-          new Request(`${baseURL}/api/auth${path}`, { headers: { cookie } })
-        );
-      for (const path of [
-        "/convex/token",
-        "/convex/jwks",
-        "/convex/.well-known/openid-configuration",
-        "/token",
-        "/jwks",
-      ]) {
-        const res = await get(path);
-        expect(res.status, `${path}: ${await res.clone().text()}`).toBe(200);
-      }
-      // Both plugins keep their keys in the jwks table. Each token verifies
-      // against the keys its own plugin publishes.
-      for (const [tokenPath, jwksPath] of [
-        ["/convex/token", "/convex/jwks"],
-        ["/token", "/jwks"],
-      ] as const) {
-        const { token } = await (await get(tokenPath)).json();
-        const jwks = createLocalJWKSet(await (await get(jwksPath)).json());
-        await expect(jwtVerify(token, jwks)).resolves.toBeTruthy();
-      }
-    });
+    for (const firstKey of ["/convex/jwks", "/jwks"]) {
+      it(`keeps both plugins working with ${order}, first key from ${firstKey}`, async () => {
+        const { auth } = build(order);
+        const get = await signedIn(auth);
+        expect((await get(firstKey)).status).toBe(200);
+        for (const path of [
+          "/convex/token",
+          "/convex/jwks",
+          "/convex/.well-known/openid-configuration",
+          "/token",
+          "/jwks",
+        ]) {
+          const res = await get(path);
+          expect(res.status, `${path}: ${await res.clone().text()}`).toBe(200);
+        }
+        // Convex only accepts the algorithm in its auth config, RS256
+        const convexJwks = await (await get("/convex/jwks")).json();
+        expect(convexJwks.keys.map((k: { alg: string }) => k.alg)).toEqual([
+          "RS256",
+        ]);
+        const { token: convexToken } = await (
+          await get("/convex/token")
+        ).json();
+        await expect(
+          jwtVerify(convexToken, createLocalJWKSet(convexJwks), {
+            algorithms: ["RS256"],
+          })
+        ).resolves.toBeTruthy();
+        // The jwt plugin signs with its latest key of any algorithm when it has
+        // none in its own, as Better Auth does, and its JWKS publishes it
+        const { token } = await (await get("/token")).json();
+        await expect(
+          jwtVerify(token, createLocalJWKSet(await (await get("/jwks")).json()))
+        ).resolves.toBeTruthy();
+      });
+    }
   }
+
+  it("rotates and exports only the Convex keys", async () => {
+    const { auth, db } = build("jwt,convex");
+    const get = await signedIn(auth);
+    await get("/jwks");
+    await get("/convex/token");
+    const otherKeys = () =>
+      (db.jwks as { id: string; alg: string }[])
+        .filter((k) => k.alg !== "RS256")
+        .map((k) => k.id);
+    const before = otherKeys();
+    expect(before).toHaveLength(1);
+    const rotated = await auth.api.rotateKeys();
+    expect(otherKeys()).toEqual(before);
+    expect(rotated).toHaveLength(1);
+    expect(rotated[0].alg).toBe("RS256");
+    // A newer key of the jwt plugin isn't exported as the Convex key
+    db.jwks.push({
+      ...db.jwks.find((k: { alg: string }) => k.alg !== "RS256"),
+      id: "newer-eddsa",
+      createdAt: new Date(Date.now() + 60_000),
+    });
+    const latest = await auth.api.getLatestJwks();
+    expect(latest[0].id).toBe(rotated[0].id);
+    expect(latest[0].alg).toBe("RS256");
+  });
 });
 
 describe("convex plugin JWT cookie", () => {
