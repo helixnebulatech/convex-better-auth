@@ -13,20 +13,19 @@ type JwksDoc = {
 };
 
 export const createPublicJwks = (jwks: JwksDoc[], options?: JwtOptions) => {
-  /*
+  // Like Better Auth's jwks endpoint, drop keys past their expiry plus the
+  // grace period. Used by jwtCache on every check, and by the Convex auth
+  // config when it's deployed.
   const now = Date.now();
   const DEFAULT_GRACE_PERIOD = 60 * 60 * 24 * 30;
   const gracePeriod =
     (options?.jwks?.gracePeriod ?? DEFAULT_GRACE_PERIOD) * 1000;
-
   const keys = jwks.filter((key) => {
     if (!key.expiresAt) {
       return true;
     }
     return new Date(key.expiresAt).getTime() + gracePeriod > now;
   });
-  */
-  const keys = jwks;
 
   const keyPairConfig = options?.jwks?.keyPairConfig;
   const defaultCrv = keyPairConfig
