@@ -10,6 +10,8 @@ import { createLocalJWKSet, decodeJwt, jwtVerify } from "jose";
 import type { MemoryDB } from "better-auth/adapters/memory";
 import { getAuthConfigProvider } from "../../auth-config.js";
 import { convex } from "./index.js";
+import type { BetterAuthPlugin } from "better-auth";
+import { createAuthEndpoint } from "better-auth/api";
 
 const authConfig = {
   providers: [{ applicationID: "convex", domain: "https://example.com" }],
@@ -527,5 +529,67 @@ describe("convex plugin JWT cookie", () => {
     expect(
       (await call(auth, "/convex/token", { cookie: cookiesOf(signUp) })).status
     ).toBe(401);
+  });
+});
+
+describe("convex plugin in query context", () => {
+  // Queries can't write, so the plugin turns adapter writes into no-ops
+  // there. Atomic writes return null, as when no row matches.
+  it("turns consumeOne and incrementOne into no-ops", async () => {
+    process.env.CONVEX_SITE_URL = baseURL;
+    const db: MemoryDB = {
+      user: [],
+      session: [],
+      account: [],
+      verification: [
+        {
+          id: "v1",
+          identifier: "id-1",
+          value: "1",
+          expiresAt: new Date(Date.now() + 60_000),
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+      ],
+      jwks: [],
+    };
+    const probe = {
+      id: "query-ctx-probe",
+      endpoints: {
+        queryCtxProbe: createAuthEndpoint(
+          "/query-ctx-probe",
+          { method: "GET" },
+          async (ctx) => {
+            const consumed = await ctx.context.adapter.consumeOne({
+              model: "verification",
+              where: [{ field: "id", value: "v1" }],
+            });
+            const incremented = await ctx.context.adapter.incrementOne({
+              model: "verification",
+              where: [{ field: "id", value: "v1" }],
+              field: "value",
+              by: 1,
+            } as any);
+            return ctx.json({ consumed, incremented });
+          }
+        ),
+      },
+    } satisfies BetterAuthPlugin;
+    const auth = betterAuth({
+      baseURL,
+      secret: "test-secret-at-least-thirty-two-characters-long",
+      logger: { disabled: true },
+      // Not marked as running in a mutation ctx
+      database: memoryAdapter(db),
+      plugins: [
+        convex({ authConfig: { providers: [getAuthConfigProvider()] } }),
+        probe,
+      ],
+    });
+    const res = await auth.handler(
+      new Request(`${baseURL}/api/auth/query-ctx-probe`)
+    );
+    expect(await res.json()).toEqual({ consumed: null, incremented: null });
+    expect(db.verification).toHaveLength(1);
   });
 });
