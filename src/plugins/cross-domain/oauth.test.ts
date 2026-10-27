@@ -339,9 +339,14 @@ describe("cross domain OAuth", () => {
 // records the form it submits and the referrer policy in effect at the time
 const setupClient = (
   auth: Auth,
-  options: { setReferrerPolicy?: boolean; failFirstVerify?: boolean } = {}
+  options: {
+    setReferrerPolicy?: boolean;
+    failFirstVerify?: boolean;
+    // Answers to /get-session wait for it
+    holdGetSession?: Promise<void>;
+  } = {}
 ) => {
-  const { failFirstVerify, ...clientOptions } = options;
+  const { failFirstVerify, holdGetSession, ...clientOptions } = options;
   let verifyFailed = false;
   const items = new Map<string, string>();
   const storage = {
@@ -363,6 +368,15 @@ const setupClient = (
         ) {
           verifyFailed = true;
           return new Response(null, { status: 503 });
+        }
+        if (holdGetSession && String(input).includes("/get-session")) {
+          const headers = new Headers(init?.headers);
+          headers.set("origin", SITE);
+          const response = await auth.handler(
+            new Request(input, { ...init, headers })
+          );
+          await holdGetSession;
+          return response;
         }
         const headers = new Headers(init?.headers);
         headers.set("origin", SITE);
@@ -412,7 +426,7 @@ const setupClient = (
     });
     return callback(auth, form.fields.state!, code, cookieHeader(start));
   };
-  return { client, submitted, document, completeFlow };
+  return { client, submitted, document, completeFlow, items };
 };
 
 describe("crossDomainClient OAuth", () => {
@@ -468,6 +482,33 @@ describe("crossDomainClient OAuth", () => {
     const { data, error } = await verify();
     expect(error).toBeNull();
     expect(data.user.email).toBe("a@example.com");
+  });
+
+  it("doesn't let a late empty get-session answer clear a session redeemed meanwhile", async () => {
+    const { auth } = build();
+    let release!: () => void;
+    const holdGetSession = new Promise<void>((resolve) => (release = resolve));
+    const { client, submitted, document, completeFlow, items } = setupClient(
+      auth,
+      { holdGetSession }
+    );
+    vi.stubGlobal("document", document);
+    await client.$fetch("/sign-in/social", {
+      method: "POST",
+      body: { provider: "mock", callbackURL: SITE },
+    });
+    const ott = ottOf(await completeFlow(submitted[0]!))!;
+    // The app loads at ?ott=: useSession asks for the session, still
+    // signed out, while the provider redeems the token
+    const getSession = client.$fetch("/get-session");
+    const { error } = await (client as any).crossDomain.oneTimeToken.verify({
+      token: ott,
+    });
+    expect(error).toBeNull();
+    release();
+    await getSession;
+    const cookie = items.get("better-auth_cookie") ?? "";
+    expect(cookie).toContain("session_token");
   });
 
   it("only changes the page's referrer policy when the app opts in", async () => {
