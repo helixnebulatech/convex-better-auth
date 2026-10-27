@@ -251,7 +251,25 @@ export const convexAdapter = <
           return data;
         },
       },
-      adapter: ({ options }) => {
+      adapter: ({ options, getFieldName }) => {
+        // Better Auth passes sortBy and select with its own field names, and
+        // each adapter maps them to the stored ones, as Drizzle does with
+        // getFieldName. "id" is kept, the component reads it as _id.
+        const toStoredSelect = (modelKey: string, select?: string[]) =>
+          select?.map((field) =>
+            field === "id" ? field : getFieldName({ model: modelKey, field })
+          );
+        const toStoredSortBy = <S extends { field: string } | undefined>(
+          modelKey: string,
+          sortBy: S
+        ): S =>
+          sortBy && {
+            ...sortBy,
+            field:
+              sortBy.field === "id"
+                ? sortBy.field
+                : getFieldName({ model: modelKey, field: sortBy.field }),
+          };
         // Disable telemetry in all cases because it requires Node
         options.telemetry = { enabled: false };
         if (options.advanced?.database?.joins) {
@@ -296,7 +314,7 @@ export const convexAdapter = <
             const { createSchema } = await import("./create-schema.js");
             return createSchema({ file, tables });
           },
-          create: async ({ model, data, select }): Promise<any> => {
+          create: async ({ model, modelKey, data, select }): Promise<any> => {
             if (!("runMutation" in ctx)) {
               throw new Error("ctx is not a mutation ctx");
             }
@@ -309,12 +327,16 @@ export const convexAdapter = <
                 : undefined;
             return ctx.runMutation(api.adapter.create, {
               input: { model: model as any, data: data as any },
-              select,
+              select: toStoredSelect(modelKey ?? model, select),
               onCreateHandle: onCreateHandle,
             });
           },
           // Better Auth 1.7.6+ passes modelKey, which the component validators reject
-          findOne: async ({ modelKey: _modelKey, ...data }): Promise<any> => {
+          findOne: async ({ modelKey, ...input }): Promise<any> => {
+            const data = {
+              ...input,
+              select: toStoredSelect(modelKey ?? input.model, input.select),
+            };
             const orWhere = splitOrWhere(data.where);
             if (orWhere) {
               for (const where of orWhere) {
@@ -336,10 +358,15 @@ export const convexAdapter = <
             });
           },
           findMany: async ({
-            modelKey: _modelKey,
+            modelKey,
             offset = 0,
-            ...data
+            ...input
           }): Promise<any[]> => {
+            const data = {
+              ...input,
+              select: toStoredSelect(modelKey ?? input.model, input.select),
+              sortBy: toStoredSortBy(modelKey ?? input.model, input.sortBy),
+            };
             // The component paginates by cursor only, so fetch offset + limit
             // rows (the component limits some lookups itself) and drop the first
             // offset here. Deep offsets read every skipped row.
