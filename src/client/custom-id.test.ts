@@ -117,6 +117,43 @@ describe("ids chosen by Better Auth", () => {
     });
   }
 
+  it("matches the chosen id in ne and not_in, like a primary key", async () => {
+    const { auth } = setup();
+    const { adapter } = await auth.$context;
+    const chosenId = "Y2hvc2VuLWlkLWZvci10aGUtbmUtdGVzdA";
+    await adapter.create({
+      model: "verification",
+      data: { ...verificationRow, id: chosenId },
+      forceAllowId: true,
+    });
+    const other = await adapter.create<{ id: string }>({
+      model: "verification",
+      data: { ...verificationRow, identifier: "other" },
+    });
+    const ids = async (operator: "ne" | "not_in" | "eq" | "in") =>
+      (
+        await adapter.findMany<{ id: string }>({
+          model: "verification",
+          where: [
+            {
+              field: "id",
+              operator,
+              value:
+                operator === "in" || operator === "not_in"
+                  ? [chosenId]
+                  : chosenId,
+            },
+            { field: "value", value: verificationRow.value },
+          ],
+        })
+      ).map((row) => row.id);
+    expect(await ids("ne")).toEqual([other.id]);
+    expect(await ids("not_in")).toEqual([other.id]);
+    expect(await ids("eq")).not.toContain(other.id);
+    expect(await ids("in")).not.toContain(other.id);
+    expect(await ids("eq")).toHaveLength(1);
+  });
+
   it("fails closed on a table without customId", async () => {
     const { auth } = setup();
     const { adapter } = await auth.$context;

@@ -377,16 +377,39 @@ const filterByWhere = <
       isComparable(val, wVal) && val! < wVal!;
     const isGreaterThan = (val: typeof value, wVal: typeof w.value) =>
       isComparable(val, wVal) && val! > wVal!;
+    // A row created with an id Better Auth chose is found by that id too,
+    // kept in customId, as by getDocById
+    const ids =
+      w.field === "_id"
+        ? [doc._id, (doc as any)[customIdField]].filter(
+            (id) => id !== undefined
+          )
+        : undefined;
     const filter = (w: Infer<typeof adapterWhereValidator>) => {
       switch (w.operator) {
         case undefined:
         case "eq": {
+          if (ids) {
+            return ids.includes(w.value);
+          }
           return w.value === null ? isNullish(value) : value === w.value;
         }
         case "in": {
+          if (ids) {
+            return (
+              Array.isArray(w.value) &&
+              ids.some((id) => (w.value as any[]).includes(id))
+            );
+          }
           return Array.isArray(w.value) && (w.value as any[]).includes(value);
         }
         case "not_in": {
+          if (ids) {
+            return (
+              Array.isArray(w.value) &&
+              !ids.some((id) => (w.value as any[]).includes(id))
+            );
+          }
           // SQL NOT IN excludes rows where the field is NULL.
           return (
             Array.isArray(w.value) &&
@@ -413,6 +436,9 @@ const filterByWhere = <
           );
         }
         case "ne": {
+          if (ids) {
+            return !ids.includes(w.value);
+          }
           // ne null is IS NOT NULL; otherwise SQL <> excludes NULL rows.
           return !isNullish(value) && value !== w.value;
         }
@@ -647,11 +673,11 @@ export const paginate = async <
       (w) =>
         w.field === "_id" &&
         w.operator &&
-        !["eq", "in", "not_in"].includes(w.operator)
+        !["eq", "in", "not_in", "ne"].includes(w.operator)
     )
   ) {
     throw new Error(
-      `_id can only be used with eq, in, or not_in operator: ${JSON.stringify(args.where)}`
+      `_id can only be used with eq, in, not_in or ne operator: ${JSON.stringify(args.where)}`
     );
   }
   if (args.where?.some((w) => w.mode === "insensitive")) {
