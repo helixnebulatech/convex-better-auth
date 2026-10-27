@@ -102,6 +102,21 @@ enabled. With it, the base URL, and so the links in emails such as password
 reset and verification links, uses the restored host. The worst a caller can do
 is pick another of the origins you listed exactly.
 
+### Self-hosted Convex
+
+Without trusted forwarded headers, Better Auth builds the base URL from the
+`Host` header and, without that, the request URL. On Convex's cloud these come
+from Convex. A self-hosted Convex backend, tested with the local backend that
+`convex dev` runs, passes the `x-forwarded-*` headers a client sends to your
+HTTP actions and builds the request URL from them. So on a self-hosted
+deployment:
+
+- Set a static `baseURL`, as the framework guides do. Then Better Auth doesn't
+  take the base URL from the request at all.
+- If you need a dynamic `baseURL`, list each host in `allowedHosts` exactly,
+  without wildcards, and put a reverse proxy in front of the backend that sets
+  `Host` and `x-forwarded-*` itself instead of passing the client's.
+
 ## Database adapter
 
 Better Auth leaves some guarantees to the database. The component provides them
