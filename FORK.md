@@ -223,6 +223,14 @@ request if the `RELEASE_BOT_TOKEN` secret holds a token allowed to merge. We
 leave it unset, so a person reviews every release before it's published. Vercel
 also merges its release pull requests by hand.
 
+The Release job runs in the `Release` GitHub environment, and npm only trusts
+the workflow when it runs there. Started by hand, a normal release only runs
+from `main`. Better Auth's release workflow does both. Vercel's AI SDK workflow,
+which ours started from, has neither: anyone with write access could run it on
+an unreviewed branch and publish that branch with valid provenance. The `if:` in
+the workflow only prevents mistakes, as a branch can edit it. The environment's
+required reviewer is what stops a publish nobody approved.
+
 To try a change before releasing it, run the Release workflow manually with
 "snapshot" checked. It publishes `0.0.0-<sha>-<timestamp>` under the `snapshot`
 dist-tag, which never replaces `latest`:
@@ -256,5 +264,11 @@ A ruleset protects `main`:
   the npm account. The same setting is in the package settings on npmjs.com.
 
   ```sh
-  npm trust github @helixnebulatech/convex-better-auth --repo helixnebulatech/convex-better-auth --file release.yml --allow-publish
+  npm trust github @helixnebulatech/convex-better-auth --repo helixnebulatech/convex-better-auth --file release.yml --env Release --allow-publish
   ```
+
+- Create the `Release` environment under Settings > Environments, with yourself
+  as a required reviewer. Every run of the Release workflow, including the one
+  that opens the "Version Packages" pull request and snapshots, then waits for
+  that approval. Keep `RELEASE_BOT_TOKEN`, if you set it, as a secret of this
+  environment rather than of the repository.
