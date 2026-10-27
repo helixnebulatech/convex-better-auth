@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { betterAuth } from "better-auth/minimal";
 import { memoryAdapter } from "better-auth/adapters/memory";
 import type { MemoryDB } from "better-auth/adapters/memory";
@@ -174,6 +174,53 @@ describe("crossDomain plugin", async () => {
       const location = new URL(response.headers.get("location")!);
       expect(location.origin).toBe(SITE_URL);
       expect(location.searchParams.get("ott")).toMatch(/^.{32}$/);
+    });
+  });
+
+  describe("Better-Auth-Cookie header", () => {
+    it("keeps the session when the request also has a Cookie header", async () => {
+      const signIn = await post(
+        "/sign-up/email",
+        {
+          email: "cookie@example.com",
+          password: "testpassword123",
+          name: "Cookie User",
+        },
+        { "better-auth-cookie": "" }
+      );
+      expect(signIn.status).toBe(200);
+      const setCookie = signIn.headers.get("set-better-auth-cookie")!;
+      const sessionCookie = setCookie.split(";")[0];
+      expect(sessionCookie).toContain("session_token=");
+
+      // Deno and Cloudflare Workers join appended cookie values with ", ".
+      const append = Headers.prototype.append;
+      const spy = vi
+        .spyOn(Headers.prototype, "append")
+        .mockImplementation(function (this: Headers, name, value) {
+          const existing = this.get(name);
+          if (name.toLowerCase() === "cookie" && existing) {
+            this.set(name, `${existing}, ${value}`);
+            return;
+          }
+          append.call(this, name, value);
+        });
+      try {
+        const response = await auth.handler(
+          new Request(`${AUTH_BASE_URL}${BASE_PATH}/get-session`, {
+            headers: {
+              cookie: "theme=dark",
+              "Better-Auth-Cookie": sessionCookie,
+            },
+          })
+        );
+        const session = (await response.json()) as {
+          user?: { email: string };
+        } | null;
+        expect(session?.user?.email).toBe("cookie@example.com");
+      } finally {
+        spy.mockRestore();
+      }
     });
   });
 });
