@@ -698,3 +698,28 @@ describe("cross domain with Better Auth's one-time-token plugin", () => {
     });
   }
 });
+
+describe("cross domain one-time token redemption race", () => {
+  it("doesn't redeem an OAuth token without the verifier while the browser redeems it", async () => {
+    const { auth } = build();
+    const ott = ottOf(await browserSignIn(auth, "codeA"))!;
+    // Hold the browser's redemption right before it consumes the token
+    const { internalAdapter } = await auth.$context;
+    const consume = internalAdapter.consumeVerificationValue;
+    let release!: () => void;
+    const held = new Promise<void>((resolve) => (release = resolve));
+    let calls = 0;
+    internalAdapter.consumeVerificationValue = async (identifier: string) => {
+      if (++calls === 1) {
+        await held;
+      }
+      return consume(identifier);
+    };
+    const browser = redeem(auth, ott, VERIFIER);
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    // Meanwhile, someone with only the token tries it
+    expect((await redeem(auth, ott)).status).toBe(400);
+    release();
+    expect((await browser).status).toBe(200);
+  });
+});

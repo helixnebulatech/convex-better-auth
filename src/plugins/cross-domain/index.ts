@@ -370,11 +370,8 @@ export const crossDomain = ({ siteUrl }: { siteUrl: string }) => {
             }
             const token = generateRandomString(32);
             const expiresAt = new Date(Date.now() + 3 * 60 * 1000);
-            await ctx.context.internalAdapter.createVerificationValue({
-              value: session.session.token,
-              identifier: ottIdentifier(token),
-              expiresAt,
-            });
+            // The binding exists before the token and outlives its
+            // redemption, so the token is never redeemable without it
             if (verifierHash) {
               await ctx.context.internalAdapter.createVerificationValue({
                 value: verifierHash,
@@ -382,6 +379,11 @@ export const crossDomain = ({ siteUrl }: { siteUrl: string }) => {
                 expiresAt,
               });
             }
+            await ctx.context.internalAdapter.createVerificationValue({
+              value: session.session.token,
+              identifier: ottIdentifier(token),
+              expiresAt,
+            });
             url.searchParams.set("ott", token);
             throw ctx.redirect(url.toString());
           }),
@@ -494,11 +496,6 @@ export const crossDomain = ({ siteUrl }: { siteUrl: string }) => {
           ) {
             throw ctx.error("BAD_REQUEST", { message: "Invalid token" });
           }
-          if (binding) {
-            await ctx.context.internalAdapter.deleteVerificationByIdentifier(
-              ottVerifierIdentifier(ctx.body.token)
-            );
-          }
           // Same steps as the one-time-token plugin's verify endpoint
           const verification =
             await ctx.context.internalAdapter.consumeVerificationValue(
@@ -506,6 +503,13 @@ export const crossDomain = ({ siteUrl }: { siteUrl: string }) => {
             );
           if (!verification) {
             throw ctx.error("BAD_REQUEST", { message: "Invalid token" });
+          }
+          // Only now: a request without the verifier that finds no binding
+          // also finds no token
+          if (binding) {
+            await ctx.context.internalAdapter.deleteVerificationByIdentifier(
+              ottVerifierIdentifier(ctx.body.token)
+            );
           }
           const session = await ctx.context.internalAdapter.findSession(
             verification.value
