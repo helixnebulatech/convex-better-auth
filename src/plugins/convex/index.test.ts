@@ -4,6 +4,7 @@ import { betterAuth } from "better-auth/minimal";
 import type { BetterAuthOptions } from "better-auth/minimal";
 import { memoryAdapter } from "better-auth/adapters/memory";
 import { admin } from "better-auth/plugins/admin";
+import { twoFactor } from "better-auth/plugins/two-factor";
 import { jwt as jwtPlugin } from "better-auth/plugins/jwt";
 import { createLocalJWKSet, decodeJwt, jwtVerify } from "jose";
 import type { MemoryDB } from "better-auth/adapters/memory";
@@ -13,54 +14,6 @@ import { convex } from "./index.js";
 const authConfig = {
   providers: [{ applicationID: "convex", domain: "https://example.com" }],
 } satisfies AuthConfig;
-
-const getJwtSetCookieMatcher = () => {
-  const plugin = convex({ authConfig });
-  const afterHooks = plugin.hooks?.after ?? [];
-  const matcher = afterHooks.find((hook) => {
-    return (
-      hook.matcher({
-        path: "/sign-in/email",
-        context: { session: { id: "s1" } },
-      } as unknown as Parameters<typeof hook.matcher>[0]) &&
-      !hook.matcher({
-        path: "/sign-out",
-        context: { session: null },
-      } as unknown as Parameters<typeof hook.matcher>[0])
-    );
-  })?.matcher;
-  if (!matcher) {
-    throw new Error("Failed to find Convex JWT set-cookie after hook matcher");
-  }
-  return matcher;
-};
-
-describe("convex plugin JWT cookie refresh matcher", () => {
-  it("matches update-session", () => {
-    const matcher = getJwtSetCookieMatcher();
-    type MatcherContext = Parameters<typeof matcher>[0];
-    const ctx = {
-      path: "/update-session",
-      context: { session: { id: "s1" } },
-    };
-    expect(matcher(ctx as unknown as MatcherContext)).toBe(true);
-  });
-
-  it("matches get-session only when a session exists", () => {
-    const matcher = getJwtSetCookieMatcher();
-    type MatcherContext = Parameters<typeof matcher>[0];
-    const withSessionCtx = {
-      path: "/get-session",
-      context: { session: { id: "s1" } },
-    };
-    const withoutSessionCtx = {
-      path: "/get-session",
-      context: { session: null },
-    };
-    expect(matcher(withSessionCtx as unknown as MatcherContext)).toBe(true);
-    expect(matcher(withoutSessionCtx as unknown as MatcherContext)).toBe(false);
-  });
-});
 
 describe("convex plugin OpenID configuration", () => {
   it("serves issuer and jwks_uri for the Convex site", async () => {
@@ -171,8 +124,15 @@ describe("convex plugin static JWKS", async () => {
     const res = await request(auth, "/convex/token", { headers: { cookie } });
     expect(res.status).toBe(200);
     expect(kidOf((await res.json()).token)).toBe(newer.id);
-    // The sign-in hook swallows token errors, so this fails silently
-    expect(setCookies.some((c) => c.includes("convex_jwt=ey"))).toBe(true);
+    // The get-session hook swallows token errors, so this fails silently
+    const session = await request(auth, "/get-session", {
+      headers: { cookie },
+    });
+    expect(
+      session.headers.getSetCookie().some((c) => c.includes("convex_jwt=ey"))
+    ).toBe(true);
+    // Sign-up doesn't sign one, like Better Auth's jwt plugin
+    expect(setCookies.some((c) => c.includes("convex_jwt=ey"))).toBe(false);
   });
 
   it("serves keys with expiresAt and drops expired ones", async () => {
@@ -297,9 +257,14 @@ describe("convex plugin default JWT payload", () => {
         headers: { cookie: cookiesOf(signIn) },
       })
     );
+    const session = await ours.handler(
+      new Request(`${baseURL}/api/auth/get-session`, {
+        headers: { cookie: cookiesOf(signIn) },
+      })
+    );
+    expect(signUp.status).toBe(200);
     const tokens = {
-      signUpCookie: jwtCookieOf(signUp)!,
-      signInCookie: jwtCookieOf(signIn)!,
+      getSessionCookie: jwtCookieOf(session)!,
       tokenEndpoint: (await tokenRes.json()).token,
     };
     for (const token of Object.values(tokens)) {
@@ -312,7 +277,12 @@ describe("convex plugin default JWT payload", () => {
       convex({ authConfig: { providers: [getAuthConfigProvider()] } }),
     ]);
     const signUp = await post(auth, "/sign-up/email", credentials);
-    const claims = decodeJwt(jwtCookieOf(signUp)!);
+    const session = await auth.handler(
+      new Request(`${baseURL}/api/auth/get-session`, {
+        headers: { cookie: cookiesOf(signUp) },
+      })
+    );
+    const claims = decodeJwt(jwtCookieOf(session)!);
     expect(typeof claims.createdAt).toBe("number");
     expect(typeof claims.updatedAt).toBe("number");
   });
@@ -394,4 +364,125 @@ describe("convex plugin with Better Auth's jwt plugin", () => {
       }
     });
   }
+});
+
+describe("convex plugin JWT cookie", () => {
+  const build = (order: "convex,twoFactor" | "twoFactor,convex") => {
+    process.env.CONVEX_SITE_URL = baseURL;
+    const db: MemoryDB = {
+      user: [],
+      session: [],
+      account: [],
+      verification: [],
+      jwks: [],
+      twoFactor: [],
+    };
+    const convexPlugin = convex({
+      authConfig: { providers: [getAuthConfigProvider()] },
+    });
+    const auth = betterAuth({
+      baseURL,
+      secret: "test-secret-at-least-thirty-two-characters-long",
+      emailAndPassword: { enabled: true },
+      logger: { disabled: true },
+      database: (options: BetterAuthOptions) => {
+        const adapter = memoryAdapter(db)(options);
+        return {
+          ...adapter,
+          options: { ...adapter.options, isRunMutationCtx: true },
+        };
+      },
+      plugins:
+        order === "convex,twoFactor"
+          ? [convexPlugin, twoFactor()]
+          : [twoFactor(), convexPlugin],
+    });
+    return { auth, db };
+  };
+  const call = (
+    auth: ReturnType<typeof build>["auth"],
+    path: string,
+    { body, cookie }: { body?: object; cookie?: string } = {}
+  ) =>
+    auth.handler(
+      new Request(`${baseURL}/api/auth${path}`, {
+        method: body ? "POST" : "GET",
+        headers: {
+          "content-type": "application/json",
+          ...(cookie ? { cookie } : {}),
+        },
+        ...(body ? { body: JSON.stringify(body) } : {}),
+      })
+    );
+  const credentials = {
+    email: "jwt@example.com",
+    password: "testpassword123",
+  };
+  const cookiesOf = (res: Response) =>
+    res.headers
+      .getSetCookie()
+      .map((c) => c.split(";")[0])
+      .join("; ");
+  const jwtOf = (res: Response) =>
+    /better-auth\.convex_jwt=([^;]*)/.exec(
+      res.headers.getSetCookie().join("\n")
+    )?.[1];
+
+  for (const order of ["convex,twoFactor", "twoFactor,convex"] as const) {
+    it(`signs no JWT while 2FA is pending, with ${order}`, async () => {
+      const { auth, db } = build(order);
+      await call(auth, "/sign-up/email", {
+        body: { ...credentials, name: "JWT" },
+      });
+      db.user[0]!.twoFactorEnabled = true;
+      db.twoFactor.push({
+        id: "tf",
+        userId: db.user[0]!.id,
+        secret: "secret",
+        backupCodes: "codes",
+        verified: true,
+      });
+      const signIn = await call(auth, "/sign-in/email", { body: credentials });
+      expect((await signIn.json()).twoFactorRedirect).toBe(true);
+      expect(jwtOf(signIn) ?? "").toBe("");
+    });
+  }
+
+  it("drops the previous JWT on sign-in and sets one from get-session", async () => {
+    const { auth } = build("twoFactor,convex");
+    await call(auth, "/sign-up/email", {
+      body: { ...credentials, name: "JWT" },
+    });
+    const signIn = await call(auth, "/sign-in/email", {
+      body: credentials,
+      cookie: "better-auth.convex_jwt=previous-user-jwt",
+    });
+    expect(signIn.status).toBe(200);
+    expect(jwtOf(signIn)).toBe("");
+    const session = await call(auth, "/get-session", {
+      cookie: cookiesOf(signIn),
+    });
+    expect(jwtOf(session)).toMatch(/^ey/);
+    const token = await call(auth, "/convex/token", {
+      cookie: cookiesOf(signIn),
+    });
+    expect(jwtOf(token)).toMatch(/^ey/);
+    expect((await token.json()).token).toMatch(/^ey/);
+  });
+
+  it("signs no JWT for an expired session", async () => {
+    const { auth, db } = build("twoFactor,convex");
+    const signUp = await call(auth, "/sign-up/email", {
+      body: { ...credentials, name: "JWT" },
+    });
+    db.session[0]!.expiresAt = new Date(Date.now() - 1000);
+    const session = await call(auth, "/get-session", {
+      cookie: cookiesOf(signUp),
+    });
+    expect(await session.json()).toBeNull();
+    expect(jwtOf(session)).toBe("");
+    expect(
+      (await call(auth, "/convex/token", { cookie: cookiesOf(signUp) })).status
+    ).toBe(401);
+  });
 });

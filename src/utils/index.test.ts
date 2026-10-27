@@ -124,7 +124,19 @@ const signUpJwt = async (
     })
   );
   expect(res.status).toBe(200);
-  const jwt = res.headers
+  // The convex plugin sets the JWT cookie from /get-session, like Better
+  // Auth's jwt plugin signs its JWT there and not on sign-in
+  const session = await auth.handler(
+    new Request(`${site}/api/auth/get-session`, {
+      headers: {
+        cookie: res.headers
+          .getSetCookie()
+          .map((cookie) => cookie.split(";")[0])
+          .join("; "),
+      },
+    })
+  );
+  const jwt = session.headers
     .getSetCookie()
     .map((cookie) => /better-auth\.convex_jwt=([^;]+)/.exec(cookie)?.[1])
     .find(Boolean);

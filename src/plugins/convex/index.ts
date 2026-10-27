@@ -5,9 +5,8 @@ import {
   createAuthMiddleware,
   sessionMiddleware,
 } from "better-auth/api";
-import { parseSessionOutput, parseUserOutput } from "better-auth/db";
 import { bearer as bearerPlugin } from "better-auth/plugins/bearer";
-import { jwt as jwtPlugin } from "better-auth/plugins/jwt";
+import { jwt as jwtPlugin, signJWT } from "better-auth/plugins/jwt";
 import type { JwtOptions, Jwk } from "better-auth/plugins/jwt";
 import { omit } from "convex-helpers";
 import type { AuthConfig, AuthProvider } from "convex/server";
@@ -245,6 +244,20 @@ export const convex = (opts: {
       },
     },
   });
+  // Signs the Convex JWT for a session, as Better Auth's jwt plugin does in
+  // getJwtToken
+  const signConvexJwt = async (
+    ctx: Parameters<typeof signJWT>[0],
+    session: { user: User & Record<string, any>; session: Session }
+  ) =>
+    await signJWT(ctx, {
+      options: jwt.options,
+      payload: {
+        iat: Math.floor(Date.now() / 1000),
+        ...(await jwtOptions.jwt.definePayload(session)),
+        sub: session.user.id,
+      },
+    });
   // Bearer plugin converts the session token to a cookie
   // for cross domain social login after code verification,
   // and is required for the headers() helper to work.
@@ -328,62 +341,47 @@ export const convex = (opts: {
       ],
       after: [
         {
-          matcher: (ctx) => {
-            return Boolean(
-              ctx.path?.startsWith("/sign-in") ||
-              ctx.path?.startsWith("/sign-up") ||
-              ctx.path?.startsWith("/callback") ||
-              ctx.path?.startsWith("/magic-link/verify") ||
-              ctx.path?.startsWith("/email-otp/verify-email") ||
-              ctx.path?.startsWith("/phone-number/verify") ||
-              ctx.path?.startsWith("/siwe/verify") ||
-              ctx.path?.startsWith("/update-session") ||
-              (ctx.path?.startsWith("/get-session") && ctx.context.session)
-            );
-          },
+          // Like Better Auth's jwt plugin, which signs only in /token and in
+          // a /get-session hook, never on sign-in. A sign-in hook would sign
+          // before a later plugin such as twoFactor could cancel the session.
+          matcher: (ctx) => ctx.path === "/get-session",
           handler: createAuthMiddleware(async (ctx) => {
-            // Set jwt cookie at login for authenticated ssr
-            const originalSession = ctx.context.session;
-            try {
-              // `newSession` holds raw rows. Filter them like getSession does,
-              // so the payload matches the /convex/token one and fields with
-              // `returned: false` stay out, as in Better Auth's jwt plugin.
-              const newSession = ctx.context.newSession;
-              ctx.context.session =
-                ctx.context.session ??
-                (newSession && {
-                  session: parseSessionOutput(
-                    ctx.context.options,
-                    newSession.session
-                  ),
-                  user: parseUserOutput(ctx.context.options, newSession.user),
-                });
-              const { token } = await jwt.endpoints.getToken({
-                ...ctx,
-                headers: {},
-                method: "GET",
-                asResponse: false,
-                returnHeaders: false,
-                returnStatus: false,
+            const jwtCookie = ctx.context.createAuthCookie(JWT_COOKIE_NAME, {
+              maxAge: jwtExpirationSeconds,
+            });
+            // The response, not ctx.context.session: getSession sets the
+            // context before rejecting an expired session, and the response
+            // holds the session as returned to the client.
+            const returned = ctx.context.returned as
+              { session?: Session; user?: User } | null | undefined;
+            if (!returned?.session || !returned.user) {
+              ctx.setCookie(jwtCookie.name, "", {
+                ...jwtCookie.attributes,
+                maxAge: 0,
               });
-              const jwtCookie = ctx.context.createAuthCookie(JWT_COOKIE_NAME, {
-                maxAge: jwtExpirationSeconds,
+              return;
+            }
+            try {
+              const token = await signConvexJwt(ctx, {
+                session: returned.session,
+                user: returned.user,
               });
               ctx.setCookie(jwtCookie.name, token, jwtCookie.attributes);
-              // eslint-disable-next-line @typescript-eslint/no-unused-vars
-            } catch (_err) {
-              // no-op, some sign-in calls (eg., when redirecting to 2fa)
-              // 401 here
+            } catch {
+              // Signing needs a key, and in query context a missing key
+              // can't be created. /convex/token signs one when asked.
             }
-            ctx.context.session = originalSession;
           }),
         },
         {
+          // Sign-out, and any request that starts a new session, such as a
+          // sign-in or a 2FA verification: drop the JWT of the previous
+          // session. /get-session or /convex/token sets the new one.
           matcher: (ctx) => {
             return Boolean(
               ctx.path?.startsWith("/sign-out") ||
               ctx.path?.startsWith("/delete-user") ||
-              (ctx.path?.startsWith("/get-session") && !ctx.context.session)
+              (ctx.path !== "/get-session" && ctx.context.newSession)
             );
           },
           handler: createAuthMiddleware(async (ctx) => {
@@ -658,17 +656,12 @@ export const convex = (opts: {
         },
         async (ctx) => {
           const runEndpoint = async () => {
-            const response = await jwt.endpoints.getToken({
-              ...ctx,
-              asResponse: false,
-              returnHeaders: false,
-              returnStatus: false,
-            });
+            const token = await signConvexJwt(ctx, ctx.context.session);
             const jwtCookie = ctx.context.createAuthCookie(JWT_COOKIE_NAME, {
               maxAge: jwtExpirationSeconds,
             });
-            ctx.setCookie(jwtCookie.name, response.token, jwtCookie.attributes);
-            return response;
+            ctx.setCookie(jwtCookie.name, token, jwtCookie.attributes);
+            return ctx.json({ token });
           };
           try {
             return await runEndpoint();

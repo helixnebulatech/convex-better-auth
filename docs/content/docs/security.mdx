@@ -119,6 +119,13 @@ minutes by default). Use `authComponent.getAuthUser` or `safeGetAuthUser` when
 the session must be checked. With [JWT caching](/experimental),
 `isAuthenticated()` always checks the session with the server.
 
+The Convex JWT is only signed where Better Auth's `jwt` plugin signs its own: by
+`/convex/token`, which requires a session, and after `/get-session` returns one,
+when it's also stored in the `convex_jwt` cookie. It's never signed on sign-in,
+so a plugin that holds a sign-in back, such as `twoFactor` waiting for the
+second factor, can't leave a JWT behind whatever the plugin order. A request
+that starts a new session, and sign-out, clear the cookie.
+
 ## Verbose logs
 
 `verbose: true` logs request and response headers with cookies, tokens and API
