@@ -263,7 +263,7 @@ const UserSubscription = ({
  * @example
  * ```ts
  * // convex/auth.ts
- * export const { getAuthUser } = authComponent.clientApi();
+ * export const { getAuthUser } = authComponent.clientApi(createAuth);
  *
  * // auth-client.tsx
  * import { AuthBoundary } from "@convex-dev/react";
@@ -290,7 +290,7 @@ const UserSubscription = ({
  * unauthenticated. Defaults to null. Generally not rendered as error handling
  * is typically a redirect.
  * @param props.getAuthUserFn - Reference to a Convex query that returns user.
- * The component provides a query for this via `export const { getAuthUser } = authComponent.clientApi()`.
+ * The component provides a query for this via `export const { getAuthUser } = authComponent.clientApi(createAuth)`.
  * @param props.isAuthError - Function to check if the error is auth related.
  */
 export const AuthBoundary = ({

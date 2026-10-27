@@ -73,8 +73,6 @@ export const authComponent = createClient<DataModel, typeof betterAuthSchema>(
 
 export const { onCreate, onUpdate, onDelete } = authComponent.triggersApi()
 
-export const { getAuthUser } = authComponent.clientApi()
-
 export const createAuthOptions = (ctx: GenericCtx<DataModel>) =>
   ({
     baseURL: siteUrl,
@@ -150,6 +148,8 @@ export const createAuthOptions = (ctx: GenericCtx<DataModel>) =>
 
 export const createAuth = (ctx: GenericCtx<DataModel>) =>
   betterAuth(createAuthOptions(ctx))
+
+export const { getAuthUser } = authComponent.clientApi(createAuth)
 
 export const rotateKeys = internalAction({
   args: {},

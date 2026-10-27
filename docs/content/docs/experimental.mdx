@@ -178,8 +178,14 @@ query for synced handling of session state changes.
 The Convex Component exports a query for use with `AuthBoundary`.
 
 ```ts title="convex/auth.ts"
-export const { getAuthUser } = authComponent.clientApi(); // [!code ++]
+export const { getAuthUser } = authComponent.clientApi(createAuth); // [!code ++]
 ```
+
+The query returns the signed in user the way Better Auth's `/get-session` does:
+fields marked `returned: false` in your options are left out. Without
+`createAuth` it can't know which fields your options hide, so it only returns
+the core Better Auth user fields (`name`, `email`, `emailVerified`, `image`,
+`createdAt`, `updatedAt`) and the Convex document fields.
 
 Create a utility function for determining whether an error is auth related.
 

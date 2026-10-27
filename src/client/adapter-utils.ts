@@ -562,9 +562,16 @@ const generateQuery = (
         (w.field === "createdAt" &&
           ["lt", "lte", "gt", "gte"].includes(w.operator ?? "")) ||
         (w.operator &&
-          ["contains", "starts_with", "ends_with", "ne", "not_in"].includes(
-            w.operator
-          ))
+          // Indexes never use "in". paginate turns the first one into an eq
+          // per stream, so a second one is only checked here.
+          [
+            "contains",
+            "starts_with",
+            "ends_with",
+            "ne",
+            "in",
+            "not_in",
+          ].includes(w.operator))
     );
   });
   return filteredQuery;
@@ -810,6 +817,11 @@ export const paginate = async <
       ...foundInWhere,
       value: [...new Set(foundInWhere.value as (string | number)[])],
     } as typeof foundInWhere & { value: any[] };
+    // Like SQL IN (), an empty list matches nothing. All clauses are AND'd
+    // here, so no document can match.
+    if (inWhere.value.length === 0) {
+      return { page: [], isDone: true, continueCursor: "" };
+    }
     args = {
       ...args,
       where: args.where?.map((w) => (w === foundInWhere ? inWhere : w)),

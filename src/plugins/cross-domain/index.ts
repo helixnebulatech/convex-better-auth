@@ -1,5 +1,9 @@
 import type { BetterAuthPlugin } from "better-auth";
-import { setSessionCookie } from "better-auth/cookies";
+import {
+  parseCookies,
+  setRequestCookie,
+  setSessionCookie,
+} from "better-auth/cookies";
 import { generateRandomString } from "better-auth/crypto";
 import { createAuthEndpoint, createAuthMiddleware } from "better-auth/api";
 import { z } from "zod";
@@ -162,7 +166,12 @@ export const crossDomain = ({ siteUrl }: { siteUrl: string }) => {
             if (!cookie) {
               return;
             }
-            headers.append("cookie", cookie);
+            // Merge into the Cookie header the way Better Auth's bearer
+            // plugin does. `headers.append` joins with ", " in some runtimes,
+            // which breaks cookie parsing and drops the session token.
+            for (const [name, value] of parseCookies(cookie)) {
+              setRequestCookie(headers, name, value);
+            }
             return {
               context: {
                 headers,
