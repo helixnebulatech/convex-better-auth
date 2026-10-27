@@ -193,7 +193,10 @@ export const getToken = async (
   if (forwardedProto && !headers.has("x-better-auth-forwarded-proto")) {
     headers.set("x-better-auth-forwarded-proto", forwardedProto);
   }
+  // Like the framework handlers: only the x-better-auth-forwarded-* headers
+  // carry the app's host and protocol to the component
   headers.delete("x-forwarded-host");
+  headers.delete("x-forwarded-proto");
   const basePath = opts?.basePath
     ? (opts.basePath.startsWith("/")
         ? opts.basePath

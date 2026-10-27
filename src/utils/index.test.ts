@@ -47,6 +47,7 @@ describe("getToken", () => {
     const sent = sentHeaders(fetchSpy);
     expect(sent.get("host")).toBe(new URL(SITE_URL).host);
     expect(sent.get("x-forwarded-host")).toBeNull();
+    expect(sent.get("x-forwarded-proto")).toBeNull();
     expect(sent.get("x-better-auth-forwarded-host")).toBe("app.example.com");
     expect(sent.get("x-better-auth-forwarded-proto")).toBe("https");
   });

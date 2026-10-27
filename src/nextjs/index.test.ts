@@ -100,14 +100,18 @@ describe("convexBetterAuthNextJs handler", () => {
         body: "{}",
         headers: {
           "x-forwarded-host": "proxy.internal.example.com",
+          "x-forwarded-proto": "http",
           "x-better-auth-forwarded-host": "spoofed.example.com",
+          "x-better-auth-forwarded-proto": "http",
         },
       }
     );
     await handler.POST(request);
     const headers = headersOf(fetchSpy);
     expect(headers.get("x-forwarded-host")).toBeNull();
+    expect(headers.get("x-forwarded-proto")).toBeNull();
     expect(headers.get("x-better-auth-forwarded-host")).toBe("app.example.com");
+    expect(headers.get("x-better-auth-forwarded-proto")).toBe("https");
   });
 
   it("buffers POST body and forwards as ArrayBuffer", async () => {
