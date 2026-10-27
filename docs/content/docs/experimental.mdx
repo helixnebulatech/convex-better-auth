@@ -96,7 +96,10 @@ is fetched instead.
 | `issuer`                     | `convexSiteUrl` | Expected `iss`. Set this if `convexSiteUrl` differs from `CONVEX_SITE_URL` in your deployment.  |
 
 `isAuthenticated()` always checks the session with the server, like Better
-Auth's `getSession`, so it doesn't use the cached JWT. Calls to Convex do: like
+Auth's `getSession`, so it doesn't use the cached JWT. `getToken()` does, so in
+TanStack Start a route guarded with `!!token` from `getToken()` lets a user in
+until the cached JWT expires; call `isAuthenticated()` where the session must be
+checked. Calls to Convex use the cached JWT too: like
 `ctx.auth.getUserIdentity()` in Convex, a cached JWT stays valid after sign-out
 or session revocation until it expires (15 minutes by default). Use a
 session-checked query, such as `authComponent.getAuthUser`, where that matters.

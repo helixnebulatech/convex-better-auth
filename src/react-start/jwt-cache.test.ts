@@ -133,3 +133,28 @@ describe("convexBetterAuthReactStart jwtCache retry", () => {
     expect(tokenCalls).toHaveLength(1);
   });
 });
+
+describe("convexBetterAuthReactStart isAuthenticated", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("checks the session with the server even with a cached cookie JWT", async () => {
+    requestHeaders.current = new Headers({
+      cookie: `better-auth.convex_jwt=${cookieJwt}`,
+    });
+    const { tokenCalls } = mockFetch(() => json({}));
+    await expect(setup().isAuthenticated()).resolves.toBe(true);
+    expect(tokenCalls).toEqual([`${SITE_URL}/api/auth/convex/token`]);
+  });
+
+  it("is false when the server has no session, despite the cached JWT", async () => {
+    requestHeaders.current = new Headers({
+      cookie: `better-auth.convex_jwt=${cookieJwt}`,
+    });
+    vi.spyOn(globalThis, "fetch").mockImplementation(
+      async () => new Response(null, { status: 401 })
+    );
+    await expect(setup().isAuthenticated()).resolves.toBe(false);
+  });
+});

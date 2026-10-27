@@ -138,6 +138,13 @@ export const convexBetterAuthReactStart = (
       const token = await cachedGetToken(opts);
       return token.token;
     },
+    // Checks the session with the server, like Better Auth's getSession and
+    // the Next.js helper. getToken() may return the JWT cached in a cookie
+    // with jwtCache, which stays valid after the session ends.
+    isAuthenticated: async () => {
+      const token = await cachedGetToken({ ...opts, forceRefresh: true });
+      return !!token.token;
+    },
     handler: (request: Request) => handler(request, opts),
     fetchAuthQuery: async <Query extends FunctionReference<"query">>(
       query: Query,
