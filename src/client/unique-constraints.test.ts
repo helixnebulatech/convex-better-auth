@@ -178,6 +178,45 @@ describe("unique constraints", () => {
     await check({ organizationId: "o1", userId: "u1" }, self);
   });
 
+  // The generator and the adapter must agree on the order of equality
+  // fields, also when they differ only by case (code unit vs locale order)
+  it("finds the index the generator emits for mixed-case fields", async () => {
+    const tables = {
+      team: {
+        modelName: "team",
+        fields: {
+          orgId: { type: "string" as const, required: true },
+          organizationId: { type: "string" as const, required: true },
+        },
+        indexes: [{ fields: ["organizationId", "orgId"], unique: true }],
+      },
+    } as unknown as Parameters<typeof createSchema>[0]["tables"];
+    const { code } = await createSchema({ tables, file: "schema.ts" });
+    const match = /\.index\("[^"]+", (\[[^\]]+\])\)/.exec(code);
+    const fields = JSON.parse(match![1]!) as string[];
+    const schema = defineSchema({
+      team: defineTable({
+        orgId: v.string(),
+        organizationId: v.string(),
+      }).index(fields.join("_"), fields as any),
+    });
+    const t = convexTest(schema, modules);
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      const data = { orgId: "o", organizationId: "org" };
+      await t.run(async (ctx) => {
+        await checkUniqueFields(ctx, schema, tables, "team", data);
+        await ctx.db.insert("team", data);
+      });
+      await expect(
+        t.run((ctx) => checkUniqueFields(ctx, schema, tables, "team", data))
+      ).rejects.toThrow("already exists");
+      expect(warn).not.toHaveBeenCalled();
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
   it("generates schema indexes for table-level indexes", async () => {
     const { code } = await createSchema({ tables: deviceTables });
     expect(code).toContain('.index("deviceCode", ["deviceCode"])');

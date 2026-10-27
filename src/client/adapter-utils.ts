@@ -14,7 +14,7 @@ import { stream } from "convex-helpers/server/stream";
 import { mergedStream } from "convex-helpers/server/stream";
 import { stripIndent } from "common-tags";
 import type { BetterAuthDBSchema } from "better-auth/db";
-import { customIdField } from "./create-schema.js";
+import { compareFieldNames, customIdField } from "./create-schema.js";
 
 export const adapterWhereValidator = v.object({
   field: v.string(),
@@ -185,9 +185,7 @@ const findIndex = (
   const indexEqFields =
     where
       ?.filter((w) => !w.operator || w.operator === "eq")
-      .sort((a, b) => {
-        return a.field.localeCompare(b.field);
-      })
+      .sort((a, b) => compareFieldNames(a.field, b.field))
       .map((w) => [w.field, w.value]) ?? [];
   if (!indexEqFields?.length && !boundField && !args.sortBy) {
     return;
