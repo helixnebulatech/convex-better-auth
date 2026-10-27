@@ -52,11 +52,15 @@ describe("getToken", () => {
     expect(sent.get("x-better-auth-forwarded-proto")).toBe("https");
   });
 
-  it("keeps an existing x-better-auth-forwarded-host", async () => {
+  // The platform sets x-forwarded-*; anyone can send x-better-auth-forwarded-*
+  // to the app, so the platform's values win, as in the framework handlers
+  it("replaces a client-sent x-better-auth-forwarded-host", async () => {
     const fetchSpy = setup();
     const headers = new Headers({
-      "x-forwarded-host": "proxy.internal.example.com",
-      "x-better-auth-forwarded-host": "app.example.com",
+      "x-forwarded-host": "app.example.com",
+      "x-forwarded-proto": "https",
+      "x-better-auth-forwarded-host": "spoofed.example.com",
+      "x-better-auth-forwarded-proto": "http",
     });
 
     await getToken(SITE_URL, headers);
@@ -64,6 +68,21 @@ describe("getToken", () => {
     const sent = sentHeaders(fetchSpy);
     expect(sent.get("x-forwarded-host")).toBeNull();
     expect(sent.get("x-better-auth-forwarded-host")).toBe("app.example.com");
+    expect(sent.get("x-better-auth-forwarded-proto")).toBe("https");
+  });
+
+  it("drops a client-sent x-better-auth-forwarded-host with no platform header", async () => {
+    const fetchSpy = setup();
+    const headers = new Headers({
+      "x-better-auth-forwarded-host": "spoofed.example.com",
+      "x-better-auth-forwarded-proto": "http",
+    });
+
+    await getToken(SITE_URL, headers);
+
+    const sent = sentHeaders(fetchSpy);
+    expect(sent.get("x-better-auth-forwarded-host")).toBeNull();
+    expect(sent.get("x-better-auth-forwarded-proto")).toBeNull();
   });
 
   it("does not add forwarding headers when none were sent", async () => {
