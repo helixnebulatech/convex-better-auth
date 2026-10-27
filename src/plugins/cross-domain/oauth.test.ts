@@ -339,8 +339,10 @@ describe("cross domain OAuth", () => {
 // records the form it submits and the referrer policy in effect at the time
 const setupClient = (
   auth: Auth,
-  options: { setReferrerPolicy?: boolean } = {}
+  options: { setReferrerPolicy?: boolean; failFirstVerify?: boolean } = {}
 ) => {
+  const { failFirstVerify, ...clientOptions } = options;
+  let verifyFailed = false;
   const items = new Map<string, string>();
   const storage = {
     getItem: (key: string) => items.get(key) ?? null,
@@ -350,9 +352,18 @@ const setupClient = (
   };
   const client = createAuthClient({
     baseURL: BASE,
-    plugins: [crossDomainClient({ storage, ...options })],
+    plugins: [crossDomainClient({ storage, ...clientOptions })],
     fetchOptions: {
-      customFetchImpl: (input, init) => {
+      customFetchImpl: async (input, init) => {
+        // A redemption that never reaches the server, eg. a network error
+        if (
+          failFirstVerify &&
+          !verifyFailed &&
+          String(input).includes("/cross-domain/one-time-token/verify")
+        ) {
+          verifyFailed = true;
+          return new Response(null, { status: 503 });
+        }
         const headers = new Headers(init?.headers);
         headers.set("origin", SITE);
         return auth.handler(new Request(input, { ...init, headers }));
@@ -438,6 +449,25 @@ describe("crossDomainClient OAuth", () => {
     ).crossDomain.oneTimeToken.verify({ token: ott });
     expect(error).toBeNull();
     expect(verified.user.email).toBe("a@example.com");
+  });
+
+  it("keeps the verifier when a redemption fails, so it can be retried", async () => {
+    const { auth } = build();
+    const { client, submitted, document, completeFlow } = setupClient(auth, {
+      failFirstVerify: true,
+    });
+    vi.stubGlobal("document", document);
+    await client.$fetch("/sign-in/social", {
+      method: "POST",
+      body: { provider: "mock", callbackURL: SITE },
+    });
+    const ott = ottOf(await completeFlow(submitted[0]!))!;
+    const verify = () =>
+      (client as any).crossDomain.oneTimeToken.verify({ token: ott });
+    expect((await verify()).error).not.toBeNull();
+    const { data, error } = await verify();
+    expect(error).toBeNull();
+    expect(data.user.email).toBe("a@example.com");
   });
 
   it("only changes the page's referrer policy when the app opts in", async () => {

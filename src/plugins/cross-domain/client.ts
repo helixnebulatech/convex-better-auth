@@ -328,6 +328,15 @@ export const crossDomainClient = (
             if (!storage) {
               return;
             }
+            // Used up only once a redemption succeeds, so a failed one can be
+            // retried
+            if (
+              context.request.url
+                .toString()
+                .includes("/cross-domain/one-time-token/verify")
+            ) {
+              await storage.setItem(oauthVerifierName, "");
+            }
             const setCookie = context.response.headers.get(
               "set-better-auth-cookie"
             );
@@ -423,7 +432,6 @@ export const crossDomainClient = (
                   ? JSON.parse(options.body)
                   : (options.body ?? {});
               options.body = { ...body, verifier };
-              await storage.setItem(oauthVerifierName, "");
             }
           }
           if (url.includes("/sign-out")) {
