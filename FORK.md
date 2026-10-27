@@ -95,8 +95,9 @@ web origin.
     aren't tied to a browser, adapter calls without a `where` clause), the
     [security notes](./docs/content/docs/security.mdx) document it. See
     [SECURITY.md](./SECURITY.md) to report a vulnerability.
-- Indexes and lookups, from our own audit of every lookup Better Auth 1.7 and
-  its official plugins make:
+- Indexes and lookups, from our own audit of the lookups Better Auth 1.7 and its
+  official plugins make. A later review found lookups it missed, the OAuth
+  provider's consent check and the SCIM lists, fixed in 0.13.7:
   - Indexes for lookups that had none, such as the credential account lookup
     added in Better Auth 1.7 and listing a user's active sessions.
   - Schema generation indexes the fields Better Auth marks with `index: true`,
