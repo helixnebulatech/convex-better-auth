@@ -45,7 +45,7 @@ Configure `jwtCache` in server utilities.
 import { convexBetterAuthNextJs } from "@convex-dev/better-auth/nextjs";
 import { isAuthError } from "@/lib/utils";
 
-export const { fetchAuthQuery } = convexBetterAuthNextJs({
+export const { fetchAuthQuery, isAuthenticated } = convexBetterAuthNextJs({
   convexUrl: process.env.NEXT_PUBLIC_CONVEX_URL!,
   convexSiteUrl: process.env.NEXT_PUBLIC_CONVEX_SITE_URL!,
   jwtCache: {
@@ -63,14 +63,15 @@ export const { fetchAuthQuery } = convexBetterAuthNextJs({
 import { convexBetterAuthReactStart } from "@convex-dev/better-auth/react-start";
 import { isAuthError } from "@/lib/utils";
 
-export const { fetchAuthQuery } = convexBetterAuthReactStart({
-  convexUrl: process.env.VITE_CONVEX_URL!,
-  convexSiteUrl: process.env.VITE_CONVEX_SITE_URL!,
-  jwtCache: {
-    enabled: true,
-    isAuthError,
-  },
-});
+export const { fetchAuthQuery, getToken, isAuthenticated } =
+  convexBetterAuthReactStart({
+    convexUrl: process.env.VITE_CONVEX_URL!,
+    convexSiteUrl: process.env.VITE_CONVEX_SITE_URL!,
+    jwtCache: {
+      enabled: true,
+      isAuthError,
+    },
+  });
 ```
 
   </Tab>
