@@ -110,6 +110,13 @@ database:
   `email`, `username` or other unique field. The component checks it in the same
   mutation as the write. A null or unset value never conflicts, as NULL in a
   unique column in SQL, so any number of users can have no `username`.
+- **Sorting.** Better Auth's adapters always honour `sortBy`. Convex reads rows
+  in index order, so when no index ends in the sort field, the component reads
+  every row that matches the query and sorts them, as SQL does with `ORDER BY`
+  and no index. Nulls and unset values come first, as in a Convex index. On a
+  large table this can hit Convex's read limit, which fails the query instead of
+  returning the wrong rows. Add an index ending in the sort field for lists you
+  sort often.
 
 ## Adapter calls without a where clause
 

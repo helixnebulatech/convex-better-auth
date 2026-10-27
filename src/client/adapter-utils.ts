@@ -584,6 +584,37 @@ export const getDocById = async <
 // This is the core function for reading from the database, it parses and
 // validates where conditions, selects indexes, and allows the caller to
 // optionally paginate as needed. Every response is a pagination result.
+// Convex's order for index fields: undefined, then null, then values, and
+// values by type, then by value
+const typeRank = (value: unknown) =>
+  value === undefined
+    ? 0
+    : value === null
+      ? 1
+      : typeof value === "bigint"
+        ? 2
+        : typeof value === "number"
+          ? 3
+          : typeof value === "boolean"
+            ? 4
+            : typeof value === "string"
+              ? 5
+              : 6;
+export const compareValues = (a: unknown, b: unknown) => {
+  const rank = typeRank(a) - typeRank(b);
+  if (rank !== 0) {
+    return rank;
+  }
+  if (a === b || typeRank(a) <= 1) {
+    return 0;
+  }
+  return (a as any) < (b as any) ? -1 : (a as any) > (b as any) ? 1 : 0;
+};
+
+// Sorting by createdAt or the creation order uses _creationTime
+const isCreationSort = (field: string) =>
+  field === "createdAt" || field === "_creationTime";
+
 export const paginate = async <
   Doc extends DocumentByName<GenericDataModel, T>,
   T extends TableNamesInDataModel<GenericDataModel>,
@@ -672,6 +703,65 @@ export const paginate = async <
     maximumRowsRead: Math.max((args.paginationOpts.numItems ?? 0) + 1, 200),
   };
 
+  // Without an index ending in the sort field, the query would come back in
+  // creation order and the limit would keep the wrong rows. Better Auth's SQL
+  // adapters sort anyway (ORDER BY without an index), so read every matching
+  // row and sort here. On a large table this can hit Convex's read limit,
+  // which fails instead of returning the wrong rows.
+  const sortsInMemory = async (inWhere?: (typeof args.where & {})[number]) =>
+    Boolean(
+      args.sortBy &&
+      !isCreationSort(args.sortBy.field) &&
+      !findIndex(schema, {
+        model: args.model,
+        where: args.where?.map((w) =>
+          w === inWhere ? { ...w, operator: "eq" as const } : w
+        ),
+        sortBy: args.sortBy,
+      })?.index
+    );
+  const sortInMemory = async (): Promise<PaginationResult<Doc>> => {
+    const sortBy = args.sortBy!;
+    const docs: Doc[] = [];
+    let cursor: string | null = null;
+    for (;;) {
+      const result: PaginationResult<Doc> = await paginate(
+        ctx,
+        schema,
+        betterAuthSchema,
+        {
+          ...args,
+          sortBy: undefined,
+          select: undefined,
+          limit: undefined,
+          paginationOpts: { numItems: 200, cursor },
+        }
+      );
+      docs.push(...result.page);
+      if (result.isDone || result.continueCursor === cursor) {
+        break;
+      }
+      cursor = result.continueCursor;
+    }
+    const direction = sortBy.direction === "desc" ? -1 : 1;
+    const sorted = docs.sort(
+      (a, b) =>
+        direction *
+          compareValues(
+            a[sortBy.field as keyof Doc],
+            b[sortBy.field as keyof Doc]
+          ) ||
+        direction * ((a._creationTime as number) - (b._creationTime as number))
+    );
+    return {
+      page: sorted
+        .slice(0, args.limit ?? sorted.length)
+        .map((doc) => selectFields(doc, args.select)) as Doc[],
+      isDone: true,
+      continueCursor: "",
+    };
+  };
+
   // Large queries using "in" clause will crash, but these are only currently
   // possible with the organization plugin listing all members with a high
   // limit. For cases like this we need to create proper convex queries in
@@ -743,6 +833,9 @@ export const paginate = async <
         continueCursor: "",
       };
     }
+    if (await sortsInMemory(inWhere)) {
+      return await sortInMemory();
+    }
     const streams = inWhere.value.map((value) => {
       return generateQuery(ctx, schema, {
         ...args,
@@ -767,6 +860,9 @@ export const paginate = async <
     };
   }
 
+  if (await sortsInMemory()) {
+    return await sortInMemory();
+  }
   const query = generateQuery(ctx, schema, args);
   const result = await query.paginate(paginationOpts);
   return {
