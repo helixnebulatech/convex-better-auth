@@ -13,6 +13,7 @@ import type {
 import type { SetOptional } from "type-fest";
 import type defaultSchema from "../component/schema.js";
 import type { Where } from "better-auth/types";
+import type { BetterAuthOptions } from "better-auth/minimal";
 import { asyncMap } from "convex-helpers";
 import { prop, sortBy } from "remeda";
 import { isRunMutationCtx } from "../utils/index.js";
@@ -84,8 +85,7 @@ const handlePagination = async (
     // A page that returns nothing and doesn't advance the cursor while !isDone
     // can never terminate; fail loudly instead of looping forever.
     const advanced = state.cursor !== cursorBeforePage;
-    const produced =
-      (result.page?.length ?? 0) > 0 || (result.count ?? 0) > 0;
+    const produced = (result.page?.length ?? 0) > 0 || (result.count ?? 0) > 0;
     if (!state.isDone && !advanced && !produced) {
       throw new Error(
         "handlePagination made no forward progress; aborting to avoid an infinite pagination loop"
@@ -209,373 +209,389 @@ export const convexAdapter = <
     triggers?: Triggers<DataModel, Schema>;
   } = {}
 ) => {
-  return createAdapterFactory({
-    config: {
-      adapterId: "convex",
-      adapterName: "Convex Adapter",
-      debugLogs: config.debugLogs || false,
-      disableIdGeneration: true,
-      transaction: false,
-      supportsNumericIds: false,
-      supportsJSON: false,
-      supportsDates: false,
-      supportsArrays: true,
-      usePlural: false,
-      mapKeysTransformInput: {
-        id: "_id",
+  // Convex picks every _id itself, so Better Auth never generates one. With
+  // `generateId: "uuid"`, Better Auth drops ids when disableIdGeneration is
+  // set, even those it chooses with forceAllowId to guard single-use rows.
+  // Declaring native UUID support instead keeps those, as the SQL adapters
+  // keep them as the primary key, and the component stores them in customId.
+  const createConvexAdapter = (useUUIDs: boolean) =>
+    createAdapterFactory({
+      config: {
+        adapterId: "convex",
+        adapterName: "Convex Adapter",
+        debugLogs: config.debugLogs || false,
+        disableIdGeneration: !useUUIDs,
+        supportsUUIDs: useUUIDs,
+        transaction: false,
+        supportsNumericIds: false,
+        supportsJSON: false,
+        supportsDates: false,
+        supportsArrays: true,
+        usePlural: false,
+        mapKeysTransformInput: {
+          id: "_id",
+        },
+        mapKeysTransformOutput: {
+          _id: "id",
+        },
+        // Store dates as numbers, like Convex's _creationTime.
+        customTransformInput: ({ data, fieldAttributes }) => {
+          if (data && fieldAttributes.type === "date") {
+            return new Date(data).getTime();
+          }
+          return data;
+        },
+        // Hand dates back to Better Auth as Date objects, like every other
+        // adapter. Better Auth validates the session cookie cache with
+        // z.date(), so numbers there make the cache never validate.
+        customTransformOutput: ({ data, fieldAttributes }) => {
+          if (data != null && fieldAttributes.type === "date") {
+            return new Date(data);
+          }
+          return data;
+        },
       },
-      mapKeysTransformOutput: {
-        _id: "id",
-      },
-      // Store dates as numbers, like Convex's _creationTime.
-      customTransformInput: ({ data, fieldAttributes }) => {
-        if (data && fieldAttributes.type === "date") {
-          return new Date(data).getTime();
+      adapter: ({ options }) => {
+        // Disable telemetry in all cases because it requires Node
+        options.telemetry = { enabled: false };
+        if (options.advanced?.database?.joins) {
+          options.advanced = {
+            ...options.advanced,
+            database: { ...options.advanced.database, joins: false },
+          };
+          if (!didWarnJoinsUnsupported) {
+            didWarnJoinsUnsupported = true;
+            // eslint-disable-next-line no-console
+            console.warn(
+              "[convex-better-auth] Better Auth advanced.database.joins is not supported by the Convex adapter yet. Forcing advanced.database.joins = false."
+            );
+          }
         }
-        return data;
-      },
-      // Hand dates back to Better Auth as Date objects, like every other
-      // adapter. Better Auth validates the session cookie cache with
-      // z.date(), so numbers there make the cache never validate.
-      customTransformOutput: ({ data, fieldAttributes }) => {
-        if (data != null && fieldAttributes.type === "date") {
-          return new Date(data);
-        }
-        return data;
-      },
-    },
-    adapter: ({ options }) => {
-      // Disable telemetry in all cases because it requires Node
-      options.telemetry = { enabled: false };
-      if (options.advanced?.database?.joins) {
-        options.advanced = {
-          ...options.advanced,
-          database: { ...options.advanced.database, joins: false },
-        };
-        if (!didWarnJoinsUnsupported) {
-          didWarnJoinsUnsupported = true;
-          // eslint-disable-next-line no-console
-          console.warn(
-            "[convex-better-auth] Better Auth advanced.database.joins is not supported by the Convex adapter yet. Forcing advanced.database.joins = false."
-          );
-        }
-      }
 
-      const collectIdsForOrWhere = async (data: {
-        model: string;
-        orWhere: (Where & { join?: undefined })[][];
-      }) => {
-        const results = await asyncMap(data.orWhere, async (where) =>
-          handlePagination(
-            async ({ paginationOpts }) => {
+        const collectIdsForOrWhere = async (data: {
+          model: string;
+          orWhere: (Where & { join?: undefined })[][];
+        }) => {
+          const results = await asyncMap(data.orWhere, async (where) =>
+            handlePagination(async ({ paginationOpts }) => {
               return await ctx.runQuery(api.adapter.findMany, {
                 model: data.model as TableNames,
                 where: parseWhere(where),
                 paginationOpts,
               });
-            }
-          )
-        );
-        const ids = dedupeDocsById(results.flatMap((r) => r.docs))
-          .map((doc) => getDocId(doc))
-          .flatMap((id) => (id ? [id] : []));
-        return ids;
-      };
+            })
+          );
+          const ids = dedupeDocsById(results.flatMap((r) => r.docs))
+            .map((doc) => getDocId(doc))
+            .flatMap((id) => (id ? [id] : []));
+          return ids;
+        };
 
-      return {
-        id: "convex",
-        options: {
-          isRunMutationCtx: isRunMutationCtx(ctx),
-        },
-        createSchema: async ({ file, tables }) => {
-          const { createSchema } = await import("./create-schema.js");
-          return createSchema({ file, tables });
-        },
-        create: async ({ model, data, select }): Promise<any> => {
-          if (!("runMutation" in ctx)) {
-            throw new Error("ctx is not a mutation ctx");
-          }
-          const onCreateHandle =
-            config.authFunctions?.onCreate && config.triggers?.[model]?.onCreate
-              ? ((await createFunctionHandle(
-                  config.authFunctions.onCreate
-                )) as FunctionHandle<"mutation">)
-              : undefined;
-          return ctx.runMutation(api.adapter.create, {
-            input: { model: model as any, data: data as any },
-            select,
-            onCreateHandle: onCreateHandle,
-          });
-        },
-        // Better Auth 1.7.6+ passes modelKey, which the component validators reject
-        findOne: async ({ modelKey: _modelKey, ...data }): Promise<any> => {
-          const orWhere = splitOrWhere(data.where);
-          if (orWhere) {
-            for (const where of orWhere) {
-              const result = await ctx.runQuery(api.adapter.findOne, {
-                ...data,
-                model: data.model as TableNames,
-                where: parseWhere(where),
-              });
-              if (result) {
-                return result;
+        return {
+          id: "convex",
+          options: {
+            isRunMutationCtx: isRunMutationCtx(ctx),
+          },
+          createSchema: async ({ file, tables }) => {
+            const { createSchema } = await import("./create-schema.js");
+            return createSchema({ file, tables });
+          },
+          create: async ({ model, data, select }): Promise<any> => {
+            if (!("runMutation" in ctx)) {
+              throw new Error("ctx is not a mutation ctx");
+            }
+            const onCreateHandle =
+              config.authFunctions?.onCreate &&
+              config.triggers?.[model]?.onCreate
+                ? ((await createFunctionHandle(
+                    config.authFunctions.onCreate
+                  )) as FunctionHandle<"mutation">)
+                : undefined;
+            return ctx.runMutation(api.adapter.create, {
+              input: { model: model as any, data: data as any },
+              select,
+              onCreateHandle: onCreateHandle,
+            });
+          },
+          // Better Auth 1.7.6+ passes modelKey, which the component validators reject
+          findOne: async ({ modelKey: _modelKey, ...data }): Promise<any> => {
+            const orWhere = splitOrWhere(data.where);
+            if (orWhere) {
+              for (const where of orWhere) {
+                const result = await ctx.runQuery(api.adapter.findOne, {
+                  ...data,
+                  model: data.model as TableNames,
+                  where: parseWhere(where),
+                });
+                if (result) {
+                  return result;
+                }
               }
+              return null;
             }
-            return null;
-          }
-          return await ctx.runQuery(api.adapter.findOne, {
-            ...data,
-            model: data.model as TableNames,
-            where: parseWhere(data.where),
-          });
-        },
-        findMany: async ({
-          modelKey: _modelKey,
-          offset = 0,
-          ...data
-        }): Promise<any[]> => {
-          // The component paginates by cursor only, so fetch offset + limit
-          // rows (the component limits some lookups itself) and drop the first
-          // offset here. Deep offsets read every skipped row.
-          const limit =
-            data.limit !== undefined ? data.limit + offset : undefined;
+            return await ctx.runQuery(api.adapter.findOne, {
+              ...data,
+              model: data.model as TableNames,
+              where: parseWhere(data.where),
+            });
+          },
+          findMany: async ({
+            modelKey: _modelKey,
+            offset = 0,
+            ...data
+          }): Promise<any[]> => {
+            // The component paginates by cursor only, so fetch offset + limit
+            // rows (the component limits some lookups itself) and drop the first
+            // offset here. Deep offsets read every skipped row.
+            const limit =
+              data.limit !== undefined ? data.limit + offset : undefined;
 
-          const orWhere = splitOrWhere(data.where);
-          if (orWhere) {
-            // Always fetch full docs for OR unions so we can dedupe
-            // by id and sort/limit before trimming selected fields.
-            const { select: _ignoredSelect, ...queryData } = data;
-            const results = await asyncMap(orWhere, async (where) =>
-              handlePagination(
-                async ({ paginationOpts }) => {
+            const orWhere = splitOrWhere(data.where);
+            if (orWhere) {
+              // Always fetch full docs for OR unions so we can dedupe
+              // by id and sort/limit before trimming selected fields.
+              const { select: _ignoredSelect, ...queryData } = data;
+              const results = await asyncMap(orWhere, async (where) =>
+                handlePagination(
+                  async ({ paginationOpts }) => {
+                    return await ctx.runQuery(api.adapter.findMany, {
+                      ...queryData,
+                      limit,
+                      model: data.model as TableNames,
+                      where: parseWhere(where),
+                      paginationOpts,
+                    });
+                  },
+                  { limit }
+                )
+              );
+              let docs = dedupeDocsById(results.flatMap((r) => r.docs));
+              if (data.sortBy) {
+                docs = sortBy(docs, [
+                  prop(data.sortBy.field),
+                  data.sortBy.direction,
+                ]);
+              }
+              docs = docs.slice(offset, limit);
+              return docs.map((doc) => selectDocFields(doc, data.select));
+            }
+
+            const result = await handlePagination(
+              async ({ paginationOpts }) => {
+                return await ctx.runQuery(api.adapter.findMany, {
+                  ...data,
+                  limit,
+                  model: data.model as TableNames,
+                  where: parseWhere(data.where),
+                  paginationOpts,
+                });
+              },
+              { limit }
+            );
+            return offset ? result.docs.slice(offset) : result.docs;
+          },
+          count: async ({ modelKey: _modelKey, ...data }) => {
+            // Yes, count is just findMany returning a number.
+            const orWhere = splitOrWhere(data.where);
+            if (orWhere) {
+              const results = await asyncMap(orWhere, async (where) =>
+                handlePagination(async ({ paginationOpts }) => {
                   return await ctx.runQuery(api.adapter.findMany, {
-                    ...queryData,
-                    limit,
+                    ...data,
                     model: data.model as TableNames,
                     where: parseWhere(where),
                     paginationOpts,
                   });
-                },
-                { limit }
-              )
-            );
-            let docs = dedupeDocsById(results.flatMap((r) => r.docs));
-            if (data.sortBy) {
-              docs = sortBy(docs, [
-                prop(data.sortBy.field),
-                data.sortBy.direction,
-              ]);
+                })
+              );
+              const docs = dedupeDocsById(results.flatMap((r) => r.docs));
+              return docs.length;
             }
-            docs = docs.slice(offset, limit);
-            return docs.map((doc) => selectDocFields(doc, data.select));
-          }
 
-          const result = await handlePagination(
-            async ({ paginationOpts }) => {
-              return await ctx.runQuery(api.adapter.findMany, {
-                ...data,
-                limit,
-                model: data.model as TableNames,
-                where: parseWhere(data.where),
-                paginationOpts,
-              });
-            },
-            { limit }
-          );
-          return offset ? result.docs.slice(offset) : result.docs;
-        },
-        count: async ({ modelKey: _modelKey, ...data }) => {
-          // Yes, count is just findMany returning a number.
-          const orWhere = splitOrWhere(data.where);
-          if (orWhere) {
-            const results = await asyncMap(orWhere, async (where) =>
-              handlePagination(async ({ paginationOpts }) => {
+            const result = await handlePagination(
+              async ({ paginationOpts }) => {
                 return await ctx.runQuery(api.adapter.findMany, {
                   ...data,
                   model: data.model as TableNames,
-                  where: parseWhere(where),
+                  where: parseWhere(data.where),
                   paginationOpts,
                 });
-              })
+              }
             );
-            const docs = dedupeDocsById(results.flatMap((r) => r.docs));
-            return docs.length;
-          }
-
-          const result = await handlePagination(async ({ paginationOpts }) => {
-            return await ctx.runQuery(api.adapter.findMany, {
-              ...data,
-              model: data.model as TableNames,
-              where: parseWhere(data.where),
-              paginationOpts,
-            });
-          });
-          return result.docs.length;
-        },
-        update: async (data): Promise<any> => {
-          if (!("runMutation" in ctx)) {
-            throw new Error("ctx is not a mutation ctx");
-          }
-          // An empty where matches no single record, so there's nothing to
-          // update. better-auth's adapter contract expects null here.
-          if (!data.where?.length) {
-            return null;
-          }
-          if (data.where.some((w) => w.connector === "OR")) {
-            throw new Error("where clause not supported");
-          }
-          const onUpdateHandle =
-            config.authFunctions?.onUpdate &&
-            config.triggers?.[data.model]?.onUpdate
-              ? ((await createFunctionHandle(
-                  config.authFunctions.onUpdate
-                )) as FunctionHandle<"mutation">)
-              : undefined;
-          return ctx.runMutation(api.adapter.updateOne, {
-            input: {
-              model: data.model as TableNames,
-              where: parseWhere(data.where),
-              update: data.update as any,
-            },
-            onUpdateHandle: onUpdateHandle,
-          });
-        },
-        delete: async (data) => {
-          if (!("runMutation" in ctx)) {
-            throw new Error("ctx is not a mutation ctx");
-          }
-          const onDeleteHandle =
-            config.authFunctions?.onDelete &&
-            config.triggers?.[data.model]?.onDelete
-              ? ((await createFunctionHandle(
-                  config.authFunctions.onDelete
-                )) as FunctionHandle<"mutation">)
-              : undefined;
-          await ctx.runMutation(api.adapter.deleteOne, {
-            input: {
-              model: data.model as TableNames,
-              where: parseWhere(data.where),
-            },
-            onDeleteHandle: onDeleteHandle,
-          });
-        },
-        // deleteOne finds and deletes in a single mutation, which is atomic.
-        // Better Auth's fallback guards on every row field, including
-        // _creationTime, which the component where validators reject.
-        consumeOne: async (data): Promise<any> => {
-          if (!("runMutation" in ctx)) {
-            throw new Error("ctx is not a mutation ctx");
-          }
-          if (data.where.some((w) => w.connector === "OR")) {
-            throw new Error("where clause not supported");
-          }
-          const onDeleteHandle =
-            config.authFunctions?.onDelete &&
-            config.triggers?.[data.model]?.onDelete
-              ? ((await createFunctionHandle(
-                  config.authFunctions.onDelete
-                )) as FunctionHandle<"mutation">)
-              : undefined;
-          const doc = await ctx.runMutation(api.adapter.deleteOne, {
-            input: {
-              model: data.model as TableNames,
-              where: parseWhere(data.where),
-            },
-            onDeleteHandle: onDeleteHandle,
-          });
-          return doc ?? null;
-        },
-        deleteMany: async ({ modelKey: _modelKey, ...data }) => {
-          if (!("runMutation" in ctx)) {
-            throw new Error("ctx is not a mutation ctx");
-          }
-          const onDeleteHandle =
-            config.authFunctions?.onDelete &&
-            config.triggers?.[data.model as TableNames]?.onDelete
-              ? ((await createFunctionHandle(
-                  config.authFunctions.onDelete
-                )) as FunctionHandle<"mutation">)
-              : undefined;
-          const orWhere = splitOrWhere(data.where);
-          if (orWhere) {
-            const ids = await collectIdsForOrWhere({
-              model: data.model as string,
-              orWhere,
-            });
-            await asyncMap(ids, async (id) => {
-              await ctx.runMutation(api.adapter.deleteOne, {
-                input: {
-                  model: data.model as TableNames,
-                  where: [{ field: "_id", operator: "eq", value: id }],
-                },
-                onDeleteHandle: onDeleteHandle,
-              });
-            });
-            return ids.length;
-          }
-          const result = await handlePagination(async ({ paginationOpts }) => {
-            return await ctx.runMutation(api.adapter.deleteMany, {
+            return result.docs.length;
+          },
+          update: async (data): Promise<any> => {
+            if (!("runMutation" in ctx)) {
+              throw new Error("ctx is not a mutation ctx");
+            }
+            // An empty where matches no single record, so there's nothing to
+            // update. better-auth's adapter contract expects null here.
+            if (!data.where?.length) {
+              return null;
+            }
+            if (data.where.some((w) => w.connector === "OR")) {
+              throw new Error("where clause not supported");
+            }
+            const onUpdateHandle =
+              config.authFunctions?.onUpdate &&
+              config.triggers?.[data.model]?.onUpdate
+                ? ((await createFunctionHandle(
+                    config.authFunctions.onUpdate
+                  )) as FunctionHandle<"mutation">)
+                : undefined;
+            return ctx.runMutation(api.adapter.updateOne, {
               input: {
-                ...data,
+                model: data.model as TableNames,
+                where: parseWhere(data.where),
+                update: data.update as any,
+              },
+              onUpdateHandle: onUpdateHandle,
+            });
+          },
+          delete: async (data) => {
+            if (!("runMutation" in ctx)) {
+              throw new Error("ctx is not a mutation ctx");
+            }
+            const onDeleteHandle =
+              config.authFunctions?.onDelete &&
+              config.triggers?.[data.model]?.onDelete
+                ? ((await createFunctionHandle(
+                    config.authFunctions.onDelete
+                  )) as FunctionHandle<"mutation">)
+                : undefined;
+            await ctx.runMutation(api.adapter.deleteOne, {
+              input: {
                 model: data.model as TableNames,
                 where: parseWhere(data.where),
               },
-              paginationOpts,
               onDeleteHandle: onDeleteHandle,
             });
-          });
-          return result.count;
-        },
-        updateMany: async ({ modelKey: _modelKey, ...data }) => {
-          if (!("runMutation" in ctx)) {
-            throw new Error("ctx is not a mutation ctx");
-          }
-          const onUpdateHandle =
-            config.authFunctions?.onUpdate &&
-            config.triggers?.[data.model]?.onUpdate
-              ? ((await createFunctionHandle(
-                  config.authFunctions.onUpdate
-                )) as FunctionHandle<"mutation">)
-              : undefined;
-          const orWhere = splitOrWhere(data.where);
-          if (orWhere) {
-            const ids = await collectIdsForOrWhere({
-              model: data.model as string,
-              orWhere,
+          },
+          // deleteOne finds and deletes in a single mutation, which is atomic.
+          // Better Auth's fallback guards on every row field, including
+          // _creationTime, which the component where validators reject.
+          consumeOne: async (data): Promise<any> => {
+            if (!("runMutation" in ctx)) {
+              throw new Error("ctx is not a mutation ctx");
+            }
+            if (data.where.some((w) => w.connector === "OR")) {
+              throw new Error("where clause not supported");
+            }
+            const onDeleteHandle =
+              config.authFunctions?.onDelete &&
+              config.triggers?.[data.model]?.onDelete
+                ? ((await createFunctionHandle(
+                    config.authFunctions.onDelete
+                  )) as FunctionHandle<"mutation">)
+                : undefined;
+            const doc = await ctx.runMutation(api.adapter.deleteOne, {
+              input: {
+                model: data.model as TableNames,
+                where: parseWhere(data.where),
+              },
+              onDeleteHandle: onDeleteHandle,
             });
-            if (!ids.length) {
-              return 0;
+            return doc ?? null;
+          },
+          deleteMany: async ({ modelKey: _modelKey, ...data }) => {
+            if (!("runMutation" in ctx)) {
+              throw new Error("ctx is not a mutation ctx");
+            }
+            const onDeleteHandle =
+              config.authFunctions?.onDelete &&
+              config.triggers?.[data.model as TableNames]?.onDelete
+                ? ((await createFunctionHandle(
+                    config.authFunctions.onDelete
+                  )) as FunctionHandle<"mutation">)
+                : undefined;
+            const orWhere = splitOrWhere(data.where);
+            if (orWhere) {
+              const ids = await collectIdsForOrWhere({
+                model: data.model as string,
+                orWhere,
+              });
+              await asyncMap(ids, async (id) => {
+                await ctx.runMutation(api.adapter.deleteOne, {
+                  input: {
+                    model: data.model as TableNames,
+                    where: [{ field: "_id", operator: "eq", value: id }],
+                  },
+                  onDeleteHandle: onDeleteHandle,
+                });
+              });
+              return ids.length;
+            }
+            const result = await handlePagination(
+              async ({ paginationOpts }) => {
+                return await ctx.runMutation(api.adapter.deleteMany, {
+                  input: {
+                    ...data,
+                    model: data.model as TableNames,
+                    where: parseWhere(data.where),
+                  },
+                  paginationOpts,
+                  onDeleteHandle: onDeleteHandle,
+                });
+              }
+            );
+            return result.count;
+          },
+          updateMany: async ({ modelKey: _modelKey, ...data }) => {
+            if (!("runMutation" in ctx)) {
+              throw new Error("ctx is not a mutation ctx");
+            }
+            const onUpdateHandle =
+              config.authFunctions?.onUpdate &&
+              config.triggers?.[data.model]?.onUpdate
+                ? ((await createFunctionHandle(
+                    config.authFunctions.onUpdate
+                  )) as FunctionHandle<"mutation">)
+                : undefined;
+            const orWhere = splitOrWhere(data.where);
+            if (orWhere) {
+              const ids = await collectIdsForOrWhere({
+                model: data.model as string,
+                orWhere,
+              });
+              if (!ids.length) {
+                return 0;
+              }
+              const result = await handlePagination(
+                async ({ paginationOpts }) => {
+                  return await ctx.runMutation(api.adapter.updateMany, {
+                    input: {
+                      model: data.model as TableNames,
+                      where: [{ field: "_id", operator: "in", value: ids }],
+                      update: data.update,
+                    },
+                    paginationOpts,
+                    onUpdateHandle: onUpdateHandle,
+                  });
+                },
+                { limit: ids.length }
+              );
+              return result.count ?? 0;
             }
             const result = await handlePagination(
               async ({ paginationOpts }) => {
                 return await ctx.runMutation(api.adapter.updateMany, {
                   input: {
+                    ...data,
                     model: data.model as TableNames,
-                    where: [{ field: "_id", operator: "in", value: ids }],
-                    update: data.update,
+                    where: parseWhere(data.where),
                   },
                   paginationOpts,
                   onUpdateHandle: onUpdateHandle,
                 });
-              },
-              { limit: ids.length }
+              }
             );
-            return result.count ?? 0;
-          }
-          const result = await handlePagination(async ({ paginationOpts }) => {
-            return await ctx.runMutation(api.adapter.updateMany, {
-              input: {
-                ...data,
-                model: data.model as TableNames,
-                where: parseWhere(data.where),
-              },
-              paginationOpts,
-              onUpdateHandle: onUpdateHandle,
-            });
-          });
-          return result.count;
-        },
-      };
-    },
-  });
+            return result.count;
+          },
+        };
+      },
+    });
+  return (options: BetterAuthOptions) =>
+    createConvexAdapter(options.advanced?.database?.generateId === "uuid")(
+      options
+    );
 };

@@ -17,7 +17,7 @@ const BASE = "http://localhost:3000/api/auth";
 // the Drizzle, Prisma, Kysely and MongoDB adapters do. Convex picks _id
 // itself, so the adapter keeps the chosen id in customId and enforces it.
 describe("ids chosen by Better Auth", () => {
-  const setup = () => {
+  const setup = (generateId?: "uuid") => {
     const t = convexTest(schema, import.meta.glob("../component/**/*.*s"));
     const ctx = {
       runQuery: t.query.bind(t),
@@ -33,6 +33,7 @@ describe("ids chosen by Better Auth", () => {
       database: client.adapter(ctx),
       emailAndPassword: { enabled: true },
       logger: { disabled: true },
+      ...(generateId ? { advanced: { database: { generateId } } } : {}),
       plugins: [
         magicLink({
           sendMagicLink: async ({ url }) => {
@@ -95,22 +96,26 @@ describe("ids chosen by Better Auth", () => {
     });
   });
 
-  it("reserves a verification value once", async () => {
-    const { auth } = setup();
-    const { internalAdapter } = await auth.$context;
-    const reserve = () =>
-      internalAdapter.reserveVerificationValue({
-        identifier: "siwe-email-claim-a@example.com",
-        value: "0xabc",
-        expiresAt: new Date(Date.now() + 60_000),
-      });
-    expect(await reserve()).toBe(true);
-    expect(await reserve()).toBe(false);
-    await internalAdapter.deleteVerificationByIdentifier(
-      "siwe-email-claim-a@example.com"
-    );
-    expect(await reserve()).toBe(true);
-  });
+  // Better Auth derives a UUID for the chosen id in this mode, which the SQL
+  // adapters keep as the primary key
+  for (const generateId of [undefined, "uuid"] as const) {
+    it(`reserves a verification value once${generateId ? ` with generateId: ${generateId}` : ""}`, async () => {
+      const { auth } = setup(generateId);
+      const { internalAdapter } = await auth.$context;
+      const reserve = () =>
+        internalAdapter.reserveVerificationValue({
+          identifier: "siwe-email-claim-a@example.com",
+          value: "0xabc",
+          expiresAt: new Date(Date.now() + 60_000),
+        });
+      expect(await reserve()).toBe(true);
+      expect(await reserve()).toBe(false);
+      await internalAdapter.deleteVerificationByIdentifier(
+        "siwe-email-claim-a@example.com"
+      );
+      expect(await reserve()).toBe(true);
+    });
+  }
 
   it("fails closed on a table without customId", async () => {
     const { auth } = setup();

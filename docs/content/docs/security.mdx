@@ -92,6 +92,21 @@ enabled. With it, the base URL, and so the links in emails such as password
 reset and verification links, uses the restored host. The worst a caller can do
 is pick another of the origins you listed exactly.
 
+## Database adapter
+
+Better Auth leaves some guarantees to the database. The component provides them
+the way Better Auth's SQL adapters (Drizzle, Prisma, Kysely) get them from the
+database:
+
+- **Ids chosen by Better Auth.** Some flows create a row with an id Better Auth
+  derives from a value and rely on the primary key to reject a second one:
+  reserving a verification value (magic link, email OTP, SIWE) and the OAuth
+  provider's `private_key_jwt` replay check. Convex picks `_id` itself, so the
+  component keeps the chosen id in an indexed `customId` field and rejects a
+  duplicate in the same mutation. This works with the default ids and with
+  `advanced.database.generateId: "uuid"`. With `"serial"`, Better Auth itself
+  doesn't enforce these checks and logs a warning, on any database.
+
 ## Adapter calls without a where clause
 
 Better Auth always passes a `where` clause when it deletes or updates rows. If
