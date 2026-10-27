@@ -369,8 +369,12 @@ token from `/convex/token`, as before. Requests that start a new session clear
 the cookie.
 
 The Convex JWT is now always signed with the algorithm in your Convex auth
-config. `rotateKeys` and `getLatestJwks` only touch those keys, so they no
-longer delete or export keys of Better Auth's `jwt` plugin.
+config. `rotateKeys` and `getLatestJwks` only touch keys of that algorithm, or
+without one, so they no longer delete or export keys of Better Auth's `jwt`
+plugin in another algorithm, such as its default EdDSA. The `jwks` table doesn't
+record which plugin created a key: if you configure the `jwt` plugin with the
+same algorithm as Convex, both plugins share those keys, and rotating them
+affects both.
 
 ### Forwarded headers
 

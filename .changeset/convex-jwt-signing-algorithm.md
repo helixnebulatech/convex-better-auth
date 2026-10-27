@@ -24,7 +24,10 @@ Now:
   and delete those keys.
 
 Keys without an `alg`, saved before Better Auth added the column, count as the
-configured algorithm, as in Better Auth.
+configured algorithm, as in Better Auth. The `jwks` table doesn't record which
+plugin created a key, so keys are told apart by algorithm only: if the `jwt`
+plugin is configured with the same algorithm as Convex, both plugins share those
+keys, and `rotateKeys` affects both.
 
 Why this option: Better Auth's `oauthProvider` pins `signingAlgorithm` when an
 audience needs a specific algorithm, and Better Auth then picks or creates a key
