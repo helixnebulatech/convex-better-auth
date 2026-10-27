@@ -864,13 +864,25 @@ export const paginate = async <
         }),
       });
     });
-    const result = await mergedStream(
-      streams,
-      [
-        args.sortBy?.field !== "createdAt" && args.sortBy?.field,
-        "_creationTime",
-      ].flatMap((f) => (f ? [f] : []))
-    ).paginate(paginationOpts);
+    // Every stream uses the same index, ordered by its fields after the
+    // equality ones, e.g. expiresAt then _creationTime for userId_expiresAt.
+    // The merge has to follow that order.
+    const { index: streamIndex, values: streamValues } =
+      findIndex(schema, {
+        ...args,
+        where: args.where
+          ?.filter((w) => !isEqNull(w))
+          .map((w) =>
+            w === inWhere ? { ...w, operator: "eq" as const, value: "" } : w
+          ),
+      }) ?? {};
+    const orderFields =
+      streamIndex && streamIndex.indexDescriptor !== "by_creation_time"
+        ? streamIndex.fields.slice(streamValues?.eq.length ?? 0)
+        : ["_creationTime"];
+    const result = await mergedStream(streams, orderFields).paginate(
+      paginationOpts
+    );
     return {
       ...result,
       page: result.page.map((doc) => selectFields(doc, args.select)),

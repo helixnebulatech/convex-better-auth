@@ -79,6 +79,21 @@ describe("in and createdAt clauses, as in SQL", () => {
     ).toBe(1);
   });
 
+  // session.userId's index is userId_expiresAt, so each value's rows come
+  // ordered by expiresAt, not by creation time
+  it("matches in on a non-unique field whose index has more fields", async () => {
+    const { adapter, user } = await setup();
+    const where = [
+      { field: "userId", operator: "in" as const, value: [user.id, "other"] },
+    ];
+    expect(await adapter.count({ model: "session", where })).toBe(2);
+    const rows = await adapter.findMany<{ token: string }>({
+      model: "session",
+      where,
+    });
+    expect(rows.map((row) => row.token).sort()).toEqual(["new", "old"]);
+  });
+
   it("bounds createdAt next to an indexed equality", async () => {
     const { adapter, user, day } = await setup();
     const rows = await adapter.findMany<{ token: string }>({
