@@ -106,6 +106,10 @@ database:
   duplicate in the same mutation. This works with the default ids and with
   `advanced.database.generateId: "uuid"`. With `"serial"`, Better Auth itself
   doesn't enforce these checks and logs a warning, on any database.
+- **Unique fields.** Better Auth relies on the database to reject a duplicate
+  `email`, `username` or other unique field. The component checks it in the same
+  mutation as the write. A null or unset value never conflicts, as NULL in a
+  unique column in SQL, so any number of users can have no `username`.
 
 ## Adapter calls without a where clause
 

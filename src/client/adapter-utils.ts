@@ -99,7 +99,7 @@ export const hasUniqueFields = (
   input: Record<string, any>
 ) =>
   getUniqueConstraints(betterAuthSchema, model).some((constraint) =>
-    constraint.every((field) => field in input)
+    constraint.every((field) => input[field] != null)
   );
 
 const findIndex = (
@@ -265,9 +265,12 @@ export const checkUniqueFields = async <
   // of a compound constraint is checked together with the others.
   const mergedDoc = { ...doc, ...input };
   for (const constraint of getUniqueConstraints(betterAuthSchema, table)) {
+    // A null or unset field never conflicts, as NULL in a unique column in
+    // the SQL databases behind Better Auth's Drizzle, Prisma and Kysely
+    // adapters
     if (
       !constraint.some((field) => field in input) ||
-      constraint.some((field) => mergedDoc[field] === undefined)
+      constraint.some((field) => mergedDoc[field] == null)
     ) {
       continue;
     }

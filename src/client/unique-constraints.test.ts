@@ -6,9 +6,10 @@ import { defineSchema, defineTable } from "convex/server";
 import { v } from "convex/values";
 import { getAuthTables } from "better-auth/db";
 import { deviceAuthorization } from "better-auth/plugins/device-authorization";
+import { username } from "better-auth/plugins/username";
 import { internal } from "../component/_generated/api.js";
 import pluginTableSchema from "../component/testProfiles/schema.profile-plugin-table.js";
-import { checkUniqueFields } from "./adapter-utils.js";
+import { checkUniqueFields, hasUniqueFields } from "./adapter-utils.js";
 import { createSchema } from "./create-schema.js";
 
 const modules = import.meta.glob("../component/**/*.*s");
@@ -29,6 +30,53 @@ describe("unique constraints", () => {
     await expect(
       t.mutation(create, { input: { model: "user", data } })
     ).rejects.toThrow("user email_address already exists");
+  });
+
+  // In SQL, NULL in a unique column never conflicts with another NULL
+  it("allows any number of rows with a null unique field", async () => {
+    const usernameTables = getAuthTables({ plugins: [username()] });
+    const schema = defineSchema({
+      user: defineTable({
+        email: v.string(),
+        username: v.optional(v.union(v.null(), v.string())),
+      })
+        .index("email", ["email"])
+        .index("username", ["username"]),
+    });
+    const t = convexTest(schema, modules);
+    const insert = (email: string, username: string | null | undefined) =>
+      t.run(async (ctx) => {
+        const data = { email, ...(username !== undefined ? { username } : {}) };
+        await checkUniqueFields(ctx, schema, usernameTables, "user", data);
+        return ctx.db.insert("user", data);
+      });
+    await insert("a@example.com", null);
+    await insert("b@example.com", null);
+    await insert("c@example.com", undefined);
+    await insert("d@example.com", "dee");
+    await expect(insert("e@example.com", "dee")).rejects.toThrow(
+      "user username already exists"
+    );
+    // updateMany may set a null unique field on several rows
+    expect(hasUniqueFields(usernameTables, "user", { username: null })).toBe(
+      false
+    );
+    expect(hasUniqueFields(usernameTables, "user", { username: "x" })).toBe(
+      true
+    );
+    // Setting a field to null on update doesn't conflict either
+    const id = await insert("f@example.com", "eff");
+    await t.run(async (ctx) => {
+      const doc = await ctx.db.get("user", id);
+      await checkUniqueFields(
+        ctx,
+        schema,
+        usernameTables,
+        "user",
+        { username: null },
+        doc!
+      );
+    });
   });
 
   // Better Auth 1.7 declares some unique constraints as table-level indexes
