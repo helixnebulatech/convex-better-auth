@@ -552,6 +552,45 @@ describe("cross domain OAuth from other app origins", () => {
     );
   });
 
+  it("keeps siteUrl, with its path, as the default callbackURL for sign-ins from its origin", async () => {
+    const db: MemoryDB = {
+      user: [],
+      session: [],
+      account: [],
+      verification: [],
+    };
+    const siteUrl = `${SITE}/app`;
+    const auth = betterAuth({
+      baseURL: AUTH,
+      secret: "cross-domain-test-secret-at-least-32-characters",
+      database: memoryAdapter(db),
+      trustedOrigins: [SITE, ADMIN],
+      logger: { disabled: true },
+      plugins: [
+        genericOAuth({
+          config: [
+            {
+              providerId: "mock",
+              clientId: "c",
+              clientSecret: "s",
+              authorizationUrl: "https://provider.example.com/authorize",
+              getToken: async () => ({ accessToken: "at:codeA" }) as any,
+              getUserInfo: async () =>
+                ({ ...ACCOUNTS.codeA, emailVerified: true }) as any,
+            },
+          ],
+        }),
+        crossDomain({ siteUrl }),
+      ],
+    });
+    const state = await signInSocial(auth, { callbackURL: undefined });
+    const start = await startOAuth(auth, state);
+    const res = await callback(auth, state, "codeA", cookieHeader(start));
+    expect(res.headers.get("location")).toMatch(
+      new RegExp(`^${siteUrl}\\?ott=`)
+    );
+  });
+
   it("only hands the session to the origin that started the flow", async () => {
     const { auth, db } = build({ trustedOrigins: [SITE, ADMIN] });
     // Started on ADMIN, coming back to SITE, and the other way round

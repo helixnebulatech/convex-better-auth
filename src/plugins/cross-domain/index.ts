@@ -201,8 +201,14 @@ export const crossDomain = ({ siteUrl }: { siteUrl: string }) => {
               ctx.path?.startsWith("/sign-in/social") ||
               ctx.path?.startsWith("/link-social")
             ) {
+              // From siteUrl's own origin, keep siteUrl, which can have a
+              // path such as https://example.com/app
               const origin = ctx.request?.headers.get("origin");
-              if (origin && (await getAppOrigins(ctx)).has(origin)) {
+              if (
+                origin &&
+                origin !== siteOrigin &&
+                (await getAppOrigins(ctx)).has(origin)
+              ) {
                 base = origin;
               }
             }

@@ -14,7 +14,8 @@ origin sharing the same Convex backend couldn't sign in with OAuth. Now:
 - The one-time token is only issued when the callback URL is on the origin that
   started the flow, and is still only redeemable by the browser that started it.
 - Relative `callbackURL`, `newUserCallbackURL` and `errorCallbackURL` values of
-  an OAuth sign-in resolve against the app that started it.
+  an OAuth sign-in resolve against the app that started it. Sign-ins from
+  `siteUrl`'s origin keep resolving against `siteUrl`, path included.
 - Magic links still only hand the session to `siteUrl`.
 
 Why this option: Better Auth keeps the session on the auth server, and its
