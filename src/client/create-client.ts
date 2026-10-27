@@ -14,6 +14,8 @@ import type {
 } from "convex/server";
 import { ConvexError, v } from "convex/values";
 import type { Infer } from "convex/values";
+import { getAuthTables, parseUserOutput } from "better-auth/db";
+import type { BetterAuthOptions } from "better-auth/minimal";
 import { convexAdapter } from "./adapter.js";
 import { corsRouter } from "convex-helpers/server/cors";
 import type defaultSchema from "../component/schema.js";
@@ -248,6 +250,21 @@ const restoreOriginalForwardedHeaders = async (
  * @param config.triggers - Triggers configuration.
  * @param config.authFunctions - Authentication functions configuration.
  */
+// Fields every Better Auth user has, plus the Convex document fields and the
+// app user link. Used when clientApi doesn't get createAuth.
+const coreUserFields = new Set([
+  "_id",
+  "_creationTime",
+  "id",
+  "userId",
+  ...Object.keys(getAuthTables({}).user!.fields),
+]);
+
+const pickCoreUserFields = (user: Record<string, unknown>) =>
+  Object.fromEntries(
+    Object.entries(user).filter(([key]) => coreUserFields.has(key))
+  );
+
 export const createClient = <
   DataModel extends GenericDataModel,
   Schema extends SchemaDefinition<GenericSchema, true> = typeof defaultSchema,
@@ -434,25 +451,42 @@ export const createClient = <
     /**
      * Exposes functions for use with the ClientAuthBoundary component. Currently
      * only contains getAuthUser.
+     *
+     * Pass `createAuth` so the query returns the user the way Better Auth's
+     * `/get-session` does, without fields marked `returned: false`. Without
+     * it, the fields hidden by your options are unknown here, so the query
+     * only returns the core Better Auth user fields.
+     *
+     * @param createAuth - The createAuth function
      * @returns Functions to pass to the ClientAuthBoundary component.
      */
-    clientApi: () => ({
-      /**
-       * Convex query to get the current user. For use with the ClientAuthBoundary component.
-       *
-       * ```ts title="convex/auth.ts"
-       * export const { getAuthUser } = authComponent.clientApi();
-       * ```
-       *
-       * @returns The user or throws an error if the user is not found
-       */
-      getAuthUser: queryGeneric({
-        args: {},
-        handler: async (ctx: GenericCtx<DataModel>) => {
-          return await getAuthUser(ctx);
-        },
-      }),
-    }),
+    clientApi: (createAuth?: CreateAuth<DataModel>) => {
+      let options: BetterAuthOptions | undefined;
+      const toOutput = (user: Record<string, unknown>) => {
+        if (!createAuth) {
+          return pickCoreUserFields(user);
+        }
+        options ??= createAuth({} as any).options as BetterAuthOptions;
+        return parseUserOutput(options, user as any) as Record<string, unknown>;
+      };
+      return {
+        /**
+         * Convex query to get the current user. For use with the ClientAuthBoundary component.
+         *
+         * ```ts title="convex/auth.ts"
+         * export const { getAuthUser } = authComponent.clientApi(createAuth);
+         * ```
+         *
+         * @returns The user or throws an error if the user is not found
+         */
+        getAuthUser: queryGeneric({
+          args: {},
+          handler: async (ctx: GenericCtx<DataModel>) => {
+            return toOutput(await getAuthUser(ctx));
+          },
+        }),
+      };
+    },
 
     /**
      * Exposes functions for executing trigger callbacks in the app context.

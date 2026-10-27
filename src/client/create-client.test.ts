@@ -425,3 +425,67 @@ describe("createClient verbose logging", () => {
     }
   );
 });
+
+describe("createClient clientApi", () => {
+  const userDoc = {
+    _id: "user1",
+    _creationTime: 1,
+    name: "Ada",
+    email: "ada@example.com",
+    emailVerified: true,
+    image: null,
+    createdAt: 1,
+    updatedAt: 1,
+    role: "admin",
+    riskScore: 42,
+  };
+  const ctx = {
+    auth: {
+      getUserIdentity: async () => ({ subject: "user1", sessionId: "s1" }),
+    },
+    runQuery: async (_fn: unknown, args: { model: string }) =>
+      args.model === "session" ? { _id: "s1" } : userDoc,
+  };
+  const run = (query: unknown) =>
+    (
+      query as {
+        _handler: (ctx: unknown, args: object) => Promise<unknown>;
+      }
+    )._handler(ctx, {});
+
+  it("drops fields marked returned: false, like Better Auth", async () => {
+    const createAuth = () =>
+      ({
+        options: {
+          user: {
+            additionalFields: {
+              role: { type: "string" },
+              riskScore: { type: "number", returned: false },
+            },
+          },
+        },
+      }) as any;
+    const { getAuthUser } = createClient(component).clientApi(createAuth);
+    const user = (await run(getAuthUser)) as Record<string, unknown>;
+    expect(user.role).toBe("admin");
+    expect(user).not.toHaveProperty("riskScore");
+    expect(user.email).toBe("ada@example.com");
+  });
+
+  it("returns only core user fields without createAuth", async () => {
+    const { getAuthUser } = createClient(component).clientApi();
+    const user = (await run(getAuthUser)) as Record<string, unknown>;
+    expect(Object.keys(user).sort()).toEqual(
+      [
+        "_creationTime",
+        "_id",
+        "createdAt",
+        "email",
+        "emailVerified",
+        "image",
+        "name",
+        "updatedAt",
+      ].sort()
+    );
+  });
+});

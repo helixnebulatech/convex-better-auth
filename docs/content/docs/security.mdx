@@ -177,6 +177,16 @@ so a plugin that holds a sign-in back, such as `twoFactor` waiting for the
 second factor, can't leave a JWT behind whatever the plugin order. A request
 that starts a new session, and sign-out, clear the cookie.
 
+## Users returned to the client
+
+Better Auth runs every user it sends to a client through `parseUserOutput`,
+which leaves out fields marked `returned: false`. The public query from
+`authComponent.clientApi(createAuth)` does the same with your options. Without
+`createAuth` the component can't know which fields your options hide, so it's
+stricter and only returns the core Better Auth user fields and the Convex
+document fields. `getAuthUser` and `safeGetAuthUser` return the whole document,
+as they're meant for server code.
+
 ## Verbose logs
 
 `verbose: true` logs request and response headers with cookies, tokens and API
