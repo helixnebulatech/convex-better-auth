@@ -155,6 +155,7 @@ that starts a new session, and sign-out, clear the cookie.
 ## Verbose logs
 
 `verbose: true` logs request and response headers with cookies, tokens and API
-keys redacted. It also enables Better Auth's adapter debug logs, which print
-whole database rows, including session tokens, password hashes and verification
-values. Only enable it while debugging, and not in production.
+keys redacted, and the query string of `location` and `referer` removed. It also
+enables Better Auth's adapter debug logs, which print whole database rows,
+including session tokens, password hashes and verification values. Only enable
+it while debugging, and not in production.

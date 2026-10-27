@@ -286,6 +286,7 @@ describe("createClient verbose logging", () => {
     authorization: "Bearer authorization-secret",
     "better-auth-cookie": "better-auth.session_token=cross-domain-secret",
     "x-api-key": "api-key-secret",
+    referer: "https://app.example.com/reset-password?token=referer-secret",
   };
   const makeAuth = () => ({
     handler: async () => {
@@ -339,6 +340,9 @@ describe("createClient verbose logging", () => {
         expect(logged).toContain(
           "https://app.example.com/dashboard?[redacted]"
         );
+        expect(logged).toContain(
+          "https://app.example.com/reset-password?[redacted]"
+        );
         for (const secret of [
           "cookie-secret",
           "authorization-secret",
@@ -349,6 +353,7 @@ describe("createClient verbose logging", () => {
           "api-key-secret",
           "location-secret",
           "set-auth-jwt-secret",
+          "referer-secret",
         ]) {
           expect(logged).not.toContain(secret);
         }

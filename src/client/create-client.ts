@@ -97,7 +97,9 @@ const SENSITIVE_HEADERS = new Set([
   "set-auth-jwt",
   "x-api-key",
 ]);
-// Redirects carry one-time tokens, OAuth codes and state in the query string
+// Redirects carry one-time tokens, OAuth codes and state in the query
+// string, and so can the page that sent a request (referer), e.g. a reset
+// password page with ?token=
 const redactLocation = (value: string) => {
   const queryStart = value.indexOf("?");
   return queryStart === -1 ? value : `${value.slice(0, queryStart)}?[redacted]`;
@@ -107,7 +109,7 @@ const redactHeaders = (headers: Headers) =>
     name,
     SENSITIVE_HEADERS.has(name.toLowerCase())
       ? "[redacted]"
-      : name.toLowerCase() === "location"
+      : name.toLowerCase() === "location" || name.toLowerCase() === "referer"
         ? redactLocation(value)
         : value,
   ]);
