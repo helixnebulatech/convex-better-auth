@@ -355,6 +355,56 @@ regenerate the schema.
 
 ## Upgrading to 0.13.7
 
+0.13.7 includes security fixes. See the [security notes](/security) for how the
+component behaves now.
+
+### Convex JWT cookie
+
+The Convex JWT is no longer signed on sign-in, only by `/convex/token` and after
+`/get-session` returns a session, as Better Auth's `jwt` plugin does. This fixes
+a two-factor bypass when `convex()` was listed before `twoFactor()`. After a
+sign-in, the `convex_jwt` cookie is set by the first `/get-session` call, which
+the client makes right away; server-side helpers without the cookie fetch the
+token from `/convex/token`, as before. Requests that start a new session clear
+the cookie.
+
+The Convex JWT is now always signed with the algorithm in your Convex auth
+config. `rotateKeys` and `getLatestJwks` only touch keys of that algorithm, or
+without one, so they no longer delete or export keys of Better Auth's `jwt`
+plugin in another algorithm, such as its default EdDSA. The `jwks` table doesn't
+record which plugin created a key: if you configure the `jwt` plugin with the
+same algorithm as Convex, both plugins share those keys, and rotating them
+affects both.
+
+### Forwarded headers
+
+The component now sets `x-forwarded-host` and `x-forwarded-proto` itself before
+calling Better Auth: only for an origin listed exactly in your trusted origins,
+and otherwise it removes them. On Convex's cloud nothing changes for apps. On
+self-hosted Convex, see [Self-hosted Convex](/security#self-hosted-convex). If
+your app uses `advanced.trustedProxyHeaders` with a wildcard in `allowedHosts`,
+list the hosts exactly.
+
+### TanStack Start `isAuthenticated`
+
+`convexBetterAuthReactStart` now returns `isAuthenticated()`, which checks the
+session with the server. With `jwtCache`, `getToken()` can return a cached JWT
+that stays valid after the session ends, so use `isAuthenticated()` where the
+session must be checked.
+
+### Database adapter
+
+These now behave as with Better Auth's SQL adapters:
+
+- Any number of rows can have a null unique field, such as users without a
+  `username`.
+- `sortBy` is honoured when no index ends in the sort field. The component reads
+  the matching rows and sorts them, so add an index for lists you sort often on
+  large tables.
+- Ids chosen by Better Auth are kept with
+  `advanced.database.generateId: "uuid"`.
+- Renamed fields work in `sortBy` and `select`.
+
 ### OAuth sign-in from other apps
 
 With the cross domain plugin, an OAuth sign-in can now start from any app listed
@@ -367,3 +417,40 @@ and magic links still only hand the session to `siteUrl`. See
 Relative `callbackURL`, `newUserCallbackURL` and `errorCallbackURL` values of an
 OAuth sign-in now resolve against the app that started it. Apps that only run at
 `siteUrl` see no change.
+
+### SCIM list indexes
+
+Apps using the SCIM plugin with [Local Install](/local-install) get
+`connectionId_orderKey` indexes on `scimUser` and `scimGroup`, for the `/Users`
+and `/Groups` lists. Regenerate the schema and deploy:
+
+```npm
+cd convex/betterAuth
+npx auth generate
+```
+
+### Sign-in after email verification
+
+With the cross domain plugin and `autoSignInAfterVerification`, opening the
+verification link now signs the user in to the app at `siteUrl`, like a magic
+link. The same applies when confirming an email change. Before, Better Auth
+created the session but the app never received it.
+
+### Using the plugins with other Better Auth plugins
+
+The cross domain and Convex plugins registered some endpoints under the same
+keys as Better Auth's `oneTimeToken`, `jwt` and `oauthProvider` plugins, so
+using them together removed endpoints of one or the other. They now use keys of
+their own. If you called these endpoints on the server, rename the calls:
+
+| Before                                         | After                                      |
+| ---------------------------------------------- | ------------------------------------------ |
+| `auth.api.getToken()` (Convex)                 | `auth.api.getConvexToken()`                |
+| `auth.api.getJwks()` (Convex)                  | `auth.api.getConvexJwks()`                 |
+| `auth.api.getOpenIdConfig()`                   | `auth.api.getConvexOpenIdConfig()`         |
+| `auth.api.verifyOneTimeToken()` (cross domain) | `auth.api.crossDomainVerifyOneTimeToken()` |
+| `auth.api.startOAuth()`                        | `auth.api.crossDomainOAuthStart()`         |
+
+The paths and the clients don't change. A cross domain sign-in that is between
+the redirect and the token exchange during the upgrade fails, and the user has
+to sign in again.

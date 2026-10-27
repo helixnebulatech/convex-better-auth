@@ -93,14 +93,18 @@ describe("convexBetterAuthReactStart handler", () => {
         body: "{}",
         headers: {
           "x-forwarded-host": "proxy.internal.example.com",
+          "x-forwarded-proto": "http",
           "x-better-auth-forwarded-host": "spoofed.example.com",
+          "x-better-auth-forwarded-proto": "http",
         },
       }
     );
     await handler(request);
     const headers = headersOf(fetchSpy);
     expect(headers.get("x-forwarded-host")).toBeNull();
+    expect(headers.get("x-forwarded-proto")).toBeNull();
     expect(headers.get("x-better-auth-forwarded-host")).toBe("app.example.com");
+    expect(headers.get("x-better-auth-forwarded-proto")).toBe("https");
   });
 
   it("streams the request body with duplex: half", async () => {
@@ -244,5 +248,43 @@ describe("convexBetterAuthReactStart handler over real Node HTTP servers", () =>
     expect(result.raw).toContain('{"ok":true}');
     expect(result.raw.toLowerCase()).not.toContain("connection: keep-alive");
     expect(result.closedByServer).toBe(true);
+  });
+});
+
+// Node's fetch, not a mock: it rejects some request headers outright
+describe("proxy handler against a real server", () => {
+  it("forwards requests carrying expect, keep-alive and upgrade", async () => {
+    vi.restoreAllMocks();
+    const server = http.createServer((req, res) => {
+      req.resume();
+      req.on("end", () => res.end("ok"));
+    });
+    await new Promise<void>((resolve) => server.listen(0, resolve));
+    const siteUrl = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+    try {
+      const { handler } = convexBetterAuthReactStart({
+        convexUrl: "https://test.convex.cloud",
+        convexSiteUrl: siteUrl,
+      });
+      const request = new Request(
+        "https://app.example.com/api/auth/sign-in/email",
+        {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            expect: "100-continue",
+            "keep-alive": "timeout=5",
+            upgrade: "h2c",
+            connection: "keep-alive, upgrade",
+          },
+          body: JSON.stringify({ email: "test@example.com" }),
+        }
+      );
+      const res = await handler(request);
+      expect(res.status).toBe(200);
+      expect(await res.text()).toBe("ok");
+    } finally {
+      server.close();
+    }
   });
 });

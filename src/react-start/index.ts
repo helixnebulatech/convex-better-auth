@@ -6,7 +6,7 @@ import type {
 } from "convex/server";
 import { ConvexHttpClient } from "convex/browser";
 import { getToken } from "../utils/index.js";
-import { toProxyResponse } from "../utils/proxy.js";
+import { toProxyRequestHeaders, toProxyResponse } from "../utils/proxy.js";
 import type { GetTokenOptions } from "../utils/index.js";
 import React from "react";
 
@@ -63,12 +63,7 @@ const parseConvexSiteUrl = (url: string) => {
 const handler = async (request: Request, opts: { convexSiteUrl: string }) => {
   const requestUrl = new URL(request.url);
   const nextUrl = `${opts.convexSiteUrl}${requestUrl.pathname}${requestUrl.search}`;
-  const headers = new Headers(request.headers);
-  // Strip hop-by-hop headers inherited from the incoming request; undici
-  // rejects an outbound `transfer-encoding: chunked` header value.
-  headers.delete("transfer-encoding");
-  headers.delete("content-length");
-  headers.delete("connection");
+  const headers = toProxyRequestHeaders(request);
   // Convex's edge resolves the deployment from `x-forwarded-host`, so the app
   // host there 404s. The component restores the app's host and protocol from
   // the `x-better-auth-forwarded-*` headers, only for hosts listed exactly in
@@ -142,6 +137,13 @@ export const convexBetterAuthReactStart = (
     getToken: async () => {
       const token = await cachedGetToken(opts);
       return token.token;
+    },
+    // Checks the session with the server, like Better Auth's getSession and
+    // the Next.js helper. getToken() may return the JWT cached in a cookie
+    // with jwtCache, which stays valid after the session ends.
+    isAuthenticated: async () => {
+      const token = await cachedGetToken({ ...opts, forceRefresh: true });
+      return !!token.token;
     },
     handler: (request: Request) => handler(request, opts),
     fetchAuthQuery: async <Query extends FunctionReference<"query">>(

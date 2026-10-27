@@ -38,9 +38,9 @@ imports keep working:
 
 ```sh
 # npm
-npm install @convex-dev/better-auth@npm:@helixnebulatech/convex-better-auth@^0.13.6 better-auth@~1.7.13
+npm install @convex-dev/better-auth@npm:@helixnebulatech/convex-better-auth@^0.13.7 better-auth@~1.7.13
 # pnpm
-pnpm add @convex-dev/better-auth@npm:@helixnebulatech/convex-better-auth@^0.13.6 better-auth@~1.7.13
+pnpm add @convex-dev/better-auth@npm:@helixnebulatech/convex-better-auth@^0.13.7 better-auth@~1.7.13
 ```
 
 Then follow the

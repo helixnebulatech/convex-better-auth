@@ -13,7 +13,7 @@ import type {
 } from "convex/server";
 import React from "react";
 import { getToken } from "../utils/index.js";
-import { toProxyResponse } from "../utils/proxy.js";
+import { toProxyRequestHeaders, toProxyResponse } from "../utils/proxy.js";
 import type { GetTokenOptions } from "../utils/index.js";
 import type { EmptyObject } from "convex-helpers";
 
@@ -45,11 +45,7 @@ const handler = async (request: Request, siteUrl: string) => {
   const requestUrl = new URL(request.url);
   const nextUrl = `${siteUrl}${requestUrl.pathname}${requestUrl.search}`;
 
-  const headers = new Headers(request.headers);
-  // Strip hop-by-hop headers; undici rejects outbound `transfer-encoding: chunked`.
-  headers.delete("transfer-encoding");
-  headers.delete("content-length");
-  headers.delete("connection");
+  const headers = toProxyRequestHeaders(request);
   // Convex's edge resolves the deployment from `x-forwarded-host`, so the app
   // host there 404s. The component restores the app's host and protocol from
   // the `x-better-auth-forwarded-*` headers, only for hosts listed exactly in

@@ -6,6 +6,7 @@ import { memoryAdapter } from "better-auth/adapters/memory";
 import type { MemoryDB } from "better-auth/adapters/memory";
 import { genericOAuth } from "better-auth/plugins/generic-oauth";
 import { magicLink } from "better-auth/plugins/magic-link";
+import { oneTimeToken } from "better-auth/plugins/one-time-token";
 import { crossDomain } from "./index.js";
 
 const AUTH = "https://deploy.convex.site";
@@ -23,6 +24,8 @@ const build = (
   opts: {
     crossDomain?: boolean;
     trustedOrigins?: string[] | ((request?: Request) => Promise<string[]>);
+    // Better Auth's one-time-token plugin, registered before or after
+    oneTimeToken?: "before" | "after";
   } = {}
 ) => {
   const db: MemoryDB = { user: [], session: [], account: [], verification: [] };
@@ -58,7 +61,9 @@ const build = (
           magicLinks.push(url);
         },
       }),
+      ...(opts.oneTimeToken === "before" ? [oneTimeToken()] : []),
       ...(opts.crossDomain === false ? [] : [crossDomain({ siteUrl: SITE })]),
+      ...(opts.oneTimeToken === "after" ? [oneTimeToken()] : []),
     ],
   });
   return { auth, db, magicLinks };
@@ -218,7 +223,7 @@ describe("cross domain OAuth", () => {
       expect(res.headers.get("location")).not.toContain("ott=");
     }
     expect(
-      db.verification.some((v) => v.identifier.startsWith("one-time-token:"))
+      db.verification.some((v) => v.identifier.startsWith("cross-domain-ott:"))
     ).toBe(false);
   });
 
@@ -334,8 +339,15 @@ describe("cross domain OAuth", () => {
 // records the form it submits and the referrer policy in effect at the time
 const setupClient = (
   auth: Auth,
-  options: { setReferrerPolicy?: boolean } = {}
+  options: {
+    setReferrerPolicy?: boolean;
+    failFirstVerify?: boolean;
+    // Answers to /get-session wait for it
+    holdGetSession?: Promise<void>;
+  } = {}
 ) => {
+  const { failFirstVerify, holdGetSession, ...clientOptions } = options;
+  let verifyFailed = false;
   const items = new Map<string, string>();
   const storage = {
     getItem: (key: string) => items.get(key) ?? null,
@@ -345,9 +357,27 @@ const setupClient = (
   };
   const client = createAuthClient({
     baseURL: BASE,
-    plugins: [crossDomainClient({ storage, ...options })],
+    plugins: [crossDomainClient({ storage, ...clientOptions })],
     fetchOptions: {
-      customFetchImpl: (input, init) => {
+      customFetchImpl: async (input, init) => {
+        // A redemption that never reaches the server, eg. a network error
+        if (
+          failFirstVerify &&
+          !verifyFailed &&
+          String(input).includes("/cross-domain/one-time-token/verify")
+        ) {
+          verifyFailed = true;
+          return new Response(null, { status: 503 });
+        }
+        if (holdGetSession && String(input).includes("/get-session")) {
+          const headers = new Headers(init?.headers);
+          headers.set("origin", SITE);
+          const response = await auth.handler(
+            new Request(input, { ...init, headers })
+          );
+          await holdGetSession;
+          return response;
+        }
         const headers = new Headers(init?.headers);
         headers.set("origin", SITE);
         return auth.handler(new Request(input, { ...init, headers }));
@@ -396,7 +426,7 @@ const setupClient = (
     });
     return callback(auth, form.fields.state!, code, cookieHeader(start));
   };
-  return { client, submitted, document, completeFlow };
+  return { client, submitted, document, completeFlow, items };
 };
 
 describe("crossDomainClient OAuth", () => {
@@ -433,6 +463,52 @@ describe("crossDomainClient OAuth", () => {
     ).crossDomain.oneTimeToken.verify({ token: ott });
     expect(error).toBeNull();
     expect(verified.user.email).toBe("a@example.com");
+  });
+
+  it("keeps the verifier when a redemption fails, so it can be retried", async () => {
+    const { auth } = build();
+    const { client, submitted, document, completeFlow } = setupClient(auth, {
+      failFirstVerify: true,
+    });
+    vi.stubGlobal("document", document);
+    await client.$fetch("/sign-in/social", {
+      method: "POST",
+      body: { provider: "mock", callbackURL: SITE },
+    });
+    const ott = ottOf(await completeFlow(submitted[0]!))!;
+    const verify = () =>
+      (client as any).crossDomain.oneTimeToken.verify({ token: ott });
+    expect((await verify()).error).not.toBeNull();
+    const { data, error } = await verify();
+    expect(error).toBeNull();
+    expect(data.user.email).toBe("a@example.com");
+  });
+
+  it("doesn't let a late empty get-session answer clear a session redeemed meanwhile", async () => {
+    const { auth } = build();
+    let release!: () => void;
+    const holdGetSession = new Promise<void>((resolve) => (release = resolve));
+    const { client, submitted, document, completeFlow, items } = setupClient(
+      auth,
+      { holdGetSession }
+    );
+    vi.stubGlobal("document", document);
+    await client.$fetch("/sign-in/social", {
+      method: "POST",
+      body: { provider: "mock", callbackURL: SITE },
+    });
+    const ott = ottOf(await completeFlow(submitted[0]!))!;
+    // The app loads at ?ott=: useSession asks for the session, still
+    // signed out, while the provider redeems the token
+    const getSession = client.$fetch("/get-session");
+    const { error } = await (client as any).crossDomain.oneTimeToken.verify({
+      token: ott,
+    });
+    expect(error).toBeNull();
+    release();
+    await getSession;
+    const cookie = items.get("better-auth_cookie") ?? "";
+    expect(cookie).toContain("session_token");
   });
 
   it("only changes the page's referrer policy when the app opts in", async () => {
@@ -547,6 +623,45 @@ describe("cross domain OAuth from other app origins", () => {
     );
   });
 
+  it("keeps siteUrl, with its path, as the default callbackURL for sign-ins from its origin", async () => {
+    const db: MemoryDB = {
+      user: [],
+      session: [],
+      account: [],
+      verification: [],
+    };
+    const siteUrl = `${SITE}/app`;
+    const auth = betterAuth({
+      baseURL: AUTH,
+      secret: "cross-domain-test-secret-at-least-32-characters",
+      database: memoryAdapter(db),
+      trustedOrigins: [SITE, ADMIN],
+      logger: { disabled: true },
+      plugins: [
+        genericOAuth({
+          config: [
+            {
+              providerId: "mock",
+              clientId: "c",
+              clientSecret: "s",
+              authorizationUrl: "https://provider.example.com/authorize",
+              getToken: async () => ({ accessToken: "at:codeA" }) as any,
+              getUserInfo: async () =>
+                ({ ...ACCOUNTS.codeA, emailVerified: true }) as any,
+            },
+          ],
+        }),
+        crossDomain({ siteUrl }),
+      ],
+    });
+    const state = await signInSocial(auth, { callbackURL: undefined });
+    const start = await startOAuth(auth, state);
+    const res = await callback(auth, state, "codeA", cookieHeader(start));
+    expect(res.headers.get("location")).toMatch(
+      new RegExp(`^${siteUrl}\\?ott=`)
+    );
+  });
+
   it("only hands the session to the origin that started the flow", async () => {
     const { auth, db } = build({ trustedOrigins: [SITE, ADMIN] });
     // Started on ADMIN, coming back to SITE, and the other way round
@@ -557,7 +672,7 @@ describe("cross domain OAuth from other app origins", () => {
     });
     expect(toAdmin.headers.get("location")).not.toContain("ott=");
     expect(
-      db.verification.some((v) => v.identifier.startsWith("one-time-token:"))
+      db.verification.some((v) => v.identifier.startsWith("cross-domain-ott:"))
     ).toBe(false);
   });
 
@@ -614,5 +729,79 @@ describe("cross domain OAuth from other app origins", () => {
     const res = await callback(auth, state, "codeA", cookieHeader(start));
     expect(new URL(res.headers.get("location")!).origin).toBe(SITE);
     expect((await redeem(auth, ottOf(res)!, VERIFIER)).status).toBe(200);
+  });
+});
+
+describe("cross domain with Better Auth's one-time-token plugin", () => {
+  for (const order of ["before", "after"] as const) {
+    it(`keeps both plugins working with one-time-token registered ${order}`, async () => {
+      const { auth } = build({ oneTimeToken: order });
+      const ott = ottOf(await browserSignIn(auth, "codeA"))!;
+      // The official endpoint can't redeem the cross domain token, so it
+      // can't skip the verifier
+      const official = (token: string) =>
+        auth.handler(
+          new Request(`${BASE}/one-time-token/verify`, {
+            method: "POST",
+            headers: clientHeaders(),
+            body: JSON.stringify({ token }),
+          })
+        );
+      expect((await official(ott)).status).toBe(400);
+      expect((await redeem(auth, ott)).status).toBe(400);
+      const signedIn = await redeem(auth, ott, VERIFIER);
+      expect(signedIn.status).toBe(200);
+
+      // The official plugin keeps its own endpoints
+      const cookie = signedIn.headers
+        .get("set-better-auth-cookie")!
+        .split(";")[0]!;
+      const generated = await auth.handler(
+        new Request(`${BASE}/one-time-token/generate`, {
+          headers: clientHeaders(cookie),
+        })
+      );
+      expect(generated.status).toBe(200);
+      const { token } = await generated.json();
+      // and its tokens aren't redeemable through the cross domain endpoint
+      expect((await redeem(auth, token)).status).toBe(400);
+      expect((await official(token)).status).toBe(200);
+    });
+  }
+});
+
+describe("cross domain one-time token redemption race", () => {
+  // Redeeming consumes the token atomically, so one token gives one session
+  it("lets only one of two concurrent redemptions with the verifier succeed", async () => {
+    const { auth } = build();
+    const ott = ottOf(await browserSignIn(auth, "codeA"))!;
+    const results = await Promise.all([
+      redeem(auth, ott, VERIFIER),
+      redeem(auth, ott, VERIFIER),
+    ]);
+    expect(results.map((res) => res.status).sort()).toEqual([200, 400]);
+  });
+
+  it("doesn't redeem an OAuth token without the verifier while the browser redeems it", async () => {
+    const { auth } = build();
+    const ott = ottOf(await browserSignIn(auth, "codeA"))!;
+    // Hold the browser's redemption right before it consumes the token
+    const { internalAdapter } = await auth.$context;
+    const consume = internalAdapter.consumeVerificationValue;
+    let release!: () => void;
+    const held = new Promise<void>((resolve) => (release = resolve));
+    let calls = 0;
+    internalAdapter.consumeVerificationValue = async (identifier: string) => {
+      if (++calls === 1) {
+        await held;
+      }
+      return consume(identifier);
+    };
+    const browser = redeem(auth, ott, VERIFIER);
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    // Meanwhile, someone with only the token tries it
+    expect((await redeem(auth, ott)).status).toBe(400);
+    release();
+    expect((await browser).status).toBe(200);
   });
 });

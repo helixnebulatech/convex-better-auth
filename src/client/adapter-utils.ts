@@ -14,7 +14,7 @@ import { stream } from "convex-helpers/server/stream";
 import { mergedStream } from "convex-helpers/server/stream";
 import { stripIndent } from "common-tags";
 import type { BetterAuthDBSchema } from "better-auth/db";
-import { customIdField } from "./create-schema.js";
+import { compareFieldNames, customIdField } from "./create-schema.js";
 
 export const adapterWhereValidator = v.object({
   field: v.string(),
@@ -99,7 +99,7 @@ export const hasUniqueFields = (
   input: Record<string, any>
 ) =>
   getUniqueConstraints(betterAuthSchema, model).some((constraint) =>
-    constraint.every((field) => field in input)
+    constraint.every((field) => input[field] != null)
   );
 
 const findIndex = (
@@ -185,9 +185,7 @@ const findIndex = (
   const indexEqFields =
     where
       ?.filter((w) => !w.operator || w.operator === "eq")
-      .sort((a, b) => {
-        return a.field.localeCompare(b.field);
-      })
+      .sort((a, b) => compareFieldNames(a.field, b.field))
       .map((w) => [w.field, w.value]) ?? [];
   if (!indexEqFields?.length && !boundField && !args.sortBy) {
     return;
@@ -265,9 +263,12 @@ export const checkUniqueFields = async <
   // of a compound constraint is checked together with the others.
   const mergedDoc = { ...doc, ...input };
   for (const constraint of getUniqueConstraints(betterAuthSchema, table)) {
+    // A null or unset field never conflicts, as NULL in a unique column in
+    // the SQL databases behind Better Auth's Drizzle, Prisma and Kysely
+    // adapters
     if (
       !constraint.some((field) => field in input) ||
-      constraint.some((field) => mergedDoc[field] === undefined)
+      constraint.some((field) => mergedDoc[field] == null)
     ) {
       continue;
     }
@@ -374,16 +375,39 @@ const filterByWhere = <
       isComparable(val, wVal) && val! < wVal!;
     const isGreaterThan = (val: typeof value, wVal: typeof w.value) =>
       isComparable(val, wVal) && val! > wVal!;
+    // A row created with an id Better Auth chose is found by that id too,
+    // kept in customId, as by getDocById
+    const ids =
+      w.field === "_id"
+        ? [doc._id, (doc as any)[customIdField]].filter(
+            (id) => id !== undefined
+          )
+        : undefined;
     const filter = (w: Infer<typeof adapterWhereValidator>) => {
       switch (w.operator) {
         case undefined:
         case "eq": {
+          if (ids) {
+            return ids.includes(w.value);
+          }
           return w.value === null ? isNullish(value) : value === w.value;
         }
         case "in": {
+          if (ids) {
+            return (
+              Array.isArray(w.value) &&
+              ids.some((id) => (w.value as any[]).includes(id))
+            );
+          }
           return Array.isArray(w.value) && (w.value as any[]).includes(value);
         }
         case "not_in": {
+          if (ids) {
+            return (
+              Array.isArray(w.value) &&
+              !ids.some((id) => (w.value as any[]).includes(id))
+            );
+          }
           // SQL NOT IN excludes rows where the field is NULL.
           return (
             Array.isArray(w.value) &&
@@ -410,6 +434,9 @@ const filterByWhere = <
           );
         }
         case "ne": {
+          if (ids) {
+            return !ids.includes(w.value);
+          }
           // ne null is IS NOT NULL; otherwise SQL <> excludes NULL rows.
           return !isNullish(value) && value !== w.value;
         }
@@ -476,6 +503,12 @@ const generateQuery = (
               for (const [idx, value] of (values?.eq ?? []).entries()) {
                 q = q.eq(usableIndex.fields[idx], value);
               }
+              // createdAt isn't an index field, the index ends in
+              // _creationTime, which can differ from a createdAt Better Auth
+              // set. Its bounds are applied to the stored value below.
+              if (boundField === "createdAt") {
+                return q;
+              }
               if (values?.gt !== undefined) {
                 q = q.gt(boundField, values.gt);
               } else if (values?.gte !== undefined) {
@@ -526,6 +559,8 @@ const generateQuery = (
       (w) =>
         isEqNull(w) ||
         isRangeNull(w) ||
+        (w.field === "createdAt" &&
+          ["lt", "lte", "gt", "gte"].includes(w.operator ?? "")) ||
         (w.operator &&
           ["contains", "starts_with", "ends_with", "ne", "not_in"].includes(
             w.operator
@@ -581,6 +616,37 @@ export const getDocById = async <
 // This is the core function for reading from the database, it parses and
 // validates where conditions, selects indexes, and allows the caller to
 // optionally paginate as needed. Every response is a pagination result.
+// Convex's order for index fields: undefined, then null, then values, and
+// values by type, then by value
+const typeRank = (value: unknown) =>
+  value === undefined
+    ? 0
+    : value === null
+      ? 1
+      : typeof value === "bigint"
+        ? 2
+        : typeof value === "number"
+          ? 3
+          : typeof value === "boolean"
+            ? 4
+            : typeof value === "string"
+              ? 5
+              : 6;
+export const compareValues = (a: unknown, b: unknown) => {
+  const rank = typeRank(a) - typeRank(b);
+  if (rank !== 0) {
+    return rank;
+  }
+  if (a === b || typeRank(a) <= 1) {
+    return 0;
+  }
+  return (a as any) < (b as any) ? -1 : (a as any) > (b as any) ? 1 : 0;
+};
+
+// Sorting by createdAt or the creation order uses _creationTime
+const isCreationSort = (field: string) =>
+  field === "createdAt" || field === "_creationTime";
+
 export const paginate = async <
   Doc extends DocumentByName<GenericDataModel, T>,
   T extends TableNamesInDataModel<GenericDataModel>,
@@ -605,11 +671,11 @@ export const paginate = async <
       (w) =>
         w.field === "_id" &&
         w.operator &&
-        !["eq", "in", "not_in"].includes(w.operator)
+        !["eq", "in", "not_in", "ne"].includes(w.operator)
     )
   ) {
     throw new Error(
-      `_id can only be used with eq, in, or not_in operator: ${JSON.stringify(args.where)}`
+      `_id can only be used with eq, in, not_in or ne operator: ${JSON.stringify(args.where)}`
     );
   }
   if (args.where?.some((w) => w.mode === "insensitive")) {
@@ -669,15 +735,85 @@ export const paginate = async <
     maximumRowsRead: Math.max((args.paginationOpts.numItems ?? 0) + 1, 200),
   };
 
+  // Without an index ending in the sort field, the query would come back in
+  // creation order and the limit would keep the wrong rows. Better Auth's SQL
+  // adapters sort anyway (ORDER BY without an index), so read every matching
+  // row and sort here. On a large table this can hit Convex's read limit,
+  // which fails instead of returning the wrong rows.
+  const sortsInMemory = async (inWhere?: (typeof args.where & {})[number]) =>
+    Boolean(
+      args.sortBy &&
+      !isCreationSort(args.sortBy.field) &&
+      !findIndex(schema, {
+        model: args.model,
+        // Without the eq null clauses, as generateQuery picks its index:
+        // an index range can't match unset fields
+        where: args.where
+          ?.filter((w) => !isEqNull(w))
+          .map((w) => (w === inWhere ? { ...w, operator: "eq" as const } : w)),
+        sortBy: args.sortBy,
+      })?.index
+    );
+  const sortInMemory = async (): Promise<PaginationResult<Doc>> => {
+    const sortBy = args.sortBy!;
+    const docs: Doc[] = [];
+    let cursor: string | null = null;
+    for (;;) {
+      const result: PaginationResult<Doc> = await paginate(
+        ctx,
+        schema,
+        betterAuthSchema,
+        {
+          ...args,
+          sortBy: undefined,
+          select: undefined,
+          limit: undefined,
+          paginationOpts: { numItems: 200, cursor },
+        }
+      );
+      docs.push(...result.page);
+      if (result.isDone || result.continueCursor === cursor) {
+        break;
+      }
+      cursor = result.continueCursor;
+    }
+    const direction = sortBy.direction === "desc" ? -1 : 1;
+    const sorted = docs.sort(
+      (a, b) =>
+        direction *
+          compareValues(
+            a[sortBy.field as keyof Doc],
+            b[sortBy.field as keyof Doc]
+          ) ||
+        direction * ((a._creationTime as number) - (b._creationTime as number))
+    );
+    return {
+      page: sorted
+        .slice(0, args.limit ?? sorted.length)
+        .map((doc) => selectFields(doc, args.select)) as Doc[],
+      isDone: true,
+      continueCursor: "",
+    };
+  };
+
   // Large queries using "in" clause will crash, but these are only currently
   // possible with the organization plugin listing all members with a high
   // limit. For cases like this we need to create proper convex queries in
   // the component as an alternative to using Better Auth api's.
-  const inWhere = args.where?.find((w) => w.operator === "in");
-  if (inWhere) {
-    if (!Array.isArray(inWhere.value)) {
+  const foundInWhere = args.where?.find((w) => w.operator === "in");
+  if (foundInWhere) {
+    if (!Array.isArray(foundInWhere.value)) {
       throw new Error("in clause value must be an array");
     }
+    // Like SQL IN, a value listed twice matches its rows once
+    const inWhere = {
+      ...foundInWhere,
+      value: [...new Set(foundInWhere.value as (string | number)[])],
+    } as typeof foundInWhere & { value: any[] };
+    args = {
+      ...args,
+      where: args.where?.map((w) => (w === foundInWhere ? inWhere : w)),
+    };
     // Ids and unique fields match at most one document per value, so look
     // each value up directly and apply the other clauses as static filters.
     // Streaming per value would need an index covering every other clause
@@ -740,6 +876,9 @@ export const paginate = async <
         continueCursor: "",
       };
     }
+    if (await sortsInMemory(inWhere)) {
+      return await sortInMemory();
+    }
     const streams = inWhere.value.map((value) => {
       return generateQuery(ctx, schema, {
         ...args,
@@ -751,19 +890,34 @@ export const paginate = async <
         }),
       });
     });
-    const result = await mergedStream(
-      streams,
-      [
-        args.sortBy?.field !== "createdAt" && args.sortBy?.field,
-        "_creationTime",
-      ].flatMap((f) => (f ? [f] : []))
-    ).paginate(paginationOpts);
+    // Every stream uses the same index, ordered by its fields after the
+    // equality ones, e.g. expiresAt then _creationTime for userId_expiresAt.
+    // The merge has to follow that order.
+    const { index: streamIndex, values: streamValues } =
+      findIndex(schema, {
+        ...args,
+        where: args.where
+          ?.filter((w) => !isEqNull(w))
+          .map((w) =>
+            w === inWhere ? { ...w, operator: "eq" as const, value: "" } : w
+          ),
+      }) ?? {};
+    const orderFields =
+      streamIndex && streamIndex.indexDescriptor !== "by_creation_time"
+        ? streamIndex.fields.slice(streamValues?.eq.length ?? 0)
+        : ["_creationTime"];
+    const result = await mergedStream(streams, orderFields).paginate(
+      paginationOpts
+    );
     return {
       ...result,
       page: result.page.map((doc) => selectFields(doc, args.select)),
     };
   }
 
+  if (await sortsInMemory()) {
+    return await sortInMemory();
+  }
   const query = generateQuery(ctx, schema, args);
   const result = await query.paginate(paginationOpts);
   return {

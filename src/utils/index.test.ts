@@ -47,15 +47,20 @@ describe("getToken", () => {
     const sent = sentHeaders(fetchSpy);
     expect(sent.get("host")).toBe(new URL(SITE_URL).host);
     expect(sent.get("x-forwarded-host")).toBeNull();
+    expect(sent.get("x-forwarded-proto")).toBeNull();
     expect(sent.get("x-better-auth-forwarded-host")).toBe("app.example.com");
     expect(sent.get("x-better-auth-forwarded-proto")).toBe("https");
   });
 
-  it("keeps an existing x-better-auth-forwarded-host", async () => {
+  // The platform sets x-forwarded-*; anyone can send x-better-auth-forwarded-*
+  // to the app, so the platform's values win, as in the framework handlers
+  it("replaces a client-sent x-better-auth-forwarded-host", async () => {
     const fetchSpy = setup();
     const headers = new Headers({
-      "x-forwarded-host": "proxy.internal.example.com",
-      "x-better-auth-forwarded-host": "app.example.com",
+      "x-forwarded-host": "app.example.com",
+      "x-forwarded-proto": "https",
+      "x-better-auth-forwarded-host": "spoofed.example.com",
+      "x-better-auth-forwarded-proto": "http",
     });
 
     await getToken(SITE_URL, headers);
@@ -63,6 +68,21 @@ describe("getToken", () => {
     const sent = sentHeaders(fetchSpy);
     expect(sent.get("x-forwarded-host")).toBeNull();
     expect(sent.get("x-better-auth-forwarded-host")).toBe("app.example.com");
+    expect(sent.get("x-better-auth-forwarded-proto")).toBe("https");
+  });
+
+  it("drops a client-sent x-better-auth-forwarded-host with no platform header", async () => {
+    const fetchSpy = setup();
+    const headers = new Headers({
+      "x-better-auth-forwarded-host": "spoofed.example.com",
+      "x-better-auth-forwarded-proto": "http",
+    });
+
+    await getToken(SITE_URL, headers);
+
+    const sent = sentHeaders(fetchSpy);
+    expect(sent.get("x-better-auth-forwarded-host")).toBeNull();
+    expect(sent.get("x-better-auth-forwarded-proto")).toBeNull();
   });
 
   it("does not add forwarding headers when none were sent", async () => {
@@ -124,7 +144,19 @@ const signUpJwt = async (
     })
   );
   expect(res.status).toBe(200);
-  const jwt = res.headers
+  // The convex plugin sets the JWT cookie from /get-session, like Better
+  // Auth's jwt plugin signs its JWT there and not on sign-in
+  const session = await auth.handler(
+    new Request(`${site}/api/auth/get-session`, {
+      headers: {
+        cookie: res.headers
+          .getSetCookie()
+          .map((cookie) => cookie.split(";")[0])
+          .join("; "),
+      },
+    })
+  );
+  const jwt = session.headers
     .getSetCookie()
     .map((cookie) => /better-auth\.convex_jwt=([^;]+)/.exec(cookie)?.[1])
     .find(Boolean);

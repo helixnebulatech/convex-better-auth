@@ -92,7 +92,12 @@ export const indexFields = {
     ["connectionRecordId", "status"],
   ],
   scimProjectionGrant: [["provisioningDomainId", "userId"]],
-  scimUser: [["provisioningDomainId", "userId"]],
+  // /Users and /Groups list a connection's resources sorted by orderKey
+  scimGroup: [["connectionId", "orderKey"]],
+  scimUser: [
+    ["provisioningDomainId", "userId"],
+    ["connectionId", "orderKey"],
+  ],
 };
 
 // Tables where Better Auth creates rows with an id it chooses (forceAllowId)
@@ -133,6 +138,12 @@ const specialFields = (tables: BetterAuthDBSchema) =>
       )
   );
 
+// Order of equality fields in generated table-level indexes, and in which the
+// adapter looks them up. Code unit order, so it doesn't depend on the locale
+// of the machine that generates the schema or of the Convex runtime.
+export const compareFieldNames = (a: string, b: string) =>
+  a < b ? -1 : a > b ? 1 : 0;
+
 const mergedIndexFields = (tables: BetterAuthDBSchema) =>
   Object.fromEntries(
     Object.entries(tables).map(([key, table]) => {
@@ -142,7 +153,7 @@ const mergedIndexFields = (tables: BetterAuthDBSchema) =>
       const tableIndexes = (table.indexes ?? []).map((index) => {
         const fields = index.fields
           .map((i) => table.fields[i]?.fieldName ?? i)
-          .sort();
+          .sort(compareFieldNames);
         return fields.length === 1 ? fields[0]! : fields;
       });
       const manualIndexes = (

@@ -12,6 +12,7 @@ the latest Better Auth without waiting for upstream releases.
 | 0.13.4 | `>=1.7.5 <1.8.0` | 0.13.3 + dates returned to Better Auth as `Date` objects                       |
 | 0.13.5 | `>=1.7.5 <1.8.0` | 0.13.4 + missing indexes, single row lookups without an index                  |
 | 0.13.6 | `>=1.7.5 <1.8.0` | 0.13.5 + upstream `0.12.6`, ids chosen by Better Auth, tested with 1.7.13      |
+| 0.13.7 | `>=1.7.5 <1.8.0` | 0.13.6 + fixes from a full review: JWT on sign-in, forwarded headers, adapter  |
 
 ## Use it in an app
 
@@ -19,9 +20,9 @@ Install it under the upstream name with a package alias, so no imports change:
 
 ```sh
 # npm
-npm install @convex-dev/better-auth@npm:@helixnebulatech/convex-better-auth@^0.13.6 better-auth@~1.7.13
+npm install @convex-dev/better-auth@npm:@helixnebulatech/convex-better-auth@^0.13.7 better-auth@~1.7.13
 # pnpm
-pnpm add @convex-dev/better-auth@npm:@helixnebulatech/convex-better-auth@^0.13.6 better-auth@~1.7.13
+pnpm add @convex-dev/better-auth@npm:@helixnebulatech/convex-better-auth@^0.13.7 better-auth@~1.7.13
 ```
 
 Then follow the
@@ -81,7 +82,8 @@ web origin.
     only be redeemed by that browser. An OAuth session is only handed back to
     the app that started the flow, at `siteUrl` or an exact entry of
     `trustedOrigins`, like `oauth-popup`. A magic link session is only handed to
-    `siteUrl`.
+    `siteUrl`, and so is the session created when an email verification link
+    signs the user in.
   - `jwtCache`: the cached JWT is verified, and `isAuthenticated()` always
     checks the session.
   - `verbose` header logs redact cookies and tokens. Better Auth's adapter debug
@@ -90,12 +92,20 @@ web origin.
     fields.
   - Null comparisons match Better Auth's SQL adapters.
   - The Next.js example and docs snippets no longer expose other users' data.
+  - The Convex JWT is signed only where Better Auth's `jwt` plugin signs, never
+    on sign-in, so a plugin that holds a sign-in back, such as `twoFactor`,
+    can't leave a JWT behind whatever the plugin order.
+  - The component sets `x-forwarded-*` itself on every request, only for exact
+    trusted origins, since a self-hosted Convex backend passes a client's
+    through. `getToken` takes the forwarded host only from the platform's
+    headers.
   - Where the component behaves as Better Auth does on purpose (magic links
     aren't tied to a browser, adapter calls without a `where` clause), the
     [security notes](./docs/content/docs/security.mdx) document it. See
     [SECURITY.md](./SECURITY.md) to report a vulnerability.
-- Indexes and lookups, from our own audit of every lookup Better Auth 1.7 and
-  its official plugins make:
+- Indexes and lookups, from our own audit of the lookups Better Auth 1.7 and its
+  official plugins make. A later review found lookups it missed, the OAuth
+  provider's consent check and the SCIM lists, fixed in 0.13.7:
   - Indexes for lookups that had none, such as the credential account lookup
     added in Better Auth 1.7 and listing a user's active sessions.
   - Schema generation indexes the fields Better Auth marks with `index: true`,
@@ -117,6 +127,21 @@ web origin.
   rely on the primary key to reject a duplicate. The `verification` and
   `oauthClientAssertion` tables keep that id in an indexed `customId` field, and
   the component enforces it like a primary key.
+- Plugin endpoint keys are unique across Better Auth's official plugins, as
+  theirs are. Better Auth merges every plugin's endpoints by key, so a shared
+  key silently replaced the other plugin's endpoint:
+  - Cross domain used `verifyOneTimeToken`, the key of Better Auth's
+    `oneTimeToken` plugin, and its token storage. With both plugins, one of the
+    two verify endpoints disappeared, and the official one could redeem an OAuth
+    one-time token without the browser's verifier.
+  - The Convex plugin used `getToken` and `getJwks`, the keys of Better Auth's
+    `jwt` plugin, and `getOpenIdConfig`, the key of `oauthProvider`, which needs
+    `jwt`. With either plugin, one of the token, JWKS or discovery endpoints
+    disappeared, and without the Convex ones Convex can't validate its JWT.
+- Database adapter behaviour matching Better Auth's SQL adapters: null unique
+  fields don't conflict, `sortBy` is honoured without an index, renamed fields
+  work in `sortBy` and `select`, and ids chosen by Better Auth are kept with
+  `generateId: "uuid"`.
 - Not taken: #400 (breaks existing data), #405 (no Better Auth flow uses it),
   #418 (breaks sync storage), #438 (caching the JWKS by default breaks key
   rotation), #445 (performance only).

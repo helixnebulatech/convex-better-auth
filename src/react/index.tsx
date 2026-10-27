@@ -1,5 +1,12 @@
 import type { PropsWithChildren, ReactNode } from "react";
-import { Component, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  Component,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import type { AuthTokenFetcher } from "convex/browser";
 import {
   Authenticated,
@@ -63,7 +70,9 @@ export function ConvexBetterAuthProvider({
         const authClientWithCrossDomain =
           authClient as AuthClientWithPlugins<PluginsWithCrossDomain>;
         url.searchParams.delete("ott");
-        window.history.replaceState({}, "", url);
+        // Keep the router's history state (TanStack Router and the Next.js
+        // app router store theirs there)
+        window.history.replaceState(window.history.state, "", url);
         const result =
           await authClientWithCrossDomain.crossDomain.oneTimeToken.verify({
             token,

@@ -4,63 +4,18 @@ import { betterAuth } from "better-auth/minimal";
 import type { BetterAuthOptions } from "better-auth/minimal";
 import { memoryAdapter } from "better-auth/adapters/memory";
 import { admin } from "better-auth/plugins/admin";
+import { twoFactor } from "better-auth/plugins/two-factor";
 import { jwt as jwtPlugin } from "better-auth/plugins/jwt";
-import { decodeJwt } from "jose";
+import { createLocalJWKSet, decodeJwt, jwtVerify } from "jose";
 import type { MemoryDB } from "better-auth/adapters/memory";
 import { getAuthConfigProvider } from "../../auth-config.js";
 import { convex } from "./index.js";
+import type { BetterAuthPlugin } from "better-auth";
+import { createAuthEndpoint } from "better-auth/api";
 
 const authConfig = {
   providers: [{ applicationID: "convex", domain: "https://example.com" }],
 } satisfies AuthConfig;
-
-const getJwtSetCookieMatcher = () => {
-  const plugin = convex({ authConfig });
-  const afterHooks = plugin.hooks?.after ?? [];
-  const matcher = afterHooks.find((hook) => {
-    return (
-      hook.matcher({
-        path: "/sign-in/email",
-        context: { session: { id: "s1" } },
-      } as unknown as Parameters<typeof hook.matcher>[0]) &&
-      !hook.matcher({
-        path: "/sign-out",
-        context: { session: null },
-      } as unknown as Parameters<typeof hook.matcher>[0])
-    );
-  })?.matcher;
-  if (!matcher) {
-    throw new Error("Failed to find Convex JWT set-cookie after hook matcher");
-  }
-  return matcher;
-};
-
-describe("convex plugin JWT cookie refresh matcher", () => {
-  it("matches update-session", () => {
-    const matcher = getJwtSetCookieMatcher();
-    type MatcherContext = Parameters<typeof matcher>[0];
-    const ctx = {
-      path: "/update-session",
-      context: { session: { id: "s1" } },
-    };
-    expect(matcher(ctx as unknown as MatcherContext)).toBe(true);
-  });
-
-  it("matches get-session only when a session exists", () => {
-    const matcher = getJwtSetCookieMatcher();
-    type MatcherContext = Parameters<typeof matcher>[0];
-    const withSessionCtx = {
-      path: "/get-session",
-      context: { session: { id: "s1" } },
-    };
-    const withoutSessionCtx = {
-      path: "/get-session",
-      context: { session: null },
-    };
-    expect(matcher(withSessionCtx as unknown as MatcherContext)).toBe(true);
-    expect(matcher(withoutSessionCtx as unknown as MatcherContext)).toBe(false);
-  });
-});
 
 describe("convex plugin OpenID configuration", () => {
   it("serves issuer and jwks_uri for the Convex site", async () => {
@@ -171,8 +126,15 @@ describe("convex plugin static JWKS", async () => {
     const res = await request(auth, "/convex/token", { headers: { cookie } });
     expect(res.status).toBe(200);
     expect(kidOf((await res.json()).token)).toBe(newer.id);
-    // The sign-in hook swallows token errors, so this fails silently
-    expect(setCookies.some((c) => c.includes("convex_jwt=ey"))).toBe(true);
+    // The get-session hook swallows token errors, so this fails silently
+    const session = await request(auth, "/get-session", {
+      headers: { cookie },
+    });
+    expect(
+      session.headers.getSetCookie().some((c) => c.includes("convex_jwt=ey"))
+    ).toBe(true);
+    // Sign-up doesn't sign one, like Better Auth's jwt plugin
+    expect(setCookies.some((c) => c.includes("convex_jwt=ey"))).toBe(false);
   });
 
   it("serves keys with expiresAt and drops expired ones", async () => {
@@ -297,9 +259,14 @@ describe("convex plugin default JWT payload", () => {
         headers: { cookie: cookiesOf(signIn) },
       })
     );
+    const session = await ours.handler(
+      new Request(`${baseURL}/api/auth/get-session`, {
+        headers: { cookie: cookiesOf(signIn) },
+      })
+    );
+    expect(signUp.status).toBe(200);
     const tokens = {
-      signUpCookie: jwtCookieOf(signUp)!,
-      signInCookie: jwtCookieOf(signIn)!,
+      getSessionCookie: jwtCookieOf(session)!,
       tokenEndpoint: (await tokenRes.json()).token,
     };
     for (const token of Object.values(tokens)) {
@@ -312,8 +279,317 @@ describe("convex plugin default JWT payload", () => {
       convex({ authConfig: { providers: [getAuthConfigProvider()] } }),
     ]);
     const signUp = await post(auth, "/sign-up/email", credentials);
-    const claims = decodeJwt(jwtCookieOf(signUp)!);
+    const session = await auth.handler(
+      new Request(`${baseURL}/api/auth/get-session`, {
+        headers: { cookie: cookiesOf(signUp) },
+      })
+    );
+    const claims = decodeJwt(jwtCookieOf(session)!);
     expect(typeof claims.createdAt).toBe("number");
     expect(typeof claims.updatedAt).toBe("number");
+  });
+});
+
+describe("convex plugin with Better Auth's jwt plugin", () => {
+  const build = (order: "convex,jwt" | "jwt,convex") => {
+    process.env.CONVEX_SITE_URL = baseURL;
+    const db: MemoryDB = {
+      user: [],
+      session: [],
+      account: [],
+      verification: [],
+      jwks: [],
+    };
+    const convexPlugin = convex({
+      authConfig: { providers: [getAuthConfigProvider()] },
+    });
+    const auth = betterAuth({
+      baseURL,
+      secret: "test-secret-at-least-thirty-two-characters-long",
+      emailAndPassword: { enabled: true },
+      logger: { disabled: true },
+      database: (options: BetterAuthOptions) => {
+        const adapter = memoryAdapter(db)(options);
+        return {
+          ...adapter,
+          options: { ...adapter.options, isRunMutationCtx: true },
+        };
+      },
+      plugins:
+        order === "convex,jwt"
+          ? [convexPlugin, jwtPlugin()]
+          : [jwtPlugin(), convexPlugin],
+    });
+    return { auth, db };
+  };
+  const signedIn = async (auth: ReturnType<typeof build>["auth"]) => {
+    const signUp = await auth.handler(
+      new Request(`${baseURL}/api/auth/sign-up/email`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          email: "both@example.com",
+          password: "testpassword123",
+          name: "Both",
+        }),
+      })
+    );
+    const cookie = signUp.headers
+      .getSetCookie()
+      .map((c) => c.split(";")[0])
+      .join("; ");
+    return (path: string) =>
+      auth.handler(
+        new Request(`${baseURL}/api/auth${path}`, { headers: { cookie } })
+      );
+  };
+
+  // Either plugin may create the first key in the shared jwks table
+  for (const order of ["convex,jwt", "jwt,convex"] as const) {
+    for (const firstKey of ["/convex/jwks", "/jwks"]) {
+      it(`keeps both plugins working with ${order}, first key from ${firstKey}`, async () => {
+        const { auth } = build(order);
+        const get = await signedIn(auth);
+        expect((await get(firstKey)).status).toBe(200);
+        for (const path of [
+          "/convex/token",
+          "/convex/jwks",
+          "/convex/.well-known/openid-configuration",
+          "/token",
+          "/jwks",
+        ]) {
+          const res = await get(path);
+          expect(res.status, `${path}: ${await res.clone().text()}`).toBe(200);
+        }
+        // Convex only accepts the algorithm in its auth config, RS256
+        const convexJwks = await (await get("/convex/jwks")).json();
+        expect(convexJwks.keys.map((k: { alg: string }) => k.alg)).toEqual([
+          "RS256",
+        ]);
+        const { token: convexToken } = await (
+          await get("/convex/token")
+        ).json();
+        await expect(
+          jwtVerify(convexToken, createLocalJWKSet(convexJwks), {
+            algorithms: ["RS256"],
+          })
+        ).resolves.toBeTruthy();
+        // The jwt plugin signs with its latest key of any algorithm when it has
+        // none in its own, as Better Auth does, and its JWKS publishes it
+        const { token } = await (await get("/token")).json();
+        await expect(
+          jwtVerify(token, createLocalJWKSet(await (await get("/jwks")).json()))
+        ).resolves.toBeTruthy();
+      });
+    }
+  }
+
+  it("rotates and exports only the Convex keys", async () => {
+    const { auth, db } = build("jwt,convex");
+    const get = await signedIn(auth);
+    await get("/jwks");
+    await get("/convex/token");
+    const otherKeys = () =>
+      (db.jwks as { id: string; alg: string }[])
+        .filter((k) => k.alg !== "RS256")
+        .map((k) => k.id);
+    const before = otherKeys();
+    expect(before).toHaveLength(1);
+    const rotated = await auth.api.rotateKeys();
+    expect(otherKeys()).toEqual(before);
+    expect(rotated).toHaveLength(1);
+    expect(rotated[0].alg).toBe("RS256");
+    // A newer key of the jwt plugin isn't exported as the Convex key
+    db.jwks.push({
+      ...db.jwks.find((k: { alg: string }) => k.alg !== "RS256"),
+      id: "newer-eddsa",
+      createdAt: new Date(Date.now() + 60_000),
+    });
+    const latest = await auth.api.getLatestJwks();
+    expect(latest[0].id).toBe(rotated[0].id);
+    expect(latest[0].alg).toBe("RS256");
+  });
+});
+
+describe("convex plugin JWT cookie", () => {
+  const build = (order: "convex,twoFactor" | "twoFactor,convex") => {
+    process.env.CONVEX_SITE_URL = baseURL;
+    const db: MemoryDB = {
+      user: [],
+      session: [],
+      account: [],
+      verification: [],
+      jwks: [],
+      twoFactor: [],
+    };
+    const convexPlugin = convex({
+      authConfig: { providers: [getAuthConfigProvider()] },
+    });
+    const auth = betterAuth({
+      baseURL,
+      secret: "test-secret-at-least-thirty-two-characters-long",
+      emailAndPassword: { enabled: true },
+      logger: { disabled: true },
+      database: (options: BetterAuthOptions) => {
+        const adapter = memoryAdapter(db)(options);
+        return {
+          ...adapter,
+          options: { ...adapter.options, isRunMutationCtx: true },
+        };
+      },
+      plugins:
+        order === "convex,twoFactor"
+          ? [convexPlugin, twoFactor()]
+          : [twoFactor(), convexPlugin],
+    });
+    return { auth, db };
+  };
+  const call = (
+    auth: ReturnType<typeof build>["auth"],
+    path: string,
+    { body, cookie }: { body?: object; cookie?: string } = {}
+  ) =>
+    auth.handler(
+      new Request(`${baseURL}/api/auth${path}`, {
+        method: body ? "POST" : "GET",
+        headers: {
+          "content-type": "application/json",
+          ...(cookie ? { cookie } : {}),
+        },
+        ...(body ? { body: JSON.stringify(body) } : {}),
+      })
+    );
+  const credentials = {
+    email: "jwt@example.com",
+    password: "testpassword123",
+  };
+  const cookiesOf = (res: Response) =>
+    res.headers
+      .getSetCookie()
+      .map((c) => c.split(";")[0])
+      .join("; ");
+  const jwtOf = (res: Response) =>
+    /better-auth\.convex_jwt=([^;]*)/.exec(
+      res.headers.getSetCookie().join("\n")
+    )?.[1];
+
+  for (const order of ["convex,twoFactor", "twoFactor,convex"] as const) {
+    it(`signs no JWT while 2FA is pending, with ${order}`, async () => {
+      const { auth, db } = build(order);
+      await call(auth, "/sign-up/email", {
+        body: { ...credentials, name: "JWT" },
+      });
+      db.user[0]!.twoFactorEnabled = true;
+      db.twoFactor.push({
+        id: "tf",
+        userId: db.user[0]!.id,
+        secret: "secret",
+        backupCodes: "codes",
+        verified: true,
+      });
+      const signIn = await call(auth, "/sign-in/email", { body: credentials });
+      expect((await signIn.json()).twoFactorRedirect).toBe(true);
+      expect(jwtOf(signIn) ?? "").toBe("");
+    });
+  }
+
+  it("drops the previous JWT on sign-in and sets one from get-session", async () => {
+    const { auth } = build("twoFactor,convex");
+    await call(auth, "/sign-up/email", {
+      body: { ...credentials, name: "JWT" },
+    });
+    const signIn = await call(auth, "/sign-in/email", {
+      body: credentials,
+      cookie: "better-auth.convex_jwt=previous-user-jwt",
+    });
+    expect(signIn.status).toBe(200);
+    expect(jwtOf(signIn)).toBe("");
+    const session = await call(auth, "/get-session", {
+      cookie: cookiesOf(signIn),
+    });
+    expect(jwtOf(session)).toMatch(/^ey/);
+    const token = await call(auth, "/convex/token", {
+      cookie: cookiesOf(signIn),
+    });
+    expect(jwtOf(token)).toMatch(/^ey/);
+    expect((await token.json()).token).toMatch(/^ey/);
+  });
+
+  it("signs no JWT for an expired session", async () => {
+    const { auth, db } = build("twoFactor,convex");
+    const signUp = await call(auth, "/sign-up/email", {
+      body: { ...credentials, name: "JWT" },
+    });
+    db.session[0]!.expiresAt = new Date(Date.now() - 1000);
+    const session = await call(auth, "/get-session", {
+      cookie: cookiesOf(signUp),
+    });
+    expect(await session.json()).toBeNull();
+    expect(jwtOf(session)).toBe("");
+    expect(
+      (await call(auth, "/convex/token", { cookie: cookiesOf(signUp) })).status
+    ).toBe(401);
+  });
+});
+
+describe("convex plugin in query context", () => {
+  // Queries can't write, so the plugin turns adapter writes into no-ops
+  // there. Atomic writes return null, as when no row matches.
+  it("turns consumeOne and incrementOne into no-ops", async () => {
+    process.env.CONVEX_SITE_URL = baseURL;
+    const db: MemoryDB = {
+      user: [],
+      session: [],
+      account: [],
+      verification: [
+        {
+          id: "v1",
+          identifier: "id-1",
+          value: "1",
+          expiresAt: new Date(Date.now() + 60_000),
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+      ],
+      jwks: [],
+    };
+    const probe = {
+      id: "query-ctx-probe",
+      endpoints: {
+        queryCtxProbe: createAuthEndpoint(
+          "/query-ctx-probe",
+          { method: "GET" },
+          async (ctx) => {
+            const consumed = await ctx.context.adapter.consumeOne({
+              model: "verification",
+              where: [{ field: "id", value: "v1" }],
+            });
+            const incremented = await ctx.context.adapter.incrementOne({
+              model: "verification",
+              where: [{ field: "id", value: "v1" }],
+              field: "value",
+              by: 1,
+            } as any);
+            return ctx.json({ consumed, incremented });
+          }
+        ),
+      },
+    } satisfies BetterAuthPlugin;
+    const auth = betterAuth({
+      baseURL,
+      secret: "test-secret-at-least-thirty-two-characters-long",
+      logger: { disabled: true },
+      // Not marked as running in a mutation ctx
+      database: memoryAdapter(db),
+      plugins: [
+        convex({ authConfig: { providers: [getAuthConfigProvider()] } }),
+        probe,
+      ],
+    });
+    const res = await auth.handler(
+      new Request(`${baseURL}/api/auth/query-ctx-probe`)
+    );
+    expect(await res.json()).toEqual({ consumed: null, incremented: null });
+    expect(db.verification).toHaveLength(1);
   });
 });

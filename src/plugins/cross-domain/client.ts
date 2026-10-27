@@ -108,13 +108,24 @@ const startOAuthRedirect = (
   // browsers send `Origin: null` under a strict referrer policy such as
   // no-referrer. Only change the page's policy if the app opted in.
   if (setReferrerPolicy) {
-    const referrer = document.createElement("meta");
+    // Reuse the tag from an earlier sign-in. Appending moves it last, and
+    // the last referrer meta tag inserted sets the page's policy.
+    const referrer =
+      document.querySelector?.<HTMLMetaElement>(
+        'meta[name="referrer"][data-better-auth]'
+      ) ?? document.createElement("meta");
     referrer.name = "referrer";
     referrer.content = "strict-origin-when-cross-origin";
+    referrer.setAttribute?.("data-better-auth", "");
     document.head.appendChild(referrer);
   } else {
-    const metaPolicy = document
-      .querySelector?.('meta[name="referrer"]')
+    // The last referrer meta tag sets the policy
+    const metaTags = document.querySelectorAll?.('meta[name="referrer"]');
+    const metaPolicy = (
+      metaTags?.length
+        ? metaTags[metaTags.length - 1]
+        : document.querySelector?.('meta[name="referrer"]')
+    )
       ?.getAttribute("content")
       ?.trim()
       .toLowerCase();
@@ -328,6 +339,15 @@ export const crossDomainClient = (
             if (!storage) {
               return;
             }
+            // Used up only once a redemption succeeds, so a failed one can be
+            // retried
+            if (
+              context.request.url
+                .toString()
+                .includes("/cross-domain/one-time-token/verify")
+            ) {
+              await storage.setItem(oauthVerifierName, "");
+            }
             const setCookie = context.response.headers.get(
               "set-better-auth-cookie"
             );
@@ -368,7 +388,15 @@ export const crossDomainClient = (
             ) {
               const data = context.data;
               storage.setItem(localCacheName, JSON.stringify(data));
-              if (data === null) {
+              // The stored cookie changed while this request was in flight,
+              // eg. a one-time token was redeemed: the null answer is about
+              // the cookie sent, so it must not clear the new session
+              const sentCookie =
+                context.request.headers?.get?.("better-auth-cookie") ?? null;
+              const cookieChanged =
+                sentCookie !== null &&
+                sentCookie !== getCookie(storage.getItem(cookieName) || "{}");
+              if (data === null && !cookieChanged) {
                 // Preserve non-session cookies (e.g. two_factor) when
                 // get-session returns null during 2FA pending state.
                 // Previously this unconditionally set cookieName to "{}",
@@ -423,7 +451,6 @@ export const crossDomainClient = (
                   ? JSON.parse(options.body)
                   : (options.body ?? {});
               options.body = { ...body, verifier };
-              await storage.setItem(oauthVerifierName, "");
             }
           }
           if (url.includes("/sign-out")) {

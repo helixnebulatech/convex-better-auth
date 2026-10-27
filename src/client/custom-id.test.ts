@@ -17,7 +17,7 @@ const BASE = "http://localhost:3000/api/auth";
 // the Drizzle, Prisma, Kysely and MongoDB adapters do. Convex picks _id
 // itself, so the adapter keeps the chosen id in customId and enforces it.
 describe("ids chosen by Better Auth", () => {
-  const setup = () => {
+  const setup = (generateId?: "uuid") => {
     const t = convexTest(schema, import.meta.glob("../component/**/*.*s"));
     const ctx = {
       runQuery: t.query.bind(t),
@@ -33,6 +33,7 @@ describe("ids chosen by Better Auth", () => {
       database: client.adapter(ctx),
       emailAndPassword: { enabled: true },
       logger: { disabled: true },
+      ...(generateId ? { advanced: { database: { generateId } } } : {}),
       plugins: [
         magicLink({
           sendMagicLink: async ({ url }) => {
@@ -95,21 +96,62 @@ describe("ids chosen by Better Auth", () => {
     });
   });
 
-  it("reserves a verification value once", async () => {
+  // Better Auth derives a UUID for the chosen id in this mode, which the SQL
+  // adapters keep as the primary key
+  for (const generateId of [undefined, "uuid"] as const) {
+    it(`reserves a verification value once${generateId ? ` with generateId: ${generateId}` : ""}`, async () => {
+      const { auth } = setup(generateId);
+      const { internalAdapter } = await auth.$context;
+      const reserve = () =>
+        internalAdapter.reserveVerificationValue({
+          identifier: "siwe-email-claim-a@example.com",
+          value: "0xabc",
+          expiresAt: new Date(Date.now() + 60_000),
+        });
+      expect(await reserve()).toBe(true);
+      expect(await reserve()).toBe(false);
+      await internalAdapter.deleteVerificationByIdentifier(
+        "siwe-email-claim-a@example.com"
+      );
+      expect(await reserve()).toBe(true);
+    });
+  }
+
+  it("matches the chosen id in ne and not_in, like a primary key", async () => {
     const { auth } = setup();
-    const { internalAdapter } = await auth.$context;
-    const reserve = () =>
-      internalAdapter.reserveVerificationValue({
-        identifier: "siwe-email-claim-a@example.com",
-        value: "0xabc",
-        expiresAt: new Date(Date.now() + 60_000),
-      });
-    expect(await reserve()).toBe(true);
-    expect(await reserve()).toBe(false);
-    await internalAdapter.deleteVerificationByIdentifier(
-      "siwe-email-claim-a@example.com"
-    );
-    expect(await reserve()).toBe(true);
+    const { adapter } = await auth.$context;
+    const chosenId = "Y2hvc2VuLWlkLWZvci10aGUtbmUtdGVzdA";
+    await adapter.create({
+      model: "verification",
+      data: { ...verificationRow, id: chosenId },
+      forceAllowId: true,
+    });
+    const other = await adapter.create<{ id: string }>({
+      model: "verification",
+      data: { ...verificationRow, identifier: "other" },
+    });
+    const ids = async (operator: "ne" | "not_in" | "eq" | "in") =>
+      (
+        await adapter.findMany<{ id: string }>({
+          model: "verification",
+          where: [
+            {
+              field: "id",
+              operator,
+              value:
+                operator === "in" || operator === "not_in"
+                  ? [chosenId]
+                  : chosenId,
+            },
+            { field: "value", value: verificationRow.value },
+          ],
+        })
+      ).map((row) => row.id);
+    expect(await ids("ne")).toEqual([other.id]);
+    expect(await ids("not_in")).toEqual([other.id]);
+    expect(await ids("eq")).not.toContain(other.id);
+    expect(await ids("in")).not.toContain(other.id);
+    expect(await ids("eq")).toHaveLength(1);
   });
 
   it("fails closed on a table without customId", async () => {

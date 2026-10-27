@@ -133,3 +133,38 @@ describe("convexBetterAuthReactStart jwtCache retry", () => {
     expect(tokenCalls).toHaveLength(1);
   });
 });
+
+describe("convexBetterAuthReactStart isAuthenticated", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("checks the session with the server even with a cached cookie JWT", async () => {
+    requestHeaders.current = new Headers({
+      cookie: `better-auth.session_token=session; better-auth.convex_jwt=${cookieJwt}`,
+    });
+    // Like /convex/token, a token only for a request carrying the session
+    const tokenCookies: (string | null)[] = [];
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      const cookie = new Headers(init?.headers).get("cookie");
+      tokenCookies.push(cookie);
+      expect(String(input)).toBe(`${SITE_URL}/api/auth/convex/token`);
+      return cookie?.includes("better-auth.session_token=session")
+        ? json({ token: "fresh-token" })
+        : new Response(null, { status: 401 });
+    });
+    await expect(setup().isAuthenticated()).resolves.toBe(true);
+    expect(tokenCookies).toHaveLength(1);
+    expect(tokenCookies[0]).toContain("better-auth.session_token=session");
+  });
+
+  it("is false when the server has no session, despite the cached JWT", async () => {
+    requestHeaders.current = new Headers({
+      cookie: `better-auth.convex_jwt=${cookieJwt}`,
+    });
+    vi.spyOn(globalThis, "fetch").mockImplementation(
+      async () => new Response(null, { status: 401 })
+    );
+    await expect(setup().isAuthenticated()).resolves.toBe(false);
+  });
+});
