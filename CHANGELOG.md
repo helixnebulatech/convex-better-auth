@@ -1,5 +1,44 @@
 # Changelog
 
+## 0.13.8
+
+### Patch Changes
+
+- b3be041: Adapter: an empty `in` list matches no rows, as in SQL and Better
+  Auth's memory adapter, instead of throwing "Cannot union empty array of
+  streams" on fields without a unique index. A second `in` clause is checked
+  when the query uses an index, instead of being ignored, so `findMany`,
+  `updateMany` and `deleteMany` no longer match rows outside it.
+- b3be041: `clientApi().getAuthUser`, a public query, returned the whole user
+  document, including fields marked `returned: false`, which Better Auth never
+  sends to a client (`parseUserOutput` on `/get-session`). Pass `createAuth` to
+  `clientApi(createAuth)` and the query filters the user with Better Auth's
+  `parseUserOutput` and your options. Without it the component can't know which
+  fields your options hide, so it only returns the core Better Auth user fields
+  and the Convex document fields. This is stricter than Better Auth instead of
+  looser, and `AuthBoundary`, the query's only user, doesn't read the user. The
+  other option, requiring `createAuth`, would break every app on a patch
+  release.
+- b3be041: Cross domain: the `Better-Auth-Cookie` header is merged into an
+  existing `Cookie` header with `; `. It was appended with `headers.append`,
+  which joins values with `, ` in some runtimes, so the session token could be
+  lost when a server-side caller sent both headers. The cookies are now parsed
+  and set one by one with Better Auth's `setRequestCookie`, as its `bearer`
+  plugin does. A cookie in `Better-Auth-Cookie` replaces one with the same name
+  in `Cookie`, like the bearer token does.
+- b3be041: Release workflow: publishing runs in the protected `Release`
+  environment, and a manual normal release only runs from `main`, like Better
+  Auth's release workflow. Vercel's AI SDK workflow, which ours started from,
+  has neither, so a collaborator or a leaked token could run it on an unreviewed
+  branch and publish it with valid provenance. Only the environment, required by
+  npm trusted publishing, stops this, as a branch can edit the workflow's own
+  checks.
+- 304f379: Release workflow: only the job that publishes runs in the protected
+  `Release` environment, with read-only contents and the npm OIDC token. Opening
+  the "Version Packages" pull request and creating the GitHub release run in
+  separate jobs outside it, and the optional auto-merge with a personal token is
+  gone.
+
 ## 0.13.7
 
 ### Patch Changes
