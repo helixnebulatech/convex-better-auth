@@ -18,31 +18,27 @@ concurrency:
   group: "release-${{ github.ref_name }}"
   cancel-in-progress: false
 
-permissions:
-  contents: read
+permissions: {}
 
 jobs:
-  release:
-    name: Release
+  # Opens or updates the "Version Packages" pull request while there are
+  # changesets. No environment: it never publishes, so it needs no approval
+  # and never holds the npm OIDC token.
+  version:
+    name: Version Packages PR
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 15
     permissions:
-      # npm trusted publishing (OIDC) and provenance
-      id-token: write
       contents: write
       pull-requests: write
       # dispatch CI for the "Version Packages" pull request
       actions: write
-    # Like Better Auth's release workflow: publishing runs in the protected
-    # "Release" environment, which npm trusted publishing requires, and a
-    # manual normal release only runs from main. Snapshots can run from any
-    # branch, still through the environment.
-    environment: Release
-    # do not attempt running in forks
+    # do not attempt running in forks; a manual normal release only from main
     if: >
-      github.repository_owner == 'helixnebulatech' && (github.event_name !=
-      'workflow_dispatch' || inputs.snapshot == true || github.ref ==
-      'refs/heads/main')
+      github.repository_owner == 'helixnebulatech' && inputs.snapshot != true &&
+      github.ref == 'refs/heads/main'
+    outputs:
+      has-changesets: ${{ steps.changesets.outputs.has-changesets }}
     steps:
       - name: Checkout Repo
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -62,31 +58,20 @@ jobs:
       - name: Install Dependencies
         run: pnpm install --frozen-lockfile
 
-      # Normal release path. Opens or updates the "Version Packages" pull
-      # request while there are changesets, and publishes once it is merged.
-      - name: Create Release Pull Request or Publish to npm
-        if: inputs.snapshot != true
+      # Without a publish script the action only versions: with no changesets
+      # left it does nothing and the publish job takes over.
+      - name: Create or update the Version Packages pull request
         id: changesets
         uses: changesets/action@ae32849d5ba541f9ae29e40e22a623bc13562f51 # v2.1.2
         with:
           version-script: pnpm ci:version
-          publish-script: pnpm ci:release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Attach SLSA provenance to GitHub Releases
-        if:
-          inputs.snapshot != true && steps.changesets.outputs.published ==
-          'true'
-        run: node .github/scripts/upload-provenance.mjs
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          PUBLISHED_PACKAGES: ${{ steps.changesets.outputs.published-packages }}
 
       # Pull requests opened by GITHUB_TOKEN do not trigger workflows, so run
       # the required checks on the "Version Packages" branch explicitly.
       - name: Run checks on the release pull request
-        if: inputs.snapshot != true && steps.changesets.outputs.pr-number != ''
+        if: steps.changesets.outputs.pr-number != ''
         run: |
           gh workflow run test.yml --ref changeset-release/main
           gh workflow run verify-changesets.yml --ref changeset-release/main
@@ -94,33 +79,116 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GH_REPO: ${{ github.repository }}
 
-      # Merges the "Version Packages" pull request once the required checks
-      # pass. Uses a personal token because a merge made with GITHUB_TOKEN
-      # would not trigger this workflow again to publish.
-      - name: Enable auto-merge for the release pull request
-        if: inputs.snapshot != true && steps.changesets.outputs.pr-number != ''
-        run: |
-          if [ -z "$GH_TOKEN" ]; then
-            echo "::warning::RELEASE_BOT_TOKEN is not set; merge the Version Packages pull request manually."
-            exit 0
-          fi
-          gh pr merge "$PR_NUMBER" --auto --squash
-        env:
-          GH_TOKEN: ${{ secrets.RELEASE_BOT_TOKEN }}
-          GH_REPO: ${{ github.repository }}
-          PR_NUMBER: ${{ steps.changesets.outputs.pr-number }}
+  # Publishes once the "Version Packages" pull request is merged (no
+  # changesets left). Like Better Auth's release workflow, publishing runs in
+  # the protected "Release" environment (required reviewer, main only), which
+  # npm trusted publishing is bound to, with read-only contents and the OIDC
+  # token only.
+  publish:
+    name: Publish to npm
+    needs: version
+    if: needs.version.outputs.has-changesets == 'false'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: Release
+    permissions:
+      contents: read
+      # npm trusted publishing (OIDC) and provenance
+      id-token: write
+    outputs:
+      published-packages: ${{ steps.publish.outputs.published-packages }}
+    steps:
+      - name: Checkout Repo
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
-      # Snapshot release path
+      - name: Setup pnpm
+        uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+
+      - name: Setup Node.js 24
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+
+      - name: Install Dependencies
+        run: pnpm install --frozen-lockfile
+
+      # changeset publish only publishes a version that isn't on npm yet, so a
+      # re-run is safe. Its "New tag:" lines name what was published.
+      - name: Publish
+        id: publish
+        run: |
+          set -o pipefail
+          pnpm ci:release | tee "$RUNNER_TEMP/publish.log"
+          packages="$(sed 's/\x1b\[[0-9;]*m//g' "$RUNNER_TEMP/publish.log" | sed -n 's/.*New tag:[[:space:]]*\(.*\)@\([^@[:space:]]*\)[[:space:]]*$/{"name":"\1","version":"\2"}/p' | jq -sc '.')"
+          echo "published-packages=$packages" >> "$GITHUB_OUTPUT"
+
+  # Tag, GitHub Release and provenance for what was published, outside the
+  # environment (it needs to write, not to publish).
+  github-release:
+    name: GitHub Release
+    needs: publish
+    if: needs.publish.outputs.published-packages != '[]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout Repo
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Create GitHub Release
+        run: node .github/scripts/github-release.mjs
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          PUBLISHED_PACKAGES: ${{ needs.publish.outputs.published-packages }}
+
+      - name: Attach SLSA provenance to GitHub Releases
+        run: node .github/scripts/upload-provenance.mjs
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PUBLISHED_PACKAGES: ${{ needs.publish.outputs.published-packages }}
+
+  # Snapshot release path, also through the protected environment (and so
+  # only from main).
+  snapshot:
+    name: Snapshot Release
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: Release
+    permissions:
+      contents: read
+      id-token: write
+    if: github.repository_owner == 'helixnebulatech' && inputs.snapshot == true
+    steps:
+      - name: Checkout Repo
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+
+      - name: Setup Node.js 24
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+
+      - name: Install Dependencies
+        run: pnpm install --frozen-lockfile
+
       - name: Version Packages (snapshot)
-        if: inputs.snapshot == true
         run: |
           pnpm changeset version --snapshot "${GITHUB_SHA::8}"
           node scripts/sync-version.mjs
 
       - name: Build
-        if: inputs.snapshot == true
         run: rm -rf dist ./*.tsbuildinfo && pnpm run build
 
       - name: Publish Snapshot Release
-        if: inputs.snapshot == true
         run: pnpm changeset publish --no-git-tag --tag snapshot

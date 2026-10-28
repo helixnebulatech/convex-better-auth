@@ -215,21 +215,26 @@ ships with
    Changesets" runs until someone approves them, because a bot opened the pull
    request. Approve them from the pull request checks ("Approve and run"), then
    approve the pull request once they pass.
-4. Merging that pull request publishes to npm, and creates the git tag and the
-   GitHub release.
+4. Merge that pull request by hand. The Release workflow then starts the
+   "Publish to npm" job, which waits in the `Release` environment until you
+   approve it, and publishes. A separate "GitHub Release" job then creates the
+   git tag and the GitHub release and attaches the provenance.
 
-The Release workflow can enable auto-merge on the "Version Packages" pull
-request if the `RELEASE_BOT_TOKEN` secret holds a token allowed to merge. We
-leave it unset, so a person reviews every release before it's published. Vercel
-also merges its release pull requests by hand.
+The workflow has three jobs. "Version Packages PR" opens the pull request and
+runs its checks; it never publishes, so it needs no approval and never gets the
+npm OIDC token. "Publish to npm" is the only job in the `Release` environment,
+and it only has read access to the repo and the OIDC token. "GitHub Release"
+writes the tag and the release, outside the environment. Snapshots also run in
+the environment.
 
-The Release job runs in the `Release` GitHub environment, and npm only trusts
-the workflow when it runs there. Started by hand, a normal release only runs
-from `main`. Better Auth's release workflow does both. Vercel's AI SDK workflow,
-which ours started from, has neither: anyone with write access could run it on
-an unreviewed branch and publish that branch with valid provenance. The `if:` in
-the workflow only prevents mistakes, as a branch can edit it. The environment's
-required reviewer is what stops a publish nobody approved.
+npm only trusts the workflow when it runs in the `Release` environment, and the
+environment only accepts `main` and needs a reviewer's approval. Started by
+hand, a normal release only runs from `main`. Better Auth's release workflow
+does the same. Vercel's AI SDK workflow, which ours started from, has neither:
+anyone with write access could run it on an unreviewed branch and publish that
+branch with valid provenance. The `if:` in the workflow only prevents mistakes,
+as a branch can edit it. The environment's branch rule and required reviewer are
+what stop a publish nobody approved.
 
 To try a change before releasing it, run the Release workflow manually with
 "snapshot" checked. It publishes `0.0.0-<sha>-<timestamp>` under the `snapshot`
@@ -268,7 +273,6 @@ A ruleset protects `main`:
   ```
 
 - Create the `Release` environment under Settings > Environments, with yourself
-  as a required reviewer. Every run of the Release workflow, including the one
-  that opens the "Version Packages" pull request and snapshots, then waits for
-  that approval. Keep `RELEASE_BOT_TOKEN`, if you set it, as a secret of this
-  environment rather than of the repository.
+  as a required reviewer and "Deployment branches and tags" limited to `main`.
+  Publishing and snapshots then wait for that approval; opening the "Version
+  Packages" pull request does not.
