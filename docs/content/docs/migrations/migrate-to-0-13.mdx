@@ -525,3 +525,28 @@ another account now fails. Better Auth already refuses to sign in with a
 provider account that two accounts share, so this only stops new duplicates.
 If an app ran into `Multiple accounts match the same accountId`, delete the
 extra account rows.
+
+### Request origin
+
+The component now also sets the request URL and `Host` header Better Auth sees,
+not only `x-forwarded-*`: to your app's origin when it's listed exactly in your
+trusted origins, and otherwise to `CONVEX_SITE_URL`. On Convex's cloud nothing
+changes. A dynamic `baseURL` now gets your app's origin from the Next.js and
+TanStack Start handlers without `advanced.trustedProxyHeaders`. Hosts that only
+match a wildcard in `allowedHosts` are replaced with `CONVEX_SITE_URL`, so Better
+Auth uses the `fallback` of your `baseURL`; list them exactly.
+See [Self-hosted Convex](/security#self-hosted-convex).
+
+### Adapter debug logs
+
+`verbose: true` no longer turns on Better Auth's adapter debug logs, which print
+whole database rows, including session tokens and password hashes. To see them
+while debugging, pass `debugLogs: true` to `createClient()`.
+
+### Atomic writes in queries
+
+`auth.api` calls that run in a query and need `consumeOne` or `incrementOne`,
+such as verifying an API key with rate limiting, now throw an error naming the
+method, instead of returning no row. See
+[Calling Better Auth from a query](/basic-usage#calling-better-auth-from-a-query).
+Run them from a mutation or action.

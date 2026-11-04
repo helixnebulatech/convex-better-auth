@@ -4,15 +4,17 @@ Fork of [`get-convex/better-auth`](https://github.com/get-convex/better-auth),
 published to npm as `@helixnebulatech/convex-better-auth` so our apps can use
 the latest Better Auth without waiting for upstream releases.
 
-| Fork   | Better Auth      | Based on                                                                       |
-| ------ | ---------------- | ------------------------------------------------------------------------------ |
-| 0.13.0 | `>=1.7.5 <1.8.0` | upstream `0.12.5` + [#444](https://github.com/get-convex/better-auth/pull/444) |
-| 0.13.2 | `>=1.7.5 <1.8.0` | 0.13.0 + fixes audited from open upstream pull requests                        |
-| 0.13.3 | `>=1.7.5 <1.8.0` | 0.13.2 + security fixes                                                        |
-| 0.13.4 | `>=1.7.5 <1.8.0` | 0.13.3 + dates returned to Better Auth as `Date` objects                       |
-| 0.13.5 | `>=1.7.5 <1.8.0` | 0.13.4 + missing indexes, single row lookups without an index                  |
-| 0.13.6 | `>=1.7.5 <1.8.0` | 0.13.5 + upstream `0.12.6`, ids chosen by Better Auth, tested with 1.7.13      |
-| 0.13.7 | `>=1.7.5 <1.8.0` | 0.13.6 + fixes from a full review: JWT on sign-in, forwarded headers, adapter  |
+| Fork   | Better Auth       | Based on                                                                       |
+| ------ | ----------------- | ------------------------------------------------------------------------------ |
+| 0.13.0 | `>=1.7.5 <1.8.0`  | upstream `0.12.5` + [#444](https://github.com/get-convex/better-auth/pull/444) |
+| 0.13.2 | `>=1.7.5 <1.8.0`  | 0.13.0 + fixes audited from open upstream pull requests                        |
+| 0.13.3 | `>=1.7.5 <1.8.0`  | 0.13.2 + security fixes                                                        |
+| 0.13.4 | `>=1.7.5 <1.8.0`  | 0.13.3 + dates returned to Better Auth as `Date` objects                       |
+| 0.13.5 | `>=1.7.5 <1.8.0`  | 0.13.4 + missing indexes, single row lookups without an index                  |
+| 0.13.6 | `>=1.7.5 <1.8.0`  | 0.13.5 + upstream `0.12.6`, ids chosen by Better Auth, tested with 1.7.13      |
+| 0.13.7 | `>=1.7.5 <1.8.0`  | 0.13.6 + fixes from a full review: JWT on sign-in, forwarded headers, adapter  |
+| 0.13.8 | `>=1.7.5 <1.8.0`  | 0.13.7 + fixes from a security audit: `clientApi` output, adapter `in` clauses |
+| 0.13.9 | `>=1.7.16 <1.8.0` | 0.13.8 + fixes backported and audited from upstream `0.12.7` and `0.13.0`      |
 
 ## Use it in an app
 
@@ -20,9 +22,9 @@ Install it under the upstream name with a package alias, so no imports change:
 
 ```sh
 # npm
-npm install @convex-dev/better-auth@npm:@helixnebulatech/convex-better-auth@^0.13.7 better-auth@~1.7.13
+npm install @convex-dev/better-auth@npm:@helixnebulatech/convex-better-auth@^0.13.9 better-auth@~1.7.16
 # pnpm
-pnpm add @convex-dev/better-auth@npm:@helixnebulatech/convex-better-auth@^0.13.7 better-auth@~1.7.13
+pnpm add @convex-dev/better-auth@npm:@helixnebulatech/convex-better-auth@^0.13.9 better-auth@~1.7.16
 ```
 
 Then follow the
@@ -57,8 +59,12 @@ web origin.
 - Native `consumeOne`. Better Auth's fallback guards on `_creationTime`, which
   the component rejects, so magic links, email OTP, one-time tokens and cross
   domain sign in all failed.
-- `consumeOne`/`incrementOne` are no-ops in query context, from upstream PR
-  #430.
+- Native `incrementOne`, a component function like upstream's, so rate limits
+  and two factor lockouts don't fail under contention. Local Installs that don't
+  export it yet fall back to Better Auth's compare-and-swap with a warning.
+- Writes in query context are no-ops, from upstream PR #430, except
+  `consumeOne`/`incrementOne`, which throw: a faked miss made callers such as
+  `@better-auth/api-key` retry forever. Upstream reverted the whole change.
 - Fixes audited from the open upstream pull requests. Each bug was reproduced
   with a failing test before it was fixed, and the fix was reviewed or rewritten
   where the upstream one was wrong or incomplete:
@@ -86,8 +92,9 @@ web origin.
     signs the user in.
   - `jwtCache`: the cached JWT is verified, and `isAuthenticated()` always
     checks the session.
-  - `verbose` header logs redact cookies and tokens. Better Auth's adapter debug
-    logs, which `verbose` also turns on, still print full rows.
+  - `verbose` header logs redact cookies and tokens, and `verbose` no longer
+    turns on Better Auth's adapter debug logs, which print full rows. They have
+    their own `debugLogs` option, as upstream.
   - The sign-in JWT no longer includes `returned: false` user and session
     fields.
   - Null comparisons match Better Auth's SQL adapters.
@@ -95,17 +102,25 @@ web origin.
   - The Convex JWT is signed only where Better Auth's `jwt` plugin signs, never
     on sign-in, so a plugin that holds a sign-in back, such as `twoFactor`,
     can't leave a JWT behind whatever the plugin order.
-  - The component sets `x-forwarded-*` itself on every request, only for exact
-    trusted origins, since a self-hosted Convex backend passes a client's
-    through. `getToken` takes the forwarded host only from the platform's
-    headers.
+  - The component decides the origin Better Auth sees on every request, since a
+    self-hosted Convex backend passes a client's `Host` and `x-forwarded-*`
+    through: it sets the request URL, `Host` and `x-forwarded-*` to the app's
+    origin when it's an exact trusted origin, and otherwise to
+    `CONVEX_SITE_URL`, like upstream `0.12.7` (GHSA-9qq3-v9g3-cxhw), but
+    matching full origins exactly. `getToken` takes the forwarded host only from
+    the platform's headers.
+  - The Convex JWT cookie is also cleared when a response expires the session
+    cookie, as when `twoFactor` holds a sign-in back, so the previous user's JWT
+    doesn't stay behind.
   - Where the component behaves as Better Auth does on purpose (magic links
     aren't tied to a browser, adapter calls without a `where` clause), the
     [security notes](./docs/content/docs/security.mdx) document it. See
     [SECURITY.md](./SECURITY.md) to report a vulnerability.
 - Indexes and lookups, from our own audit of the lookups Better Auth 1.7 and its
   official plugins make. A later review found lookups it missed, the OAuth
-  provider's consent check and the SCIM lists, fixed in 0.13.7:
+  provider's consent check and the SCIM lists, fixed in 0.13.7 (the SCIM plugin
+  itself needs native transactions since Better Auth 1.7.16, so it can't be
+  used):
   - Indexes for lookups that had none, such as the credential account lookup
     added in Better Auth 1.7 and listing a user's active sessions.
   - Schema generation indexes the fields Better Auth marks with `index: true`,
@@ -139,9 +154,31 @@ web origin.
     `jwt`. With either plugin, one of the token, JWKS or discovery endpoints
     disappeared, and without the Convex ones Convex can't validate its JWT.
 - Database adapter behaviour matching Better Auth's SQL adapters: null unique
-  fields don't conflict, `sortBy` is honoured without an index, renamed fields
-  work in `sortBy` and `select`, and ids chosen by Better Auth are kept with
-  `generateId: "uuid"`.
+  fields don't conflict, `sortBy` is honoured without an index and with a range
+  on another field, renamed fields work in `sortBy` and `select`, and ids chosen
+  by Better Auth are kept with `generateId: "uuid"`. A comparison with
+  `undefined` matches no row, as Kysely binds it as `NULL`.
+- Upstream `0.12.7` and `0.13.0`: both release Better Auth 1.7 support in
+  parallel with this fork, and include fixes ported from it. Their tests were
+  run against the fork, and what they found was fixed here:
+  - Adapter: split pages are no longer read twice, `updateMany` updates a row
+    the update moves within the index once, `in` lookups with `sortBy` order
+    nulls like an index, and a second account with the same `providerId` and
+    `accountId` is rejected (stricter than SQL, since Better Auth's account
+    lookups throw on duplicates).
+  - Request origin (GHSA-9qq3-v9g3-cxhw), `debugLogs`, the 2FA JWT cookie and
+    query context atomic writes, above.
+  - The Convex plugin's discovery document describes only what it serves, with
+    the real signing algorithm.
+  - Endpoint key `verifyCrossDomainOneTimeToken`, upstream's name, and
+    `AuthClient` typed structurally, so clients with `inferAdditionalFields` are
+    accepted. The cross domain client clears a rejected session unless its token
+    changed in flight.
+  - Not taken, since Better Auth behaves as the fork does: refusing `sortBy`
+    without an index, refusing `offset` and compound unique indexes, turning off
+    `session.cookieCache`, dropping ids chosen by Better Auth, and `ne` /
+    `not_in` matching null. Upstream's cross domain plugin also hands sessions
+    to any exact trusted origin; the fork keeps its stricter rules.
 - Not taken: #400 (breaks existing data), #405 (no Better Auth flow uses it),
   #418 (breaks sync storage), #438 (caching the JWKS by default breaks key
   rotation), #445 (performance only).
