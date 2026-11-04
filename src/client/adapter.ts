@@ -47,11 +47,10 @@ const handlePagination = async (
   const onResult = (
     result: SetOptional<PaginationResult<any>, "page"> & { count?: number }
   ) => {
-    state.cursor =
-      result.pageStatus === "SplitRecommended" ||
-      result.pageStatus === "SplitRequired"
-        ? (result.splitCursor ?? result.continueCursor)
-        : result.continueCursor;
+    // The page holds every row up to continueCursor, also when Convex
+    // suggests a split. splitCursor only marks where the page could be cut in
+    // two, so resuming from it reads the second half of the page again.
+    state.cursor = result.continueCursor;
     if (result.page) {
       state.docs.push(...result.page);
       state.isDone = (limit && state.docs.length >= limit) || result.isDone;
@@ -580,45 +579,37 @@ export const convexAdapter = <
                     config.authFunctions.onUpdate
                   )) as FunctionHandle<"mutation">)
                 : undefined;
+            // Collect the matching ids first, then update by id, as SQL's
+            // UPDATE ... WHERE touches each matching row once. Patching while
+            // paginating the index the where filters on moves a row past the
+            // cursor, and the next page patched it again.
             const orWhere = splitOrWhere(data.where);
-            if (orWhere) {
-              const ids = await collectIdsForOrWhere({
-                model: data.model as string,
-                orWhere,
-              });
-              if (!ids.length) {
-                return 0;
-              }
-              const result = await handlePagination(
-                async ({ paginationOpts }) => {
-                  return await ctx.runMutation(api.adapter.updateMany, {
-                    input: {
-                      model: data.model as TableNames,
-                      where: [{ field: "_id", operator: "in", value: ids }],
-                      update: data.update,
-                    },
-                    paginationOpts,
-                    onUpdateHandle: onUpdateHandle,
-                  });
+            const ids = await collectIdsForOrWhere({
+              model: data.model as string,
+              orWhere: orWhere ?? [data.where ?? []],
+            });
+            // The where is applied again in each mutation, so a row that
+            // stopped matching since it was collected is left alone. An OR
+            // where can't be, the component only takes AND clauses.
+            const guard = orWhere ? [] : parseWhere(data.where);
+            let count = 0;
+            for (let i = 0; i < ids.length; i += 200) {
+              const chunk = ids.slice(i, i + 200);
+              const result = await ctx.runMutation(api.adapter.updateMany, {
+                input: {
+                  model: data.model as TableNames,
+                  where: [
+                    { field: "_id", operator: "in", value: chunk },
+                    ...guard,
+                  ],
+                  update: data.update,
                 },
-                { limit: ids.length }
-              );
-              return result.count ?? 0;
+                paginationOpts: { numItems: chunk.length, cursor: null },
+                onUpdateHandle: onUpdateHandle,
+              });
+              count += result.count ?? 0;
             }
-            const result = await handlePagination(
-              async ({ paginationOpts }) => {
-                return await ctx.runMutation(api.adapter.updateMany, {
-                  input: {
-                    ...data,
-                    model: data.model as TableNames,
-                    where: parseWhere(data.where),
-                  },
-                  paginationOpts,
-                  onUpdateHandle: onUpdateHandle,
-                });
-              }
-            );
-            return result.count;
+            return count;
           },
         };
       },
