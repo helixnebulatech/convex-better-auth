@@ -491,6 +491,34 @@ describe("convex plugin JWT cookie", () => {
       expect((await signIn.json()).twoFactorRedirect).toBe(true);
       expect(jwtOf(signIn) ?? "").toBe("");
     });
+
+    // twoFactor's after hook expires the session cookie and clears
+    // newSession, so with twoFactor first the convex plugin's hook sees
+    // neither a sign-out nor a new session
+    it(`drops the previous JWT when 2FA holds a sign-in, with ${order}`, async () => {
+      const { auth, db } = build(order);
+      await call(auth, "/sign-up/email", {
+        body: { ...credentials, name: "JWT" },
+      });
+      db.user[0]!.twoFactorEnabled = true;
+      db.twoFactor.push({
+        id: "tf",
+        userId: db.user[0]!.id,
+        secret: "totp-secret",
+        backupCodes: "codes",
+        verified: true,
+      });
+      const signIn = await call(auth, "/sign-in/email", {
+        body: credentials,
+        cookie: "better-auth.convex_jwt=previous-user-jwt",
+      });
+      expect((await signIn.json()).twoFactorRedirect).toBe(true);
+      const expired = signIn.headers
+        .getSetCookie()
+        .filter((c) => c.includes("better-auth.convex_jwt="));
+      expect(expired).toHaveLength(1);
+      expect(expired[0]).toMatch(/better-auth\.convex_jwt=;.*Max-Age=0/i);
+    });
   }
 
   it("drops the previous JWT on sign-in and sets one from get-session", async () => {

@@ -196,7 +196,12 @@ The Convex JWT is only signed where Better Auth's `jwt` plugin signs its own: by
 when it's also stored in the `convex_jwt` cookie. It's never signed on sign-in,
 so a plugin that holds a sign-in back, such as `twoFactor` waiting for the
 second factor, can't leave a JWT behind whatever the plugin order. A request
-that starts a new session, and sign-out, clear the cookie.
+that starts a new session, sign-out, and any response that expires the session
+cookie clear the `convex_jwt` cookie, the way Better Auth's
+`deleteSessionCookie` clears the cookies derived from the session
+(`session_data`, `account_data`). So when `twoFactor` holds a sign-in, which
+expires the session cookie, the JWT of a user who was signed in before in the
+same browser is cleared too, whatever the plugin order.
 
 ## Users returned to the client
 

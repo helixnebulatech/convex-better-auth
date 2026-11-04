@@ -84,6 +84,17 @@ const datesToMillis = (value: unknown): any => {
   return value;
 };
 
+// Whether a response expires a cookie, as Better Auth's expireCookie does:
+// an empty value with Max-Age=0
+const expiresCookie = (headers: Headers | undefined, name: string) =>
+  (headers?.getSetCookie() ?? []).some((entry) => {
+    const [pair = "", ...attributes] = entry.split(";");
+    return (
+      pair.trim() === `${name}=` &&
+      attributes.some((attribute) => /^\s*max-age=0\s*$/i.test(attribute))
+    );
+  });
+
 export const convex = (opts: {
   /**
    * @param {AuthConfig} authConfig - Auth config from your Convex project.
@@ -422,14 +433,25 @@ export const convex = (opts: {
           }),
         },
         {
-          // Sign-out, and any request that starts a new session, such as a
-          // sign-in or a 2FA verification: drop the JWT of the previous
-          // session. /get-session or /convex/token sets the new one.
+          // Sign-out, any request that starts a new session, such as a
+          // sign-in or a 2FA verification, and any response that expires
+          // the session cookie: drop the JWT of the previous session, as
+          // Better Auth's deleteSessionCookie drops the cookies derived from
+          // the session (session_data, account_data). twoFactor holds a
+          // sign-in that way, clearing newSession, so with twoFactor before
+          // this plugin the new session isn't visible here.
+          // /get-session or /convex/token sets the new one. /get-session
+          // handles its own cookie above.
           matcher: (ctx) => {
             return Boolean(
               ctx.path?.startsWith("/sign-out") ||
               ctx.path?.startsWith("/delete-user") ||
-              (ctx.path !== "/get-session" && ctx.context.newSession)
+              (ctx.path !== "/get-session" &&
+                (ctx.context.newSession ||
+                  expiresCookie(
+                    ctx.context.responseHeaders,
+                    ctx.context.authCookies.sessionToken.name
+                  )))
             );
           },
           handler: createAuthMiddleware(async (ctx) => {
