@@ -115,14 +115,20 @@ without loading Better Auth.
 The framework handlers (`@convex-dev/better-auth/nextjs`,
 `@convex-dev/better-auth/react-start`) send your app's host and protocol in
 `x-better-auth-forwarded-host` and `x-better-auth-forwarded-proto`. The routes
-registered by `registerRoutes()` and `registerRoutesLazy()` copy them to
-`x-forwarded-host` and `x-forwarded-proto` before calling Better Auth, only when
-together they form an origin listed exactly in `trustedOrigins`,
-`BETTER_AUTH_TRUSTED_ORIGINS` or the `allowedHosts` of a dynamic `baseURL`.
-Wildcard entries such as `*.vercel.app` don't count. Without such headers, an
-incoming `x-forwarded-*` that forms an exact trusted origin is kept, and
-otherwise both are removed.
+registered by `registerRoutes()` and `registerRoutesLazy()` set the request URL,
+`Host`, `x-forwarded-host` and `x-forwarded-proto` to one origin before calling
+Better Auth:
 
-Better Auth only reads these headers with `advanced.trustedProxyHeaders`
-enabled. To build links in emails from the host the user is on, enable it and
-list each host exactly. See [Security notes](/security#forwarded-host-headers).
+1. the origin from `x-better-auth-forwarded-*`, or else from the incoming
+   `x-forwarded-*`, when it's listed exactly in `trustedOrigins`,
+   `BETTER_AUTH_TRUSTED_ORIGINS` or the `allowedHosts` of a dynamic `baseURL`;
+2. otherwise the request's own origin, when it's listed exactly;
+3. otherwise `CONVEX_SITE_URL`.
+
+Wildcard entries such as `*.vercel.app` don't count. The
+`x-better-auth-forwarded-*` headers are removed.
+
+Better Auth reads the forwarded headers with `advanced.trustedProxyHeaders` and
+`Host` without it, so a dynamic `baseURL` builds links in emails from the host
+the user is on either way. List each host exactly in `allowedHosts`. See
+[Security notes](/security#forwarded-host-headers).

@@ -74,48 +74,69 @@ Two differences make the plugin stricter than Better Auth:
 
 ## Forwarded host headers
 
-Without Convex, Better Auth learns the app's host from the `x-forwarded-host`
-and `x-forwarded-proto` headers your hosting platform's proxy sets, when
-`advanced.trustedProxyHeaders` is enabled. With Convex, the request goes through
-a second proxy, Convex's edge, which has its own `x-forwarded-*`. So the
-framework handlers (`convexBetterAuthNextJs`, `convexBetterAuthReactStart`) and
-the server helpers that fetch the Convex token send the app's host and protocol
-in `x-better-auth-forwarded-host` and `x-better-auth-forwarded-proto` instead,
-and don't send `x-forwarded-*`. Like any proxy, they set these headers from the
+Without Convex, Better Auth learns the app's origin from the request: from the
+`x-forwarded-host` and `x-forwarded-proto` headers your hosting platform's proxy
+sets when `advanced.trustedProxyHeaders` is enabled, and otherwise from the
+`Host` header and the request URL. A dynamic `baseURL` checks that host against
+`allowedHosts`, wildcards included, and without a `baseURL` Better Auth uses the
+request URL. With Convex, the request goes through a second proxy, Convex's
+edge, which has its own `x-forwarded-*`. So the framework handlers
+(`convexBetterAuthNextJs`, `convexBetterAuthReactStart`) and the server helpers
+that fetch the Convex token send the app's host and protocol in
+`x-better-auth-forwarded-host` and `x-better-auth-forwarded-proto` instead, and
+don't send `x-forwarded-*`. Like any proxy, they set these headers from the
 request URL or the platform's headers, and replace values a client sent.
 
 Your Convex site URL is publicly reachable, so any client can set these headers,
-and `x-forwarded-*` too. Convex's cloud edge replaces the `x-forwarded-*` a
-client sends with its own, but a self-hosted Convex backend passes them through
-to your HTTP actions. So the component, as the proxy in front of Better Auth,
-sets `x-forwarded-host` and `x-forwarded-proto` itself on every request, from
-`x-better-auth-forwarded-*` or else from the `x-forwarded-*` the request arrived
-with, only when together they form an origin listed exactly in `trustedOrigins`,
-`BETTER_AUTH_TRUSTED_ORIGINS` or the `allowedHosts` of a dynamic `baseURL`.
-Otherwise it removes them, and Better Auth falls back to the `Host` header and
-the request URL, as without a trusted proxy. Wildcard entries such as
-`*.vercel.app` don't count, since anyone can deploy to a shared platform domain.
-Both headers are set together or not at all.
+`x-forwarded-*` and, on a self-hosted backend, `Host` too. So the component, as
+the proxy in front of Better Auth, decides the origin of every request and sets
+the request URL, `Host`, `x-forwarded-host` and `x-forwarded-proto` all to it,
+whatever `trustedProxyHeaders` says. It picks the first of:
 
-Better Auth ignores `x-forwarded-*` unless `advanced.trustedProxyHeaders` is
-enabled. With it, the base URL, and so the links in emails such as password
-reset and verification links, uses the restored host. The worst a caller can do
-is pick another of the origins you listed exactly.
+1. The app's origin from `x-better-auth-forwarded-*`, or else the
+   `x-forwarded-*` the request arrived with, when together they form an origin
+   listed exactly in `trustedOrigins`, `BETTER_AUTH_TRUSTED_ORIGINS` or the
+   `allowedHosts` and `fallback` of a dynamic `baseURL`.
+2. The request's own origin, when it's listed exactly, such as a custom domain
+   for your Convex site.
+3. `CONVEX_SITE_URL`, which only the deployment sets. On Convex's cloud this is
+   the origin requests arrive at anyway, so nothing needs configuring. Convex
+   always sets it; if it's missing, the request's own origin is used.
+
+The `x-better-auth-forwarded-*` headers are removed before Better Auth sees the
+request. Origins are compared as protocol and host, so an origin listed only
+with `https://` is never used over `http://`, and a host with a path, user info
+or an explicit default port doesn't count.
+
+This is stricter than Better Auth in two ways:
+
+- Wildcard entries such as `*.vercel.app` in `trustedOrigins` or
+  `allowedHosts` don't count. Better Auth accepts them for a dynamic `baseURL`,
+  but anyone can deploy to a shared platform domain, and the base URL decides
+  where links in emails such as password reset and verification links point.
+  A request from an app on a wildcard host gets the `fallback` origin.
+- A host only reaches Better Auth through the component, so a client can't pick
+  one Better Auth would accept but you didn't list exactly. The worst a caller
+  can do is pick another of the origins you listed exactly.
+
+Better Auth only uses the app's origin when it takes the base URL from the
+request: with a dynamic `baseURL`, or without a `baseURL`. Then links in emails,
+OAuth callback URLs and, with `crossSubDomainCookies`, the cookie domain follow
+the app's origin. With a static `baseURL` they always use that URL.
 
 ### Self-hosted Convex
 
-Without trusted forwarded headers, Better Auth builds the base URL from the
-`Host` header and, without that, the request URL. On Convex's cloud these come
-from Convex. A self-hosted Convex backend, tested with the local backend that
-`convex dev` runs, passes the `x-forwarded-*` headers a client sends to your
-HTTP actions and builds the request URL from them. So on a self-hosted
-deployment:
+A self-hosted Convex backend, tested with the local backend that `convex dev`
+runs, passes the `Host` and `x-forwarded-*` headers a client sends to your HTTP
+actions and builds the request URL from them. The component replaces all of
+them as described above, so a self-hosted deployment needs no reverse proxy for
+this. Before 0.13.9, it only replaced `x-forwarded-*`, and a dynamic `baseURL`
+with a wildcard in `allowedHosts` took a client's `Host` header
+([GHSA-9qq3-v9g3-cxhw](https://github.com/get-convex/better-auth/security/advisories/GHSA-9qq3-v9g3-cxhw)).
 
-- Set a static `baseURL`, as the framework guides do. Then Better Auth doesn't
-  take the base URL from the request at all.
-- If you need a dynamic `baseURL`, list each host in `allowedHosts` exactly,
-  without wildcards, and put a reverse proxy in front of the backend that sets
-  `Host` and `x-forwarded-*` itself instead of passing the client's.
+Make sure `CONVEX_SITE_URL` is your backend's public site URL (set from
+`CONVEX_SITE_ORIGIN` on a self-hosted backend), since it's the origin used when
+a request's own isn't listed.
 
 ## Database adapter
 

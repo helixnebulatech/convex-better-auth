@@ -378,12 +378,13 @@ affects both.
 
 ### Forwarded headers
 
-The component now sets `x-forwarded-host` and `x-forwarded-proto` itself before
-calling Better Auth: only for an origin listed exactly in your trusted origins,
-and otherwise it removes them. On Convex's cloud nothing changes for apps. On
+The component now decides the origin Better Auth sees and sets the request URL,
+`Host`, `x-forwarded-host` and `x-forwarded-proto` to it before calling Better
+Auth: your app's origin when it's listed exactly in your trusted origins, and
+otherwise `CONVEX_SITE_URL`. On Convex's cloud nothing changes for apps. On
 self-hosted Convex, see [Self-hosted Convex](/security#self-hosted-convex). If
-your app uses `advanced.trustedProxyHeaders` with a wildcard in `allowedHosts`,
-list the hosts exactly.
+your app uses a dynamic `baseURL` with a wildcard in `allowedHosts`, list the
+hosts exactly, or requests from them get the `fallback` origin.
 
 ### TanStack Start `isAuthenticated`
 
