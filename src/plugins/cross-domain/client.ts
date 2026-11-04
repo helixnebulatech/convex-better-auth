@@ -56,6 +56,13 @@ export function getSetCookie(header: string, prevCookie?: string) {
   return JSON.stringify(toSetCookie);
 }
 
+// The session token cookie in a Better-Auth-Cookie header, whatever the
+// cookie prefix. Multi session cookies (session_token_multi-*) don't count.
+const sessionTokenOf = (cookieHeader: string) =>
+  cookieHeader
+    .split("; ")
+    .find((cookie) => cookie.split("=")[0]!.endsWith("session_token"));
+
 export function getCookie(cookie: string) {
   let parsed = {} as Record<string, StoredCookie>;
   try {
@@ -388,15 +395,20 @@ export const crossDomainClient = (
             ) {
               const data = context.data;
               storage.setItem(localCacheName, JSON.stringify(data));
-              // The stored cookie changed while this request was in flight,
-              // eg. a one-time token was redeemed: the null answer is about
-              // the cookie sent, so it must not clear the new session
+              // The session token changed while this request was in flight,
+              // eg. a one-time token was redeemed, so the null answer is
+              // about the token sent and must not clear the new session.
+              // Other cookies (two_factor, an expiring cookie) don't count,
+              // or a rejected session would be kept.
               const sentCookie =
                 context.request.headers?.get?.("better-auth-cookie") ?? null;
-              const cookieChanged =
+              const sessionTokenChanged =
                 sentCookie !== null &&
-                sentCookie !== getCookie(storage.getItem(cookieName) || "{}");
-              if (data === null && !cookieChanged) {
+                sessionTokenOf(sentCookie) !==
+                  sessionTokenOf(
+                    getCookie(storage.getItem(cookieName) || "{}")
+                  );
+              if (data === null && !sessionTokenChanged) {
                 // Preserve non-session cookies (e.g. two_factor) when
                 // get-session returns null during 2FA pending state.
                 // Previously this unconditionally set cookieName to "{}",

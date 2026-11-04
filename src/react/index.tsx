@@ -15,24 +15,55 @@ import {
   useQuery,
 } from "convex/react";
 import type { FunctionReference } from "convex/server";
-import type { createAuthClient } from "better-auth/react";
 import { decodeJwt } from "jose";
-import type {
-  convexClient,
-  crossDomainClient,
-} from "../client/plugins/index.js";
 import type { EmptyObject } from "convex-helpers";
 
-type CrossDomainClient = ReturnType<typeof crossDomainClient>;
-type ConvexClient = ReturnType<typeof convexClient>;
-type PluginsWithCrossDomain = (CrossDomainClient | ConvexClient)[];
-type PluginsWithoutCrossDomain = ConvexClient[];
-type AuthClientWithPlugins<
-  Plugins extends PluginsWithCrossDomain | PluginsWithoutCrossDomain,
-> = ReturnType<typeof createAuthClient<{ plugins: Plugins }>>;
-export type AuthClient =
-  | AuthClientWithPlugins<PluginsWithCrossDomain>
-  | AuthClientWithPlugins<PluginsWithoutCrossDomain>;
+type FetchResult<T> = {
+  data?: T | null;
+  error?: unknown;
+};
+
+type ConvexTokenFetcher = (options: {
+  fetchOptions: { throw: false };
+}) => Promise<FetchResult<{ token: string }>>;
+
+/**
+ * The parts of a Better Auth client created with the `convexClient()` plugin
+ * that this package uses. Any `createAuthClient()` result that includes
+ * `convexClient()` satisfies it, whatever other plugins it has.
+ *
+ * It's structural because deriving it from `createAuthClient()` with a fixed
+ * plugin list rejected clients with other plugins, such as
+ * `inferAdditionalFields()`.
+ */
+export type AuthClient = {
+  useSession: () => {
+    data: {
+      session?: { id?: string } | null;
+    } | null;
+    isPending: boolean;
+  };
+  getSession: (options?: {
+    fetchOptions?: { headers?: Record<string, string> };
+  }) => Promise<unknown>;
+  convex: {
+    token: ConvexTokenFetcher;
+  };
+};
+
+/**
+ * An {@link AuthClient} that also includes the `crossDomainClient()` plugin.
+ */
+export type AuthClientWithCrossDomain = AuthClient & {
+  crossDomain: {
+    oneTimeToken: {
+      verify: (data: {
+        token: string;
+      }) => Promise<FetchResult<{ session: { token: string } }>>;
+    };
+  };
+  updateSession: () => void;
+};
 
 // Until we can import from our own entry points (requires TypeScript 4.7),
 // just describe the interface enough to help users pass the right type.
@@ -68,7 +99,7 @@ export function ConvexBetterAuthProvider({
       const token = url.searchParams.get("ott");
       if (token) {
         const authClientWithCrossDomain =
-          authClient as AuthClientWithPlugins<PluginsWithCrossDomain>;
+          authClient as AuthClientWithCrossDomain;
         url.searchParams.delete("ott");
         // Keep the router's history state (TanStack Router and the Next.js
         // app router store theirs there)

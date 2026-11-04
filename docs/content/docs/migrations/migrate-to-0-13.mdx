@@ -10,7 +10,7 @@ description: Migrate to @convex-dev/better-auth@0.13
   <div className="fd-step">
     ### Install dependencies
 
-    Update Better Auth and the component. Better Auth must be on `1.7.5` or
+    Update Better Auth and the component. Better Auth must be on `1.7.16` or
     later in the `1.7.x` line.
 
     <Callout>
@@ -19,7 +19,7 @@ description: Migrate to @convex-dev/better-auth@0.13
 
     ```npm
     npm install @convex-dev/better-auth@^0.13.0
-    npm install better-auth@~1.7.5
+    npm install better-auth@~1.7.16
     ```
 
   </div>
@@ -35,8 +35,9 @@ description: Migrate to @convex-dev/better-auth@0.13
 ### Use `signIn.social` for Generic OAuth providers
 
 Better Auth 1.7 registers each Generic OAuth provider as a social provider.
-Remove `genericOAuthClient()` from your auth client, and use `signIn.social`
-instead of `signIn.oauth2`.
+Remove `genericOAuthClient()` from your auth client. Use `signIn.social`
+instead of `signIn.oauth2`, and `linkSocial` instead of `oauth2.link` to link a
+provider to the signed-in user.
 
 ```ts
 export const authClient = createAuthClient({
@@ -48,6 +49,9 @@ export const authClient = createAuthClient({
 
 await authClient.signIn.oauth2({ providerId: "slack" }); // [!code --]
 await authClient.signIn.social({ provider: "slack" }); // [!code ++]
+
+await authClient.oauth2.link({ providerId: "slack" }); // [!code --]
+await authClient.linkSocial({ provider: "slack" }); // [!code ++]
 ```
 
 The callback URL changes from `/api/auth/oauth2/callback/<providerId>` to
@@ -449,7 +453,7 @@ their own. If you called these endpoints on the server, rename the calls:
 | `auth.api.getToken()` (Convex)                 | `auth.api.getConvexToken()`                |
 | `auth.api.getJwks()` (Convex)                  | `auth.api.getConvexJwks()`                 |
 | `auth.api.getOpenIdConfig()`                   | `auth.api.getConvexOpenIdConfig()`         |
-| `auth.api.verifyOneTimeToken()` (cross domain) | `auth.api.crossDomainVerifyOneTimeToken()` |
+| `auth.api.verifyOneTimeToken()` (cross domain) | `auth.api.verifyCrossDomainOneTimeToken()` |
 | `auth.api.startOAuth()`                        | `auth.api.crossDomainOAuthStart()`         |
 
 The paths and the clients don't change. A cross domain sign-in that is between
@@ -457,6 +461,33 @@ the redirect and the token exchange during the upgrade fails, and the user has
 to sign in again.
 
 ## Upgrading to 0.13.9
+
+0.13.9 needs Better Auth 1.7.16 or later, which has security fixes:
+
+```npm
+npm install better-auth@~1.7.16
+```
+
+### Cross domain verify endpoint
+
+The cross domain one-time token endpoint is now
+`auth.api.verifyCrossDomainOneTimeToken()`, the name upstream uses. If you
+upgraded to 0.13.7 or 0.13.8 and call it on the server, rename
+`auth.api.crossDomainVerifyOneTimeToken()`. The path and the client don't
+change.
+
+### Confirming an email change
+
+Since Better Auth 1.7.16, opening the link that confirms an email change updates
+the email but no longer signs in whoever opens it. With the cross domain plugin
+the link redirects to `siteUrl` without a session, and users who aren't signed
+in there sign in again.
+
+### SCIM
+
+`@better-auth/scim` 1.7.16 refuses to start unless the database adapter has
+native transactions, which the Convex adapter doesn't have, so the SCIM plugin
+can't be used. The SCIM list indexes from 0.13.7 stay in the schema.
 
 ### Atomic counters
 
