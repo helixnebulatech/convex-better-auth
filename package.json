@@ -111,8 +111,8 @@
     "react": "^18.3.1 || ^19.0.0"
   },
   "devDependencies": {
-    "@better-auth/core": "1.7.13",
-    "@better-auth/test-utils": "1.7.13",
+    "@better-auth/core": "1.7.16",
+    "@better-auth/test-utils": "1.7.16",
     "@changesets/cli": "3.0.3",
     "@convex-dev/eslint-plugin": "5.0.0",
     "@edge-runtime/vm": "5.0.0",
@@ -126,7 +126,7 @@
     "@types/react": "19.3.0",
     "@types/react-dom": "19.3.0",
     "@types/semver": "7.8.0",
-    "better-auth": "1.7.13",
+    "better-auth": "1.7.16",
     "chokidar-cli": "3.0.0",
     "concurrently": "10.0.5",
     "convex": "1.46.0",
@@ -137,7 +137,7 @@
     "eslint-plugin-react-refresh": "0.5.7",
     "globals": "17.13.0",
     "happy-dom": "20.14.5",
-    "next": "16.3.8",
+    "next": "16.4.5",
     "pkg-pr-new": "0.0.88",
     "prettier": "3.9.9",
     "react": "19.3.0",
