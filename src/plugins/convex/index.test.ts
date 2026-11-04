@@ -533,9 +533,10 @@ describe("convex plugin JWT cookie", () => {
 });
 
 describe("convex plugin in query context", () => {
-  // Queries can't write, so the plugin turns adapter writes into no-ops
-  // there. Atomic writes return null, as when no row matches.
-  it("turns consumeOne and incrementOne into no-ops", async () => {
+  // Queries can't write. The plugin turns fire-and-forget writes into no-ops
+  // there, but consumeOne and incrementOne throw: their callers act on the
+  // result, and neither a faked row nor a faked miss is safe.
+  const queryCtxAuth = (endpoint: Parameters<typeof createAuthEndpoint>[2]) => {
     process.env.CONVEX_SITE_URL = baseURL;
     const db: MemoryDB = {
       user: [],
@@ -559,19 +560,7 @@ describe("convex plugin in query context", () => {
         queryCtxProbe: createAuthEndpoint(
           "/query-ctx-probe",
           { method: "GET" },
-          async (ctx) => {
-            const consumed = await ctx.context.adapter.consumeOne({
-              model: "verification",
-              where: [{ field: "id", value: "v1" }],
-            });
-            const incremented = await ctx.context.adapter.incrementOne({
-              model: "verification",
-              where: [{ field: "id", value: "v1" }],
-              field: "value",
-              by: 1,
-            } as any);
-            return ctx.json({ consumed, incremented });
-          }
+          endpoint
         ),
       },
     } satisfies BetterAuthPlugin;
@@ -586,10 +575,78 @@ describe("convex plugin in query context", () => {
         probe,
       ],
     });
-    const res = await auth.handler(
+    return { auth, db };
+  };
+
+  it("throws on consumeOne and incrementOne instead of faking a result", async () => {
+    const errors: string[] = [];
+    const { auth, db } = queryCtxAuth(async (ctx) => {
+      for (const call of [
+        () =>
+          ctx.context.adapter.consumeOne({
+            model: "verification",
+            where: [{ field: "id", value: "v1" }],
+          }),
+        () =>
+          ctx.context.adapter.incrementOne({
+            model: "verification",
+            where: [{ field: "id", value: "v1" }],
+            increment: {},
+            set: { value: "2" },
+          }),
+      ]) {
+        try {
+          await call();
+        } catch (error) {
+          errors.push((error as Error).message);
+        }
+      }
+      return ctx.json({ ok: true });
+    });
+    await auth.handler(new Request(`${baseURL}/api/auth/query-ctx-probe`));
+    expect(errors).toHaveLength(2);
+    expect(errors[0]).toMatch(/"consumeOne" can't run in a query/);
+    expect(errors[1]).toMatch(/"incrementOne" can't run in a query/);
+    expect(db.verification).toEqual([
+      expect.objectContaining({ id: "v1", value: "1" }),
+    ]);
+  });
+
+  // @better-auth/api-key's rate limiting (consumeRateLimit) retries with a
+  // fresh row whenever its guarded incrementOne returns null, so a faked
+  // miss recursed until the heap ran out in verifyApiKey from a query
+  it("fails a caller that retries on a miss instead of looping", async () => {
+    let attempts = 0;
+    const { auth } = queryCtxAuth(async (ctx) => {
+      const consume = async (): Promise<unknown> => {
+        attempts++;
+        if (attempts > 50) {
+          return "looped";
+        }
+        const incremented = await ctx.context.adapter.incrementOne({
+          model: "verification",
+          where: [
+            { field: "id", value: "v1" },
+            { field: "value", value: "1" },
+          ],
+          increment: {},
+          set: { value: "2" },
+        });
+        if (incremented) {
+          return incremented;
+        }
+        await ctx.context.adapter.findOne({
+          model: "verification",
+          where: [{ field: "id", value: "v1" }],
+        });
+        return consume();
+      };
+      return ctx.json({ result: await consume() });
+    });
+    const response = await auth.handler(
       new Request(`${baseURL}/api/auth/query-ctx-probe`)
     );
-    expect(await res.json()).toEqual({ consumed: null, incremented: null });
-    expect(db.verification).toHaveLength(1);
+    expect(attempts).toBe(1);
+    expect(response.status).toBe(500);
   });
 });

@@ -97,3 +97,13 @@ export const createAuthOptions = (ctx: GenericCtx<DataModel>) => ({
   },
 });
 ```
+
+### Calling Better Auth from a query
+
+Queries can't write to the database. When `auth.api` runs in a query, the
+component skips the writes Better Auth makes as side effects, such as deleting
+an expired session or refreshing its expiry, and logs a warning. Atomic writes,
+which consume a one-time token or count a request against a rate limit, throw
+instead, since faking their result would accept a token or a request without
+recording it. For example, `verifyApiKey` from `@better-auth/api-key` counts
+each request when rate limiting is on, so call it from a mutation or an action.

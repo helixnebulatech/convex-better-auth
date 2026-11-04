@@ -367,16 +367,22 @@ export const convex = (opts: {
             ctx.context.adapter.updateMany = noopWrite("updateMany") as any;
             ctx.context.adapter.delete = noopWrite("delete") as any;
             ctx.context.adapter.deleteMany = noopWrite("deleteMany") as any;
-            // Atomic writes return the affected row, null means no match
-            const noopAtomicWrite = (method: string) => {
-              const warn = noopWrite(method);
-              return async (...args: any[]) => {
-                await warn(...args);
-                return null;
-              };
+            // The other writes above are side effects whose callers don't
+            // depend on them (session cleanup, deleting an expired key), so
+            // skipping them leaves the read the caller asked for intact.
+            // consumeOne and incrementOne decide the caller's next step:
+            // returning a row would accept a token or a request without
+            // recording it, and null, a miss, makes some callers retry
+            // forever (@better-auth/api-key rate limiting). So they fail, as
+            // the adapter does for writes outside a mutation.
+            const atomicWriteInQuery = (method: string) => async () => {
+              throw new Error(
+                `[convex-better-auth] "${method}" can't run in a query${ctx.path ? ` (${ctx.path})` : ""}. Call this Better Auth endpoint from a mutation, an action or an HTTP action.`
+              );
             };
-            ctx.context.adapter.consumeOne = noopAtomicWrite("consumeOne");
-            ctx.context.adapter.incrementOne = noopAtomicWrite("incrementOne");
+            ctx.context.adapter.consumeOne = atomicWriteInQuery("consumeOne");
+            ctx.context.adapter.incrementOne =
+              atomicWriteInQuery("incrementOne");
             return { context: ctx };
           }),
         },
