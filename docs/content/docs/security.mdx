@@ -216,7 +216,10 @@ as they're meant for server code.
 ## Verbose logs
 
 `verbose: true` logs request and response headers with cookies, tokens and API
-keys redacted, and the query string of `location` and `referer` removed. It also
-enables Better Auth's adapter debug logs, which print whole database rows,
-including session tokens, password hashes and verification values. Only enable
-it while debugging, and not in production.
+keys redacted, and the query string of `location` and `referer` removed. It no
+longer enables Better Auth's adapter debug logs, which print whole database
+rows, including session tokens, password hashes and verification values. Those
+have their own `debugLogs` option, off by default, which takes the same values
+as the `debugLogs` of Better Auth's adapters. Better Auth doesn't redact them
+either, so only enable either option while debugging, and `debugLogs` never in
+production.

@@ -25,12 +25,33 @@ export const authComponent = createClient(
   only enable them while debugging. Request and response headers are logged with
   credential headers (`Cookie`, `Authorization`, `Set-Cookie`,
   `Better-Auth-Cookie`, `Set-Better-Auth-Cookie`, `Set-Auth-Token`,
-  `Set-Auth-JWT`, `X-Api-Key`) redacted, and redirect `Location` headers are
-  logged without their query string, which can carry one-time tokens. Verbose
-  mode also turns on the Better Auth adapter `debugLogs`, which log full
-  database rows unredacted, including session tokens, password hashes, OAuth
-  access and refresh tokens, and verification values such as password reset
-  tokens and one-time codes.
+  `Set-Auth-JWT`, `X-Api-Key`) redacted, and redirect `Location` and `Referer`
+  headers are logged without their query string, which can carry one-time
+  tokens.
+</Callout>
+
+### Database adapter
+
+Better Auth's adapter debug logs show every database call the component makes.
+They have their own option, `debugLogs`, which takes the same values as the
+`debugLogs` of Better Auth's adapters: `true`, or an object that picks methods
+such as `{ findOne: true }`.
+
+```ts title="convex/auth.ts"
+export const authComponent = createClient(
+  components.betterAuth,
+  // [!code ++:3]
+  {
+    debugLogs: true,
+  }
+);
+```
+
+<Callout type="error">
+  Adapter debug logs print whole database rows without redaction, including
+  session tokens, password hashes, OAuth access and refresh tokens, and
+  verification values such as password reset tokens and one-time codes. Never
+  enable them in production. Before 0.13.9, `verbose: true` turned them on too.
 </Callout>
 
 ### Client side

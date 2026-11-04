@@ -6,6 +6,19 @@ description: Component client for Better Auth
 The component client is returned from the `createClient` function, and provides
 helpful methods for using Better Auth in your Convex code.
 
+## Options
+
+`createClient(components.betterAuth, options)` takes:
+
+- `verbose`: logs the configured `baseURL` and the request and response headers
+  of each auth request, with credentials redacted.
+- `debugLogs`: Better Auth's adapter debug logs, `true` or an object that picks
+  methods such as `{ findOne: true }`. Off by default. They print whole database
+  rows without redaction, so only enable them while debugging. See
+  [Debugging](/debugging#database-adapter).
+- `local`: the schema of a [local install](/features/local-install).
+- `triggers` and `authFunctions`: see [Triggers](/features/triggers).
+
 ## `adapter()`
 
 Returns the Convex database adapter for use in Better Auth options.

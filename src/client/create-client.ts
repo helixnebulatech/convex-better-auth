@@ -17,6 +17,7 @@ import type { Infer } from "convex/values";
 import { getAuthTables, parseUserOutput } from "better-auth/db";
 import type { BetterAuthOptions } from "better-auth/minimal";
 import { convexAdapter } from "./adapter.js";
+import type { DBAdapterDebugLogOption } from "better-auth/adapters";
 import { corsRouter } from "convex-helpers/server/cors";
 import type defaultSchema from "../component/schema.js";
 import type { CreateAuth, GenericCtx } from "./index.js";
@@ -251,20 +252,6 @@ const normalizeRequestOrigin = async (
   });
 };
 
-/**
- * Backend API for the Better Auth component.
- * Responsible for exposing the `client` and `triggers` APIs to the client, http
- * route registration, and having convenience methods for interacting with the
- * component from the backend.
- *
- * @param component - Generally `components.betterAuth` from
- * `./_generated/api` once you've configured it in `convex.config.ts`.
- * @param config - Configuration options for the component.
- * @param config.local - Local schema configuration.
- * @param config.verbose - Whether to enable verbose logging.
- * @param config.triggers - Triggers configuration.
- * @param config.authFunctions - Authentication functions configuration.
- */
 // Fields every Better Auth user has, plus the Convex document fields and the
 // app user link. Used when clientApi doesn't get createAuth.
 const coreUserFields = new Set([
@@ -280,6 +267,25 @@ const pickCoreUserFields = (user: Record<string, unknown>) =>
     Object.entries(user).filter(([key]) => coreUserFields.has(key))
   );
 
+/**
+ * Backend API for the Better Auth component.
+ * Responsible for exposing the `client` and `triggers` APIs to the client, http
+ * route registration, and having convenience methods for interacting with the
+ * component from the backend.
+ *
+ * @param component - Generally `components.betterAuth` from
+ * `./_generated/api` once you've configured it in `convex.config.ts`.
+ * @param config - Configuration options for the component.
+ * @param config.local - Local schema configuration.
+ * @param config.verbose - Whether to log the configured `baseURL` and the
+ * request and response headers of each auth request, with credentials
+ * redacted. It no longer turns on the adapter's debug logs.
+ * @param config.debugLogs - Better Auth's adapter debug logs, off by default.
+ * They print whole database rows without redaction, including session tokens
+ * and password hashes.
+ * @param config.triggers - Triggers configuration.
+ * @param config.authFunctions - Authentication functions configuration.
+ */
 export const createClient = <
   DataModel extends GenericDataModel,
   Schema extends SchemaDefinition<GenericSchema, true> = typeof defaultSchema,
@@ -291,6 +297,7 @@ export const createClient = <
       schema?: Schema;
     };
     verbose?: boolean;
+    debugLogs?: DBAdapterDebugLogOption;
   } & (
     | {
         triggers: Triggers<DataModel, Schema>;
@@ -378,10 +385,7 @@ export const createClient = <
      * @returns The Convex database adapter
      */
     adapter: (ctx: GenericCtx<DataModel>) =>
-      convexAdapter<DataModel, typeof ctx, Schema>(ctx, component, {
-        ...config,
-        debugLogs: config?.verbose,
-      }),
+      convexAdapter<DataModel, typeof ctx, Schema>(ctx, component, config),
 
     /**
      * Returns the Better Auth auth object and headers for using Better Auth API
