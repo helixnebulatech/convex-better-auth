@@ -115,13 +115,22 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       # changeset publish only publishes a version that isn't on npm yet, so a
-      # re-run is safe. Its "New tag:" lines name what was published.
+      # re-run is safe. What it published is the package.json version when
+      # npm didn't have it before; its output isn't parsed, as its format
+      # changes between changesets versions (3.x dropped the "New tag:"
+      # lines). A stale "not on npm" only re-runs the GitHub Release job,
+      # which leaves an existing release as is.
       - name: Publish
         id: publish
         run: |
-          set -o pipefail
-          pnpm ci:release | tee "$RUNNER_TEMP/publish.log"
-          packages="$(sed 's/\x1b\[[0-9;]*m//g' "$RUNNER_TEMP/publish.log" | sed -n 's/.*New tag:[[:space:]]*\(.*\)@\([^@[:space:]]*\)[[:space:]]*$/{"name":"\1","version":"\2"}/p' | jq -sc '.')"
+          name="$(jq -r .name package.json)"
+          version="$(jq -r .version package.json)"
+          if npm view "$name@$version" version --prefer-online 2>/dev/null | grep -qxF "$version"; then
+            packages='[]'
+          else
+            packages="$(jq -nc --arg name "$name" --arg version "$version" '[{name: $name, version: $version}]')"
+          fi
+          pnpm ci:release
           echo "published-packages=$packages" >> "$GITHUB_OUTPUT"
 
   # Tag, GitHub Release and provenance for what was published, outside the
