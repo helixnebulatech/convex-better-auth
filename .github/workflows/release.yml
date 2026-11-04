@@ -114,15 +114,19 @@ jobs:
       - name: Install Dependencies
         run: pnpm install --frozen-lockfile
 
-      # changeset publish only publishes a version that isn't on npm yet, so a
-      # re-run is safe. Its "New tag:" lines name what was published.
+      # Like Vercel's AI SDK and Better Auth, the changesets action runs the
+      # publish and reports what it published (published-packages, from the
+      # CLI's machine-readable CHANGESETS_OUTPUT, not its log). changeset
+      # publish only publishes a version that isn't on npm yet, so a re-run is
+      # safe. Tags and releases are left to the GitHub Release job, as this
+      # job can't write to the repo.
       - name: Publish
         id: publish
-        run: |
-          set -o pipefail
-          pnpm ci:release | tee "$RUNNER_TEMP/publish.log"
-          packages="$(sed 's/\x1b\[[0-9;]*m//g' "$RUNNER_TEMP/publish.log" | sed -n 's/.*New tag:[[:space:]]*\(.*\)@\([^@[:space:]]*\)[[:space:]]*$/{"name":"\1","version":"\2"}/p' | jq -sc '.')"
-          echo "published-packages=$packages" >> "$GITHUB_OUTPUT"
+        uses: changesets/action@ae32849d5ba541f9ae29e40e22a623bc13562f51 # v2.1.2
+        with:
+          publish-script: pnpm ci:release
+          create-github-releases: false
+          push-git-tags: false
 
   # Tag, GitHub Release and provenance for what was published, outside the
   # environment (it needs to write, not to publish).
