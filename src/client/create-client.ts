@@ -209,7 +209,6 @@ const normalizeRequestOrigin = async (
   auth: Parameters<typeof exactTrustedOrigins>[0],
   request: Request
 ) => {
-  const url = new URL(request.url);
   const ownOrigin = parseHttpOrigin(request.url);
   const siteOrigin = process.env.CONVEX_SITE_URL
     ? parseHttpOrigin(process.env.CONVEX_SITE_URL)
@@ -232,12 +231,31 @@ const normalizeRequestOrigin = async (
   ].filter((origin) => origin && origin !== fallback);
   let origin = fallback;
   if (candidates.length > 0) {
-    const trusted = await exactTrustedOrigins(auth, request);
+    // A trustedOrigins function gets the request as if it had arrived at the
+    // fallback origin. On a self-hosted backend the URL, Host and
+    // x-forwarded-* are the caller's, so a function that returns the origin
+    // of the request's own host would make any host it accepts trusted
+    // exactly, wildcards included.
+    const trusted = await exactTrustedOrigins(
+      auth,
+      fallback ? withOrigin(request, fallback) : request
+    );
     origin = candidates.find((origin) => trusted.has(origin!)) ?? fallback;
   }
   if (!origin) {
     return request;
   }
+  return withOrigin(request, origin, { body: request.body });
+};
+
+// The request with its URL, Host and x-forwarded-* set to one origin and
+// x-better-auth-forwarded-* removed. Without a body unless one is passed.
+const withOrigin = (
+  request: Request,
+  origin: string,
+  init?: { body: ReadableStream | null }
+) => {
+  const url = new URL(request.url);
   const target = new URL(origin);
   const headers = new Headers(request.headers);
   headers.set("host", target.host);
@@ -248,9 +266,12 @@ const normalizeRequestOrigin = async (
   return new Request(`${target.origin}${url.pathname}${url.search}`, {
     method: request.method,
     headers,
-    body: request.body,
-    // @ts-expect-error - duplex is required for streaming request bodies
-    duplex: "half",
+    ...(init?.body
+      ? {
+          body: init.body,
+          duplex: "half",
+        }
+      : {}),
   });
 };
 

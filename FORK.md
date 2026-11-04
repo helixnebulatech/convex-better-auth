@@ -119,8 +119,7 @@ web origin.
 - Indexes and lookups, from our own audit of the lookups Better Auth 1.7 and its
   official plugins make. A later review found lookups it missed, the OAuth
   provider's consent check and the SCIM lists, fixed in 0.13.7 (the SCIM plugin
-  itself needs native transactions since Better Auth 1.7.16, so it can't be
-  used):
+  itself needs native transactions on Better Auth 1.7, so it can't be used):
   - Indexes for lookups that had none, such as the credential account lookup
     added in Better Auth 1.7 and listing a user's active sessions.
   - Schema generation indexes the fields Better Auth marks with `index: true`,

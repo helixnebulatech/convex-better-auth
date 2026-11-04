@@ -106,4 +106,6 @@ an expired session or refreshing its expiry, and logs a warning. Atomic writes,
 which consume a one-time token or count a request against a rate limit, throw
 instead, since faking their result would accept a token or a request without
 recording it. For example, `verifyApiKey` from `@better-auth/api-key` counts
-each request when rate limiting is on, so call it from a mutation or an action.
+each request when rate limiting is on, and also updates the key on every call,
+so call it from a mutation or an action. In a query it fails even with rate
+limiting off, with `Invalid API key`.

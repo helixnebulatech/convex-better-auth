@@ -24,13 +24,23 @@ import type { AuthFunctions, GenericCtx, Triggers } from "./index.js";
 let didWarnJoinsUnsupported = false;
 let didWarnIncrementOneMissing = false;
 
-// The error Convex throws when the component has no such function, as from a
-// Local Install whose adapter.ts doesn't export incrementOne. convex-test
-// words it differently.
-const isMissingFunctionError = (error: unknown) =>
-  /Could(?: not|n't) find (?:public )?function|there is no such export/.test(
-    error instanceof Error ? error.message : String(error)
+// The error Convex throws when a Local Install's adapter.ts doesn't export
+// incrementOne. A Local Install's component api is a proxy, so the function
+// reference always exists and only the call fails. The backend says
+// "Child component 'betterAuth' does not export 'adapter.incrementOne'" from a
+// mutation and "Couldn't resolve betterAuth.adapter.incrementOne" from an
+// action, and convex-test "Could not find function ... there is no such
+// export". The message must name incrementOne, so a missing function called
+// from a trigger inside it isn't mistaken for it.
+export const isMissingIncrementOneError = (error: unknown) => {
+  const message = error instanceof Error ? error.message : String(error);
+  return (
+    /\bincrementOne/.test(message) &&
+    /does not export|Couldn't resolve|Could(?: not|n't) find (?:public )?function|there is no such export/.test(
+      message
+    )
   );
+};
 
 // Fields Better Auth's atomic fallback puts in its compare-and-swap guard:
 // strings, numbers, booleans and null. Arrays can't be compared with eq.
@@ -590,7 +600,7 @@ export const convexAdapter = <
                   onUpdateHandle,
                 });
               } catch (error) {
-                if (!isMissingFunctionError(error)) {
+                if (!isMissingIncrementOneError(error)) {
                   throw error;
                 }
               }

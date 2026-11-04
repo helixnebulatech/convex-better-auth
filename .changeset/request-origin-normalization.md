@@ -14,10 +14,10 @@ origin from the Next.js and TanStack Start handlers was ignored, since only
 `x-forwarded-*` carried it.
 
 The component now sets the request URL, `Host`, `x-forwarded-host` and
-`x-forwarded-proto` to one origin on every request, as upstream 0.12.7 does: the
-app's origin from `x-better-auth-forwarded-*` (or the incoming `x-forwarded-*`)
-when it's an exact trusted origin, else the request's own origin when it's
-exactly trusted, else `CONVEX_SITE_URL`, and it removes
+`x-forwarded-proto` to one origin on every request, like upstream 0.12.7: the
+app's origin from `x-better-auth-forwarded-*` (or the incoming `x-forwarded-*`,
+which upstream ignores) when it's an exact trusted origin, else the request's
+own origin when it's exactly trusted, else `CONVEX_SITE_URL`, and it removes
 `x-better-auth-forwarded-*`. Setting all four gives Better Auth the same origin
 whichever header its config reads, as a proxy in front of a direct deploy would.
 Removing only the forwarded headers, or telling self-hosted users to add a
@@ -26,3 +26,10 @@ still compared in full (protocol and host), from `trustedOrigins`,
 `BETTER_AUTH_TRUSTED_ORIGINS` and Better Auth's own trusted origins, and
 wildcard entries still don't count, now including `?` patterns, which Better
 Auth also treats as wildcards.
+
+A `trustedOrigins` function is called with the request as if it had arrived at
+`CONVEX_SITE_URL`. Called with the request as received, as upstream does, a
+function that trusts the origin of the request's own host would make a client's
+host on a self-hosted backend exactly trusted. Leaving functions out of the
+exact origins would be stricter still, but would drop the app's origin for apps
+that list it from a function.

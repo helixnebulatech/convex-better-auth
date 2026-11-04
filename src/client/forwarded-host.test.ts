@@ -28,7 +28,10 @@ const component = {
   },
 } as any;
 
-const setup = async (advanced?: BetterAuthOptions["advanced"]) => {
+const setup = async (
+  advanced?: BetterAuthOptions["advanced"],
+  trustedOrigins?: BetterAuthOptions["trustedOrigins"]
+) => {
   const db: MemoryDB = { user: [], session: [], account: [], verification: [] };
   let resetUrl = "";
   const auth = betterAuth({
@@ -41,6 +44,7 @@ const setup = async (advanced?: BetterAuthOptions["advanced"]) => {
     database: memoryAdapter(db),
     logger: { disabled: true },
     advanced,
+    trustedOrigins,
     emailAndPassword: {
       enabled: true,
       sendResetPassword: async ({ url }) => {
@@ -171,6 +175,34 @@ describe.each([
   it("keeps a request that arrives at an exactly listed origin", async () => {
     vi.stubEnv("CONVEX_SITE_URL", CONVEX_SITE);
     const url = await requestReset({}, `https://${ADMIN_HOST}`);
+    expect(url.origin).toBe(`https://${ADMIN_HOST}`);
+  });
+});
+
+describe("dynamic baseURL, trustedOrigins function", async () => {
+  // A common preview setup: trust the origin of the host the request names
+  const requestReset = await setup(undefined, (request) => {
+    const host = request?.headers.get("host");
+    return host?.endsWith(".example-previews.app") ? [`https://${host}`] : [];
+  });
+
+  it("doesn't trust a client-sent host the function accepts", async () => {
+    vi.stubEnv("CONVEX_SITE_URL", CONVEX_SITE);
+    const url = await requestReset({}, `https://${PREVIEW_HOST}`);
+    expect(url.origin).toBe(`https://${APP_HOST}`);
+  });
+
+  it("uses an origin the function lists for the deployment", async () => {
+    vi.stubEnv("CONVEX_SITE_URL", CONVEX_SITE);
+    const requestAdminReset = await setup(undefined, (request) =>
+      request?.headers.get("host") === new URL(CONVEX_SITE).host
+        ? [`https://${ADMIN_HOST}`]
+        : []
+    );
+    const url = await requestAdminReset({
+      "x-better-auth-forwarded-host": ADMIN_HOST,
+      "x-better-auth-forwarded-proto": "https",
+    });
     expect(url.origin).toBe(`https://${ADMIN_HOST}`);
   });
 });

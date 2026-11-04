@@ -119,6 +119,12 @@ This is stricter than Better Auth in two ways:
 - A host only reaches Better Auth through the component, so a client can't pick
   one Better Auth would accept but you didn't list exactly. The worst a caller
   can do is pick another of the origins you listed exactly.
+- If `trustedOrigins` is a function, the component calls it with the request as
+  if it had arrived at `CONVEX_SITE_URL`, so a function that trusts the origin
+  of the request's own host, as some preview setups do, can't make a client's
+  host trusted. Better Auth calls it with the request it receives. Don't return
+  origins read from other request headers, such as `Origin`: a client sets
+  those.
 
 Better Auth only uses the app's origin when it takes the base URL from the
 request: with a dynamic `baseURL`, or without a `baseURL`. Then links in emails,

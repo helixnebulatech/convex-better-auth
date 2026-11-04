@@ -485,9 +485,10 @@ in there sign in again.
 
 ### SCIM
 
-`@better-auth/scim` 1.7.16 refuses to start unless the database adapter has
-native transactions, which the Convex adapter doesn't have, so the SCIM plugin
-can't be used. The SCIM list indexes from 0.13.7 stay in the schema.
+`@better-auth/scim` refuses to start unless the database adapter has native
+transactions, which the Convex adapter doesn't have, so the SCIM plugin can't be
+used with any Better Auth 1.7 release. Earlier 0.13 docs listed it as supported.
+The SCIM list indexes from 0.13.7 stay in the schema.
 
 ### Atomic counters
 

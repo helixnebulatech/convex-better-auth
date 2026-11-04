@@ -8,6 +8,7 @@ import { api } from "../component/_generated/api.js";
 import schema from "../component/schema.js";
 import type { DataModel } from "../component/_generated/dataModel.js";
 import { createClient } from "./index.js";
+import { isMissingIncrementOneError } from "./adapter.js";
 
 // Better Auth 1.7 routes rate limiting, two factor lockouts and verification
 // consumption through the atomic consumeOne/incrementOne adapter methods.
@@ -257,6 +258,30 @@ describe("native incrementOne", () => {
       const row = await t.run((ctx) => ctx.db.query("rateLimit").first());
       expect(row?.count).toBe(2);
       warn.mockRestore();
+    }
+  );
+
+  it.each([
+    // Convex backend, called from a mutation
+    "Child component 'betterAuth' does not export 'adapter.incrementOne'",
+    // Convex backend, called from an action
+    "Couldn't resolve betterAuth.adapter.incrementOne",
+    // convex-test
+    'Could not find function for "adapter:incrementOne", there is no such export.',
+  ])("recognizes a missing incrementOne: %s", (message) => {
+    expect(isMissingIncrementOneError(new Error(message))).toBe(true);
+  });
+
+  it.each([
+    // A missing function called from a trigger inside incrementOne
+    "Child component 'betterAuth' does not export 'auth.onUpdate'",
+    "Couldn't resolve api.users.onRateLimitUpdate",
+    // Any other error from incrementOne
+    "[Request ID: 1] Server Error Uncaught Error: Cannot increment non-numeric field adapter.incrementOne",
+  ])(
+    "doesn't mistake other errors for a missing incrementOne: %s",
+    (message) => {
+      expect(isMissingIncrementOneError(new Error(message))).toBe(false);
     }
   );
 
