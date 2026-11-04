@@ -10,7 +10,7 @@ import { createLocalJWKSet, decodeJwt, jwtVerify } from "jose";
 import type { MemoryDB } from "better-auth/adapters/memory";
 import { getAuthConfigProvider } from "../../auth-config.js";
 import { convex } from "./index.js";
-import type { BetterAuthPlugin } from "better-auth";
+import type { AuthContext, BetterAuthPlugin } from "better-auth";
 import { createAuthEndpoint } from "better-auth/api";
 
 const authConfig = {
@@ -606,7 +606,12 @@ describe("convex plugin in query context", () => {
   // Queries can't write. The plugin turns fire-and-forget writes into no-ops
   // there, but consumeOne and incrementOne throw: their callers act on the
   // result, and neither a faked row nor a faked miss is safe.
-  const queryCtxAuth = (endpoint: Parameters<typeof createAuthEndpoint>[2]) => {
+  const queryCtxAuth = (
+    endpoint: (ctx: {
+      context: AuthContext;
+      json: (data: Record<string, unknown>) => unknown;
+    }) => Promise<unknown>
+  ) => {
     process.env.CONVEX_SITE_URL = baseURL;
     const db: MemoryDB = {
       user: [],
@@ -630,7 +635,7 @@ describe("convex plugin in query context", () => {
         queryCtxProbe: createAuthEndpoint(
           "/query-ctx-probe",
           { method: "GET" },
-          endpoint
+          async (ctx) => endpoint(ctx)
         ),
       },
     } satisfies BetterAuthPlugin;
