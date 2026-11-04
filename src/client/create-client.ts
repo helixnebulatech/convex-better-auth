@@ -245,8 +245,6 @@ const normalizeRequestOrigin = async (
     method: request.method,
     headers,
     body: request.body,
-    redirect: request.redirect,
-    signal: request.signal,
     // @ts-expect-error - duplex is required for streaming request bodies
     duplex: "half",
   });
