@@ -10,7 +10,7 @@ description: Migrate to @convex-dev/better-auth@0.13
   <div className="fd-step">
     ### Install dependencies
 
-    Update Better Auth and the component. Better Auth must be on `1.7.5` or
+    Update Better Auth and the component. Better Auth must be on `1.7.16` or
     later in the `1.7.x` line.
 
     <Callout>
@@ -19,7 +19,7 @@ description: Migrate to @convex-dev/better-auth@0.13
 
     ```npm
     npm install @convex-dev/better-auth@^0.13.0
-    npm install better-auth@~1.7.5
+    npm install better-auth@~1.7.16
     ```
 
   </div>
@@ -454,3 +454,26 @@ their own. If you called these endpoints on the server, rename the calls:
 The paths and the clients don't change. A cross domain sign-in that is between
 the redirect and the token exchange during the upgrade fails, and the user has
 to sign in again.
+
+## Upgrading to 0.13.9
+
+0.13.9 needs Better Auth 1.7.16 or later, which has security fixes:
+
+```npm
+npm install better-auth@~1.7.16
+```
+
+### Cross domain verify endpoint
+
+The cross domain one-time token endpoint is now
+`auth.api.verifyCrossDomainOneTimeToken()`, the name upstream uses. If you
+upgraded to 0.13.7 or 0.13.8 and call it on the server, rename
+`auth.api.crossDomainVerifyOneTimeToken()`. The path and the client don't
+change.
+
+### Confirming an email change
+
+Since Better Auth 1.7.16, opening the link that confirms an email change updates
+the email but no longer signs in whoever opens it. With the cross domain plugin
+the link redirects to `siteUrl` without a session, and users who aren't signed
+in there sign in again.
