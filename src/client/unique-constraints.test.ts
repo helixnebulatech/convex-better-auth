@@ -7,10 +7,13 @@ import { v } from "convex/values";
 import { getAuthTables } from "better-auth/db";
 import { deviceAuthorization } from "better-auth/plugins/device-authorization";
 import { username } from "better-auth/plugins/username";
-import { internal } from "../component/_generated/api.js";
+import { api, internal } from "../component/_generated/api.js";
+import type { DataModel } from "../component/_generated/dataModel.js";
+import defaultSchema from "../component/schema.js";
 import pluginTableSchema from "../component/testProfiles/schema.profile-plugin-table.js";
 import { checkUniqueFields, hasUniqueFields } from "./adapter-utils.js";
 import { createSchema } from "./create-schema.js";
+import { createClient } from "./index.js";
 
 const modules = import.meta.glob("../component/**/*.*s");
 
@@ -221,5 +224,70 @@ describe("unique constraints", () => {
     const { code } = await createSchema({ tables: deviceTables });
     expect(code).toContain('.index("deviceCode", ["deviceCode"])');
     expect(code).toContain('.index("userCode", ["userCode"])');
+  });
+});
+
+// Better Auth's internal adapter throws "Multiple accounts match" when two
+// accounts share a providerId and accountId, so a racing double link broke
+// sign-in with that provider for good. Its SQL schema has no constraint for
+// it; the component rejects the second account.
+describe("account provider key", () => {
+  const setup = () => {
+    const t = convexTest(defaultSchema, modules);
+    const ctx = {
+      runQuery: t.query.bind(t),
+      runMutation: t.mutation.bind(t),
+    } as any;
+    const adapter = createClient<DataModel>({ adapter: api.adapter } as any, {
+      verbose: false,
+    }).adapter(ctx)({});
+    const createAccount = (
+      userId: string,
+      accountId = "gh-1",
+      providerId = "github"
+    ) =>
+      adapter.create<{ id: string }>({
+        model: "account",
+        data: {
+          userId,
+          accountId,
+          providerId,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+      });
+    return { t, adapter, createAccount };
+  };
+
+  it("rejects a second account with the same providerId and accountId", async () => {
+    const { createAccount } = setup();
+    await createAccount("user-1");
+    await expect(createAccount("user-2")).rejects.toThrow(
+      "account unique constraint accountId+providerId already exists"
+    );
+    // Either half alone may repeat
+    await createAccount("user-2", "gh-1", "google");
+    await createAccount("user-2", "gh-2", "github");
+  });
+
+  it("rejects an update that makes an account a duplicate", async () => {
+    const { adapter, createAccount } = setup();
+    await createAccount("user-1");
+    const other = await createAccount("user-2", "gh-2");
+    await expect(
+      adapter.update({
+        model: "account",
+        where: [{ field: "id", value: other.id }],
+        update: { accountId: "gh-1" },
+      })
+    ).rejects.toThrow(
+      "account unique constraint accountId+providerId already exists"
+    );
+    // Updating other fields of an account is fine
+    await adapter.update({
+      model: "account",
+      where: [{ field: "id", value: other.id }],
+      update: { accessToken: "token" },
+    });
   });
 });

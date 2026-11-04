@@ -98,7 +98,7 @@ describe("cross domain email verification", () => {
     expect(db.user[0]!.emailVerified).toBe(true);
   });
 
-  it("hands the session created when confirming an email change to siteUrl", async () => {
+  it("hands no session to siteUrl when confirming an email change", async () => {
     const { auth, db, emails } = build(false);
     const signedUp = await signUp(auth);
     db.user[0]!.emailVerified = true;
@@ -113,11 +113,16 @@ describe("cross domain email verification", () => {
       })
     );
     expect(changed.status).toBe(200);
-    // The link opens without the app's session, which lives in the app
+    const emailBefore = db.user[0]!.email;
+    const sessions = db.session.length;
+    // The link opens without the app's session, which lives in the app.
+    // Since Better Auth 1.7.16 confirming an email change only refreshes a
+    // session the browser already has, so there is none to hand off.
     const res = await openLink(auth, emails[emails.length - 1]!);
     const location = new URL(res.headers.get("location")!);
     expect(location.origin).toBe(SITE);
-    const verified = await redeem(auth, location.searchParams.get("ott")!);
-    expect((await verified.json()).user.email).toBe("b@example.com");
+    expect(location.searchParams.has("ott")).toBe(false);
+    expect(db.session).toHaveLength(sessions);
+    expect(db.user[0]!.email).not.toBe(emailBefore);
   });
 });

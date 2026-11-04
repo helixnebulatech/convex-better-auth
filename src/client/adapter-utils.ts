@@ -62,16 +62,32 @@ export const adapterArgsValidator = v.object({
 // Unique constraints of a model, as lists of database field names. Better Auth
 // declares them on fields (`unique: true`) and, since 1.7, as table-level
 // indexes (`indexes: [{ fields, unique: true }]`), which can be compound.
+//
+// An account's providerId and accountId are unique too, stricter than Better
+// Auth's SQL schema, which has no constraint for them. Better Auth's internal
+// adapter (findAccountByKey, findAccountOwnerByKey) throws "Multiple accounts
+// match" when two accounts share them, so a duplicate left by two racing
+// links would break sign-in with that provider for the user.
 const getUniqueConstraints = (
   betterAuthSchema: BetterAuthDBSchema,
   model: string
 ) => {
-  const table = Object.values(betterAuthSchema).find(
-    (value) => value.modelName === model
-  );
+  const [modelKey, table] =
+    Object.entries(betterAuthSchema).find(
+      ([, value]) => value.modelName === model
+    ) ?? [];
   if (!table) {
     return [];
   }
+  const accountKeyConstraints =
+    modelKey === "account" && table.fields.accountId && table.fields.providerId
+      ? [
+          [
+            table.fields.accountId.fieldName ?? "accountId",
+            table.fields.providerId.fieldName ?? "providerId",
+          ],
+        ]
+      : [];
   const fieldConstraints = Object.entries(table.fields)
     .filter(([, value]) => value.unique)
     .map(([key, value]) => [value.fieldName ?? key]);
@@ -80,7 +96,7 @@ const getUniqueConstraints = (
     .map((index) =>
       index.fields.map((field) => table.fields[field]?.fieldName ?? field)
     );
-  return [...fieldConstraints, ...indexConstraints];
+  return [...fieldConstraints, ...indexConstraints, ...accountKeyConstraints];
 };
 const isUniqueField = (
   betterAuthSchema: BetterAuthDBSchema,
@@ -650,6 +666,34 @@ export const compareValues = (a: unknown, b: unknown) => {
   return (a as any) < (b as any) ? -1 : (a as any) > (b as any) ? 1 : 0;
 };
 
+// The fields incrementOne writes: `set` as given, and each counter in
+// `increment` added to its current value. An unset or null counter counts as
+// 0, as in Better Auth's memory adapter and atomic fallback. Like the
+// fallback, a counter that isn't a number, or a result that isn't a finite
+// number or loses the increment to rounding, throws instead of writing.
+export const incrementedFields = (
+  model: string,
+  doc: Record<string, unknown>,
+  increment: Record<string, number>,
+  set?: Record<string, unknown>
+) => {
+  const update: Record<string, unknown> = { ...set };
+  for (const [field, delta] of Object.entries(increment)) {
+    const current = doc[field] ?? 0;
+    if (typeof current !== "number") {
+      throw new Error(`Cannot increment non-numeric field ${model}.${field}`);
+    }
+    const next = current + delta;
+    if (!Number.isFinite(next) || (delta !== 0 && next === current)) {
+      throw new Error(
+        `Cannot increment ${model}.${field} by ${delta} from ${current} safely`
+      );
+    }
+    update[field] = next;
+  }
+  return update;
+};
+
 // Sorting by createdAt or the creation order uses _creationTime
 const isCreationSort = (field: string) =>
   field === "createdAt" || field === "_creationTime";
@@ -747,11 +791,26 @@ export const paginate = async <
   // adapters sort anyway (ORDER BY without an index), so read every matching
   // row and sort here. On a large table this can hit Convex's read limit,
   // which fails instead of returning the wrong rows.
-  const sortsInMemory = async (inWhere?: (typeof args.where & {})[number]) =>
-    Boolean(
-      args.sortBy &&
-      !isCreationSort(args.sortBy.field) &&
-      !findIndex(schema, {
+  //
+  // An index scan with a range on one field returns rows in that field's
+  // order, even when the index has the sort field next, so a range on another
+  // field also sorts here. A range on createdAt doesn't count: it's applied
+  // to the rows the index returns, not to the index.
+  const rangeOnOtherField = Boolean(
+    args.sortBy &&
+    args.where?.some(
+      (w) =>
+        ["lt", "lte", "gt", "gte"].includes(w.operator ?? "") &&
+        !isCreationSort(w.field) &&
+        w.field !== args.sortBy!.field
+    )
+  );
+  const sortsInMemory = async (inWhere?: (typeof args.where & {})[number]) => {
+    if (!args.sortBy) {
+      return false;
+    }
+    const { index } =
+      findIndex(schema, {
         model: args.model,
         // Without the eq null clauses, as generateQuery picks its index:
         // an index range can't match unset fields
@@ -759,8 +818,13 @@ export const paginate = async <
           ?.filter((w) => !isEqNull(w))
           .map((w) => (w === inWhere ? { ...w, operator: "eq" as const } : w)),
         sortBy: args.sortBy,
-      })?.index
-    );
+      }) ?? {};
+    // Without an index the query reads rows in creation order
+    if (isCreationSort(args.sortBy.field)) {
+      return rangeOnOtherField && Boolean(index);
+    }
+    return rangeOnOtherField || !index;
+  };
   const sortInMemory = async (): Promise<PaginationResult<Doc>> => {
     const sortBy = args.sortBy!;
     const docs: Doc[] = [];
@@ -785,13 +849,16 @@ export const paginate = async <
       cursor = result.continueCursor;
     }
     const direction = sortBy.direction === "desc" ? -1 : 1;
+    // createdAt sorts by _creationTime, as the index paths do
     const sorted = docs.sort(
       (a, b) =>
-        direction *
-          compareValues(
-            a[sortBy.field as keyof Doc],
-            b[sortBy.field as keyof Doc]
-          ) ||
+        (isCreationSort(sortBy.field)
+          ? 0
+          : direction *
+            compareValues(
+              a[sortBy.field as keyof Doc],
+              b[sortBy.field as keyof Doc]
+            )) ||
         direction * ((a._creationTime as number) - (b._creationTime as number))
     );
     return {
@@ -857,29 +924,26 @@ export const paginate = async <
         .flatMap((doc) => (doc ? [doc] : []))
         .filter((doc) => filterByWhere(doc, args.where, (w) => w !== inWhere));
 
+      // Sorted as by sortInMemory, in a Convex index's order: unset and null
+      // first, then by creation order
+      const sortBy = args.sortBy;
+      const sign = sortBy?.direction === "desc" ? -1 : 1;
       return {
         page: filteredDocs
           .sort((a, b) => {
-            if (args.sortBy?.field === "createdAt") {
-              return args.sortBy.direction === "asc"
-                ? (a._creationTime as number) - (b._creationTime as number)
-                : (b._creationTime as number) - (a._creationTime as number);
+            if (!sortBy) {
+              return 0;
             }
-            if (args.sortBy) {
-              const aValue = a[args.sortBy.field as keyof typeof a];
-              const bValue = b[args.sortBy.field as keyof typeof b];
-              if (aValue === bValue) {
-                return 0;
-              }
-              return args.sortBy.direction === "asc"
-                ? aValue! > bValue!
-                  ? 1
-                  : -1
-                : aValue! > bValue!
-                  ? -1
-                  : 1;
-            }
-            return 0;
+            const byField = isCreationSort(sortBy.field)
+              ? 0
+              : compareValues(
+                  a[sortBy.field as keyof typeof a],
+                  b[sortBy.field as keyof typeof b]
+                );
+            return (
+              sign * byField ||
+              sign * ((a._creationTime as number) - (b._creationTime as number))
+            );
           })
           .slice(0, args.limit)
           .map((doc) => selectFields(doc, args.select))

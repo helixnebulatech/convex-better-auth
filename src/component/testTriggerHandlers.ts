@@ -25,3 +25,16 @@ export const sessionOnUpdateUpdater = internalMutationGeneric({
     }
   },
 });
+
+// Appends a marker to `session.userAgent` on every onUpdate call, so a test
+// can tell how many times a row's trigger fired (one "x" per call).
+export const sessionOnUpdateMarker = internalMutationGeneric({
+  args: { newDoc: v.any(), oldDoc: v.any(), model: v.string() },
+  handler: async (ctx, args) => {
+    if (args.model === "session") {
+      await ctx.db.patch("session", args.newDoc._id, {
+        userAgent: `${args.oldDoc.userAgent ?? ""}x`,
+      });
+    }
+  },
+});

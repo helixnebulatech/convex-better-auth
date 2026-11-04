@@ -10,7 +10,7 @@ description: Migrate to @convex-dev/better-auth@0.13
   <div className="fd-step">
     ### Install dependencies
 
-    Update Better Auth and the component. Better Auth must be on `1.7.5` or
+    Update Better Auth and the component. Better Auth must be on `1.7.16` or
     later in the `1.7.x` line.
 
     <Callout>
@@ -19,7 +19,7 @@ description: Migrate to @convex-dev/better-auth@0.13
 
     ```npm
     npm install @convex-dev/better-auth@^0.13.0
-    npm install better-auth@~1.7.5
+    npm install better-auth@~1.7.16
     ```
 
   </div>
@@ -35,8 +35,9 @@ description: Migrate to @convex-dev/better-auth@0.13
 ### Use `signIn.social` for Generic OAuth providers
 
 Better Auth 1.7 registers each Generic OAuth provider as a social provider.
-Remove `genericOAuthClient()` from your auth client, and use `signIn.social`
-instead of `signIn.oauth2`.
+Remove `genericOAuthClient()` from your auth client. Use `signIn.social`
+instead of `signIn.oauth2`, and `linkSocial` instead of `oauth2.link` to link a
+provider to the signed-in user.
 
 ```ts
 export const authClient = createAuthClient({
@@ -48,6 +49,9 @@ export const authClient = createAuthClient({
 
 await authClient.signIn.oauth2({ providerId: "slack" }); // [!code --]
 await authClient.signIn.social({ provider: "slack" }); // [!code ++]
+
+await authClient.oauth2.link({ providerId: "slack" }); // [!code --]
+await authClient.linkSocial({ provider: "slack" }); // [!code ++]
 ```
 
 The callback URL changes from `/api/auth/oauth2/callback/<providerId>` to
@@ -378,12 +382,13 @@ affects both.
 
 ### Forwarded headers
 
-The component now sets `x-forwarded-host` and `x-forwarded-proto` itself before
-calling Better Auth: only for an origin listed exactly in your trusted origins,
-and otherwise it removes them. On Convex's cloud nothing changes for apps. On
+The component now decides the origin Better Auth sees and sets the request URL,
+`Host`, `x-forwarded-host` and `x-forwarded-proto` to it before calling Better
+Auth: your app's origin when it's listed exactly in your trusted origins, and
+otherwise `CONVEX_SITE_URL`. On Convex's cloud nothing changes for apps. On
 self-hosted Convex, see [Self-hosted Convex](/security#self-hosted-convex). If
-your app uses `advanced.trustedProxyHeaders` with a wildcard in `allowedHosts`,
-list the hosts exactly.
+your app uses a dynamic `baseURL` with a wildcard in `allowedHosts`, list the
+hosts exactly, or requests from them get the `fallback` origin.
 
 ### TanStack Start `isAuthenticated`
 
@@ -448,9 +453,102 @@ their own. If you called these endpoints on the server, rename the calls:
 | `auth.api.getToken()` (Convex)                 | `auth.api.getConvexToken()`                |
 | `auth.api.getJwks()` (Convex)                  | `auth.api.getConvexJwks()`                 |
 | `auth.api.getOpenIdConfig()`                   | `auth.api.getConvexOpenIdConfig()`         |
-| `auth.api.verifyOneTimeToken()` (cross domain) | `auth.api.crossDomainVerifyOneTimeToken()` |
+| `auth.api.verifyOneTimeToken()` (cross domain) | `auth.api.verifyCrossDomainOneTimeToken()` |
 | `auth.api.startOAuth()`                        | `auth.api.crossDomainOAuthStart()`         |
 
 The paths and the clients don't change. A cross domain sign-in that is between
 the redirect and the token exchange during the upgrade fails, and the user has
 to sign in again.
+
+## Upgrading to 0.13.9
+
+0.13.9 needs Better Auth 1.7.16 or later, which has security fixes:
+
+```npm
+npm install better-auth@~1.7.16
+```
+
+### Cross domain verify endpoint
+
+The cross domain one-time token endpoint is now
+`auth.api.verifyCrossDomainOneTimeToken()`, the name upstream uses. If you
+upgraded to 0.13.7 or 0.13.8 and call it on the server, rename
+`auth.api.crossDomainVerifyOneTimeToken()`. The path and the client don't
+change.
+
+### Confirming an email change
+
+Since Better Auth 1.7.16, opening the link that confirms an email change updates
+the email but no longer signs in whoever opens it. With the cross domain plugin
+the link redirects to `siteUrl` without a session, and users who aren't signed
+in there sign in again.
+
+### SCIM
+
+`@better-auth/scim` refuses to start unless the database adapter has native
+transactions, which the Convex adapter doesn't have, so the SCIM plugin can't be
+used with any Better Auth 1.7 release. Earlier 0.13 docs listed it as supported.
+The SCIM list indexes from 0.13.7 stay in the schema.
+
+### Atomic counters
+
+The adapter now updates counters, such as rate limit rows and two factor
+lockouts, with the component's `incrementOne` function, in a single mutation.
+Before, Better Auth read the row and updated it only if it hadn't changed,
+retrying 5 times, so concurrent requests on the same rate limit could fail with
+`could not complete an atomic increment due to contention`.
+
+Apps using the default install get it on their next deploy. Apps using
+[Local Install](/local-install) export the two new functions from
+`convex/betterAuth/adapter.ts`, as in an adapter written for upstream 0.13:
+
+```ts title="convex/betterAuth/adapter.ts"
+export const {
+  create,
+  findOne,
+  findMany,
+  updateOne,
+  updateMany,
+  deleteOne,
+  deleteMany,
+  consumeOne, // [!code ++]
+  incrementOne, // [!code ++]
+} = createApi(schema, createAuthOptions);
+```
+
+Until they do, the adapter keeps the old behaviour, at the cost of one failed
+call per increment, and logs a warning asking to export them in every function
+run that increments a counter, such as each rate limited request.
+
+### Account keys
+
+Creating or updating an account with the `providerId` and `accountId` of
+another account now fails. Better Auth already refuses to sign in with a
+provider account that two accounts share, so this only stops new duplicates.
+If an app ran into `Multiple accounts match the same accountId`, delete the
+extra account rows.
+
+### Request origin
+
+The component now also sets the request URL and `Host` header Better Auth sees,
+not only `x-forwarded-*`: to your app's origin when it's listed exactly in your
+trusted origins, and otherwise to `CONVEX_SITE_URL`. On Convex's cloud nothing
+changes. A dynamic `baseURL` now gets your app's origin from the Next.js and
+TanStack Start handlers without `advanced.trustedProxyHeaders`. Hosts that only
+match a wildcard in `allowedHosts` are replaced with `CONVEX_SITE_URL`, so Better
+Auth uses the `fallback` of your `baseURL`; list them exactly.
+See [Self-hosted Convex](/security#self-hosted-convex).
+
+### Adapter debug logs
+
+`verbose: true` no longer turns on Better Auth's adapter debug logs, which print
+whole database rows, including session tokens and password hashes. To see them
+while debugging, pass `debugLogs: true` to `createClient()`.
+
+### Atomic writes in queries
+
+`auth.api` calls that run in a query and need `consumeOne` or `incrementOne`,
+such as verifying an API key with rate limiting, now throw an error naming the
+method, instead of returning no row. See
+[Calling Better Auth from a query](/basic-usage#calling-better-auth-from-a-query).
+Run them from a mutation or action.

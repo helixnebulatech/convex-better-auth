@@ -57,7 +57,12 @@ const getExactTrustedOrigins = async (ctx: {
   }
   const origins = new Set<string>();
   for (const entry of entries) {
-    if (typeof entry !== "string" || entry.includes("*")) {
+    // Better Auth treats `*` and `?` as wildcards (matchesOriginPattern)
+    if (
+      typeof entry !== "string" ||
+      entry.includes("*") ||
+      entry.includes("?")
+    ) {
       continue;
     }
     try {
@@ -71,6 +76,10 @@ const getExactTrustedOrigins = async (ctx: {
   }
   return origins;
 };
+
+// Set by the after hook on responses to cross domain requests, removed in
+// onResponse
+const CROSS_DOMAIN_RESPONSE_HEADER = "x-better-auth-cross-domain";
 
 const sha256 = async (value: string) => {
   const digest = await crypto.subtle.digest(
@@ -139,6 +148,34 @@ export const crossDomain = ({ siteUrl }: { siteUrl: string }) => {
             storeStateStrategy: "database",
           },
         },
+      };
+    },
+    // Runs after every plugin's after hooks. An after hook only sees the
+    // cookies set before it, so with twoFactor listed after crossDomain its
+    // two_factor cookie and the expiry of the held session went out as plain
+    // Set-Cookie, which the cross domain client never reads.
+    onResponse: async (response) => {
+      if (!response.headers.has(CROSS_DOMAIN_RESPONSE_HEADER)) {
+        return;
+      }
+      const headers = new Headers(response.headers);
+      headers.delete(CROSS_DOMAIN_RESPONSE_HEADER);
+      const setCookie = headers.get("set-cookie");
+      if (setCookie) {
+        // Later cookies win in the client, as in a browser
+        const moved = headers.get("set-better-auth-cookie");
+        headers.delete("set-cookie");
+        headers.set(
+          "Set-Better-Auth-Cookie",
+          moved ? `${moved}, ${setCookie}` : setCookie
+        );
+      }
+      return {
+        response: new Response(response.body, {
+          status: response.status,
+          statusText: response.statusText,
+          headers,
+        }),
       };
     },
     hooks: {
@@ -296,6 +333,9 @@ export const crossDomain = ({ siteUrl }: { siteUrl: string }) => {
             );
           },
           handler: createAuthMiddleware(async (ctx) => {
+            // Marks the response so onResponse also moves the cookies that
+            // after hooks of plugins listed later set, such as twoFactor's
+            ctx.setHeader(CROSS_DOMAIN_RESPONSE_HEADER, "1");
             const setCookie = ctx.context.responseHeaders?.get("set-cookie");
             if (!setCookie) {
               return;
@@ -375,6 +415,9 @@ export const crossDomain = ({ siteUrl }: { siteUrl: string }) => {
             } else if (url.origin !== siteOrigin) {
               // Magic link and email verification: only to the app at
               // siteUrl, as expo only hands them to the app's scheme
+              ctx.context.logger.warn(
+                `Not handing off the session: the callback URL is on ${url.origin}, but magic link and email verification sessions are only handed to siteUrl (${siteOrigin})`
+              );
               return;
             }
             const token = generateRandomString(32);
@@ -484,7 +527,7 @@ export const crossDomain = ({ siteUrl }: { siteUrl: string }) => {
           throw ctx.redirect(pending.url);
         }
       ),
-      crossDomainVerifyOneTimeToken: createAuthEndpoint(
+      verifyCrossDomainOneTimeToken: createAuthEndpoint(
         "/cross-domain/one-time-token/verify",
         {
           method: "POST",

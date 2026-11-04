@@ -59,6 +59,10 @@ export default function EnableTwoFactor() {
           setBackupCodes(data.backupCodes);
         }
         setStep("qr-verify");
+      } else {
+        alert(
+          "Failed to enable 2FA. Please check your password and try again."
+        );
       }
     } catch {
       alert("Failed to enable 2FA. Please check your password and try again.");

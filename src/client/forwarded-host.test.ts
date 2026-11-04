@@ -1,13 +1,16 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { httpRouter } from "convex/server";
 import { betterAuth } from "better-auth/minimal";
 import { memoryAdapter } from "better-auth/adapters/memory";
 import type { MemoryDB } from "better-auth/adapters/memory";
+import type { BetterAuthOptions } from "better-auth";
 import { createClient } from "./create-client.js";
 
 // End-to-end: a dynamic baseURL with a wildcard in allowedHosts, requests
-// arriving through registerRoutes the way Convex delivers them. Better Auth
-// only reads x-forwarded-* with advanced.trustedProxyHeaders.
+// arriving through registerRoutes the way Convex delivers them. The emailed
+// password reset link shows which origin Better Auth resolved. Better Auth
+// only reads x-forwarded-* with advanced.trustedProxyHeaders, and otherwise
+// the Host header, then the request URL.
 const APP_HOST = "myapp.example.com";
 const ADMIN_HOST = "admin.example.com";
 const PREVIEW_HOST = "branch-abc.example-previews.app";
@@ -25,9 +28,12 @@ const component = {
   },
 } as any;
 
-const setup = async (trustedProxyHeaders: boolean) => {
+const setup = async (
+  advanced?: BetterAuthOptions["advanced"],
+  trustedOrigins?: BetterAuthOptions["trustedOrigins"]
+) => {
   const db: MemoryDB = { user: [], session: [], account: [], verification: [] };
-  const sent = { resetUrl: "" };
+  let resetUrl = "";
   const auth = betterAuth({
     baseURL: {
       allowedHosts: [APP_HOST, ADMIN_HOST, "*.example-previews.app"],
@@ -37,11 +43,12 @@ const setup = async (trustedProxyHeaders: boolean) => {
     secret: "test-secret-at-least-thirty-two-characters-long",
     database: memoryAdapter(db),
     logger: { disabled: true },
-    advanced: { trustedProxyHeaders },
+    advanced,
+    trustedOrigins,
     emailAndPassword: {
       enabled: true,
       sendResetPassword: async ({ url }) => {
-        sent.resetUrl = url;
+        resetUrl = url;
       },
     },
   });
@@ -66,70 +73,136 @@ const setup = async (trustedProxyHeaders: boolean) => {
     request: Request
   ) => Promise<Response>;
 
-  return async (headers: Record<string, string>) => {
-    sent.resetUrl = "";
+  // `origin` is what the request arrives as: on Convex's cloud the edge sets
+  // the URL, Host and x-forwarded-* to the deployment; a self-hosted backend
+  // builds them from whatever the client sent.
+  return async (headers: Record<string, string>, origin = CONVEX_SITE) => {
+    resetUrl = "";
     const response = await handler(
       {},
-      new Request(`${CONVEX_SITE}/api/auth/request-password-reset`, {
+      new Request(`${origin}/api/auth/request-password-reset`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          host: new URL(CONVEX_SITE).host,
-          "x-forwarded-host": new URL(CONVEX_SITE).host,
-          "x-forwarded-proto": "https",
+          host: new URL(origin).host,
+          "x-forwarded-host": new URL(origin).host,
+          "x-forwarded-proto": new URL(origin).protocol.slice(0, -1),
           ...headers,
         },
         body: JSON.stringify({ email: "victim@example.com" }),
       })
     );
     expect(response.status, await response.clone().text()).toBe(200);
-    expect(sent.resetUrl).not.toBe("");
-    return new URL(sent.resetUrl);
+    expect(resetUrl).not.toBe("");
+    return new URL(resetUrl);
   };
 };
 
-describe("forwarded host restore with dynamic baseURL", async () => {
-  const requestReset = await setup(true);
+afterEach(() => {
+  vi.unstubAllEnvs();
+});
+
+describe.each([
+  ["trusted", { trustedProxyHeaders: true }],
+  ["not trusted", undefined],
+] as const)("dynamic baseURL, proxy headers %s", async (_name, advanced) => {
+  const requestReset = await setup(advanced);
 
   it("builds links from the fallback with no original host", async () => {
-    expect((await requestReset({})).host).toBe(APP_HOST);
+    vi.stubEnv("CONVEX_SITE_URL", CONVEX_SITE);
+    expect((await requestReset({})).origin).toBe(`https://${APP_HOST}`);
   });
 
-  it("uses an exactly listed original host", async () => {
+  // Without trustedProxyHeaders, Better Auth reads the Host header, which
+  // used to stay the Convex site's, so the original host was ignored
+  it("uses an exactly listed original origin", async () => {
+    vi.stubEnv("CONVEX_SITE_URL", CONVEX_SITE);
     const url = await requestReset({
       "x-better-auth-forwarded-host": ADMIN_HOST,
       "x-better-auth-forwarded-proto": "https",
     });
-    expect(url.host).toBe(ADMIN_HOST);
-  });
-
-  // A self-hosted Convex backend passes a client's x-forwarded-* through to
-  // the HTTP action, unlike Convex's cloud edge, which replaces them
-  it("ignores an x-forwarded-host a client sent straight to the backend", async () => {
-    const url = await requestReset({
-      "x-forwarded-host": PREVIEW_HOST,
-      "x-forwarded-proto": "https",
-    });
-    expect(url.host).toBe(APP_HOST);
+    expect(url.origin).toBe(`https://${ADMIN_HOST}`);
   });
 
   it("ignores an original host that only matches a wildcard", async () => {
+    vi.stubEnv("CONVEX_SITE_URL", CONVEX_SITE);
     const url = await requestReset({
       "x-better-auth-forwarded-host": PREVIEW_HOST,
       "x-better-auth-forwarded-proto": "https",
     });
-    expect(url.host).toBe(APP_HOST);
+    expect(url.origin).toBe(`https://${APP_HOST}`);
+  });
+
+  it("does not downgrade an exactly listed original host to http", async () => {
+    vi.stubEnv("CONVEX_SITE_URL", CONVEX_SITE);
+    const url = await requestReset({
+      "x-better-auth-forwarded-host": ADMIN_HOST,
+      "x-better-auth-forwarded-proto": "http",
+    });
+    expect(url.origin).toBe(`https://${APP_HOST}`);
+  });
+
+  // A self-hosted Convex backend passes a client's Host and x-forwarded-*
+  // through to the HTTP action and builds the request URL from them, unlike
+  // Convex's cloud edge, which replaces them
+  it("ignores an x-forwarded-host a client sent straight to the backend", async () => {
+    vi.stubEnv("CONVEX_SITE_URL", CONVEX_SITE);
+    const url = await requestReset({
+      "x-forwarded-host": PREVIEW_HOST,
+      "x-forwarded-proto": "https",
+    });
+    expect(url.origin).toBe(`https://${APP_HOST}`);
+  });
+
+  it("ignores a client-sent Host and URL that match a wildcard", async () => {
+    vi.stubEnv("CONVEX_SITE_URL", CONVEX_SITE);
+    const url = await requestReset({}, `https://${PREVIEW_HOST}`);
+    expect(url.origin).toBe(`https://${APP_HOST}`);
+  });
+
+  it("ignores a client-sent Host alone that matches a wildcard", async () => {
+    vi.stubEnv("CONVEX_SITE_URL", CONVEX_SITE);
+    const url = await requestReset({ host: PREVIEW_HOST });
+    expect(url.origin).toBe(`https://${APP_HOST}`);
+  });
+
+  it("does not downgrade a client-sent listed host to http", async () => {
+    vi.stubEnv("CONVEX_SITE_URL", CONVEX_SITE);
+    const url = await requestReset({}, `http://${ADMIN_HOST}`);
+    expect(url.origin).toBe(`https://${APP_HOST}`);
+  });
+
+  it("keeps a request that arrives at an exactly listed origin", async () => {
+    vi.stubEnv("CONVEX_SITE_URL", CONVEX_SITE);
+    const url = await requestReset({}, `https://${ADMIN_HOST}`);
+    expect(url.origin).toBe(`https://${ADMIN_HOST}`);
   });
 });
 
-describe("forwarded host restore without trustedProxyHeaders", async () => {
-  const requestReset = await setup(false);
+describe("dynamic baseURL, trustedOrigins function", async () => {
+  // A common preview setup: trust the origin of the host the request names
+  const requestReset = await setup(undefined, (request) => {
+    const host = request?.headers.get("host");
+    return host?.endsWith(".example-previews.app") ? [`https://${host}`] : [];
+  });
 
-  it("builds links from the fallback, even for a listed original host", async () => {
-    const url = await requestReset({
+  it("doesn't trust a client-sent host the function accepts", async () => {
+    vi.stubEnv("CONVEX_SITE_URL", CONVEX_SITE);
+    const url = await requestReset({}, `https://${PREVIEW_HOST}`);
+    expect(url.origin).toBe(`https://${APP_HOST}`);
+  });
+
+  it("uses an origin the function lists for the deployment", async () => {
+    vi.stubEnv("CONVEX_SITE_URL", CONVEX_SITE);
+    const requestAdminReset = await setup(undefined, (request) =>
+      request?.headers.get("host") === new URL(CONVEX_SITE).host
+        ? [`https://${ADMIN_HOST}`]
+        : []
+    );
+    const url = await requestAdminReset({
       "x-better-auth-forwarded-host": ADMIN_HOST,
       "x-better-auth-forwarded-proto": "https",
     });
-    expect(url.host).toBe(APP_HOST);
+    expect(url.origin).toBe(`https://${ADMIN_HOST}`);
   });
 });

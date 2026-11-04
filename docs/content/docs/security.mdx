@@ -41,7 +41,8 @@ redeems it automatically.
   `missing_or_null_origin`. See
   [Referrer policy](/framework-guides/react#referrer-policy).
 - One-time tokens are only handed to the apps listed below. Callback URLs on
-  other origins are redirected to without a session.
+  other origins are redirected to without a session, and the plugin logs a
+  warning with the two origins.
 - The one-time tokens have their own endpoint and storage, separate from Better
   Auth's `oneTimeToken` plugin, so the two can be used together and neither can
   redeem the other's tokens.
@@ -55,12 +56,12 @@ Better Auth keeps the session in a cookie of the auth server. Its official
 plugins hand it to another place only in these cases, and the cross domain
 plugin follows the same rules:
 
-| Flow                 | Better Auth                                                                                                                                                           | Cross domain plugin                                                                                                                                          |
-| -------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| OAuth from a web app | `oauth-popup` and `oauth-proxy` hand it back to the trusted origin that started the flow, in the browser that started it                                              | Handed back to the origin that started the flow, if it's `siteUrl` or an exact entry of `trustedOrigins`, and only redeemable by the browser that started it |
-| Magic link           | Core keeps it on the auth server. `expo` hands it only to the app's own scheme, never to another web origin, since anyone can request a link with any callback URL    | Only handed to `siteUrl`, your app, as `expo` does with the app's scheme                                                                                     |
-| Email verification   | With `autoSignInAfterVerification`, and when confirming an email change, core signs in whoever opens the link. `expo` hands that session only to the app's own scheme | Only handed to `siteUrl`, like a magic link                                                                                                                  |
-| Native app           | `expo` hands it to a trusted custom scheme such as `myapp://`                                                                                                         | Left to the `expo` plugin                                                                                                                                    |
+| Flow                 | Better Auth                                                                                                                                                                                                                 | Cross domain plugin                                                                                                                                          |
+| -------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| OAuth from a web app | `oauth-popup` and `oauth-proxy` hand it back to the trusted origin that started the flow, in the browser that started it                                                                                                    | Handed back to the origin that started the flow, if it's `siteUrl` or an exact entry of `trustedOrigins`, and only redeemable by the browser that started it |
+| Magic link           | Core keeps it on the auth server. `expo` hands it only to the app's own scheme, never to another web origin, since anyone can request a link with any callback URL                                                          | Only handed to `siteUrl`, your app, as `expo` does with the app's scheme                                                                                     |
+| Email verification   | With `autoSignInAfterVerification`, core signs in whoever opens the link. Since 1.7.16, confirming an email change only refreshes a session the browser already has. `expo` hands that session only to the app's own scheme | Only handed to `siteUrl`, like a magic link                                                                                                                  |
+| Native app           | `expo` hands it to a trusted custom scheme such as `myapp://`                                                                                                                                                               | Left to the `expo` plugin                                                                                                                                    |
 
 Two differences make the plugin stricter than Better Auth:
 
@@ -74,48 +75,75 @@ Two differences make the plugin stricter than Better Auth:
 
 ## Forwarded host headers
 
-Without Convex, Better Auth learns the app's host from the `x-forwarded-host`
-and `x-forwarded-proto` headers your hosting platform's proxy sets, when
-`advanced.trustedProxyHeaders` is enabled. With Convex, the request goes through
-a second proxy, Convex's edge, which has its own `x-forwarded-*`. So the
-framework handlers (`convexBetterAuthNextJs`, `convexBetterAuthReactStart`) and
-the server helpers that fetch the Convex token send the app's host and protocol
-in `x-better-auth-forwarded-host` and `x-better-auth-forwarded-proto` instead,
-and don't send `x-forwarded-*`. Like any proxy, they set these headers from the
+Without Convex, Better Auth learns the app's origin from the request: from the
+`x-forwarded-host` and `x-forwarded-proto` headers your hosting platform's proxy
+sets when `advanced.trustedProxyHeaders` is enabled, and otherwise from the
+`Host` header and the request URL. A dynamic `baseURL` checks that host against
+`allowedHosts`, wildcards included, and without a `baseURL` Better Auth uses the
+request URL. With Convex, the request goes through a second proxy, Convex's
+edge, which has its own `x-forwarded-*`. So the framework handlers
+(`convexBetterAuthNextJs`, `convexBetterAuthReactStart`) and the server helpers
+that fetch the Convex token send the app's host and protocol in
+`x-better-auth-forwarded-host` and `x-better-auth-forwarded-proto` instead, and
+don't send `x-forwarded-*`. Like any proxy, they set these headers from the
 request URL or the platform's headers, and replace values a client sent.
 
 Your Convex site URL is publicly reachable, so any client can set these headers,
-and `x-forwarded-*` too. Convex's cloud edge replaces the `x-forwarded-*` a
-client sends with its own, but a self-hosted Convex backend passes them through
-to your HTTP actions. So the component, as the proxy in front of Better Auth,
-sets `x-forwarded-host` and `x-forwarded-proto` itself on every request, from
-`x-better-auth-forwarded-*` or else from the `x-forwarded-*` the request arrived
-with, only when together they form an origin listed exactly in `trustedOrigins`,
-`BETTER_AUTH_TRUSTED_ORIGINS` or the `allowedHosts` of a dynamic `baseURL`.
-Otherwise it removes them, and Better Auth falls back to the `Host` header and
-the request URL, as without a trusted proxy. Wildcard entries such as
-`*.vercel.app` don't count, since anyone can deploy to a shared platform domain.
-Both headers are set together or not at all.
+`x-forwarded-*` and, on a self-hosted backend, `Host` too. So the component, as
+the proxy in front of Better Auth, decides the origin of every request and sets
+the request URL, `Host`, `x-forwarded-host` and `x-forwarded-proto` all to it,
+whatever `trustedProxyHeaders` says. It picks the first of:
 
-Better Auth ignores `x-forwarded-*` unless `advanced.trustedProxyHeaders` is
-enabled. With it, the base URL, and so the links in emails such as password
-reset and verification links, uses the restored host. The worst a caller can do
-is pick another of the origins you listed exactly.
+1. The app's origin from `x-better-auth-forwarded-*`, or else the
+   `x-forwarded-*` the request arrived with, when together they form an origin
+   listed exactly in `trustedOrigins`, `BETTER_AUTH_TRUSTED_ORIGINS` or the
+   `allowedHosts` and `fallback` of a dynamic `baseURL`.
+2. The request's own origin, when it's listed exactly, such as a custom domain
+   for your Convex site.
+3. `CONVEX_SITE_URL`, which only the deployment sets. On Convex's cloud this is
+   the origin requests arrive at anyway, so nothing needs configuring. Convex
+   always sets it; if it's missing, the request's own origin is used.
+
+The `x-better-auth-forwarded-*` headers are removed before Better Auth sees the
+request. Origins are compared as protocol and host, so an origin listed only
+with `https://` is never used over `http://`, and a host with a path, user info
+or an explicit default port doesn't count.
+
+This is stricter than Better Auth in two ways:
+
+- Wildcard entries such as `*.vercel.app` in `trustedOrigins` or `allowedHosts`
+  don't count. Better Auth accepts them for a dynamic `baseURL`, but anyone can
+  deploy to a shared platform domain, and the base URL decides where links in
+  emails such as password reset and verification links point. A request from an
+  app on a wildcard host gets the `fallback` origin.
+- A host only reaches Better Auth through the component, so a client can't pick
+  one Better Auth would accept but you didn't list exactly. The worst a caller
+  can do is pick another of the origins you listed exactly.
+- If `trustedOrigins` is a function, the component calls it with the request as
+  if it had arrived at `CONVEX_SITE_URL`, so a function that trusts the origin
+  of the request's own host, as some preview setups do, can't make a client's
+  host trusted. Better Auth calls it with the request it receives. Don't return
+  origins read from other request headers, such as `Origin`: a client sets
+  those.
+
+Better Auth only uses the app's origin when it takes the base URL from the
+request: with a dynamic `baseURL`, or without a `baseURL`. Then links in emails,
+OAuth callback URLs and, with `crossSubDomainCookies`, the cookie domain follow
+the app's origin. With a static `baseURL` they always use that URL.
 
 ### Self-hosted Convex
 
-Without trusted forwarded headers, Better Auth builds the base URL from the
-`Host` header and, without that, the request URL. On Convex's cloud these come
-from Convex. A self-hosted Convex backend, tested with the local backend that
-`convex dev` runs, passes the `x-forwarded-*` headers a client sends to your
-HTTP actions and builds the request URL from them. So on a self-hosted
-deployment:
+A self-hosted Convex backend, tested with the local backend that `convex dev`
+runs, passes the `Host` and `x-forwarded-*` headers a client sends to your HTTP
+actions and builds the request URL from them. The component replaces all of them
+as described above, so a self-hosted deployment needs no reverse proxy for this.
+Before 0.13.9, it only replaced `x-forwarded-*`, and a dynamic `baseURL` with a
+wildcard in `allowedHosts` took a client's `Host` header
+([GHSA-9qq3-v9g3-cxhw](https://github.com/convex/better-auth/security/advisories/GHSA-9qq3-v9g3-cxhw)).
 
-- Set a static `baseURL`, as the framework guides do. Then Better Auth doesn't
-  take the base URL from the request at all.
-- If you need a dynamic `baseURL`, list each host in `allowedHosts` exactly,
-  without wildcards, and put a reverse proxy in front of the backend that sets
-  `Host` and `x-forwarded-*` itself instead of passing the client's.
+Make sure `CONVEX_SITE_URL` is your backend's public site URL (set from
+`CONVEX_SITE_ORIGIN` on a self-hosted backend), since it's the origin used when
+a request's own isn't listed.
 
 ## Database adapter
 
@@ -135,13 +163,36 @@ database:
   `email`, `username` or other unique field. The component checks it in the same
   mutation as the write. A null or unset value never conflicts, as NULL in a
   unique column in SQL, so any number of users can have no `username`.
+- **Account keys.** Two accounts can't share a `providerId` and `accountId`.
+  This is stricter than Better Auth's SQL schema, which has no constraint for
+  them, but Better Auth's internal adapter (`findAccountByKey`,
+  `findAccountOwnerByKey`) throws `Multiple accounts match` when two accounts
+  do, so two requests racing to link the same provider account would break
+  sign-in with it. The component rejects the second account in the same
+  mutation as the write, on create and on update.
 - **Sorting.** Better Auth's adapters always honour `sortBy`. Convex reads rows
   in index order, so when no index ends in the sort field, the component reads
   every row that matches the query and sorts them, as SQL does with `ORDER BY`
   and no index. Nulls and unset values come first, as in a Convex index. On a
   large table this can hit Convex's read limit, which fails the query instead of
   returning the wrong rows. Add an index ending in the sort field for lists you
-  sort often.
+  sort often. A range (`lt`, `gt`...) on another field also sorts this way, as
+  an index scan with a range returns rows in the order of the ranged field.
+- **Updating many rows.** `updateMany` updates every row that matches when it
+  runs once, as SQL's `UPDATE ... WHERE`. The component collects the matching
+  ids first and updates them in chunks of 200, applying the `where` again in
+  each chunk, so an update that moves a row in the index the `where` reads
+  doesn't update it twice. From an action, each chunk is its own transaction.
+- **Atomic counters.** Better Auth's `incrementOne` (rate limits, two factor
+  lockouts, team seats) and `consumeOne` (verification values, one-time tokens)
+  read, check and write one row in a single mutation, which Convex runs as a
+  transaction, as Kysely does in one `UPDATE ... WHERE` or `DELETE ... WHERE`.
+  An unset or null counter counts as 0, as in Better Auth's memory adapter and
+  its atomic fallback.
+- **Comparisons with `undefined`.** A `where` clause whose value is `undefined`
+  matches no row, as Better Auth's SQL adapters bind it as NULL and a
+  comparison with NULL is never true. It doesn't match rows where the field is
+  null, as `eq null` does.
 
 ## Adapter calls without a where clause
 
@@ -153,6 +204,7 @@ one too. With an empty `where`:
 | ---------------------------------------- | --------------------------------- |
 | Adapter `delete`                         | Deletes the first document        |
 | Adapter `consumeOne`                     | Deletes and returns the first one |
+| Adapter `incrementOne`                   | Updates and returns the first one |
 | Adapter `update`                         | Does nothing and returns `null`   |
 | Adapter `deleteMany` / `updateMany`      | Deletes / updates every document  |
 | Component `adapter.deleteOne` (no where) | Deletes the first document        |
@@ -160,6 +212,8 @@ one too. With an empty `where`:
 
 Better Auth's own adapters don't agree on this either. With Postgres, Better
 Auth runs `delete from "session" where 1 = 1` and deletes every row.
+`consumeOne` and `incrementOne` take the first row as Better Auth's Kysely and
+memory adapters and its atomic fallback do; upstream returns `null` instead.
 
 ## Tokens and revocation
 
@@ -175,7 +229,14 @@ The Convex JWT is only signed where Better Auth's `jwt` plugin signs its own: by
 when it's also stored in the `convex_jwt` cookie. It's never signed on sign-in,
 so a plugin that holds a sign-in back, such as `twoFactor` waiting for the
 second factor, can't leave a JWT behind whatever the plugin order. A request
-that starts a new session, and sign-out, clear the cookie.
+that starts a new session, sign-out, and any response that expires the session
+cookie clear the `convex_jwt` cookie, the way Better Auth's
+`deleteSessionCookie` clears the cookies derived from the session
+(`session_data`, `account_data`). So when `twoFactor` holds a sign-in, which
+expires the session cookie, the JWT of a user who was signed in before in the
+same browser is cleared too, whatever the plugin order. With the cross domain
+plugin, every cookie of the response, including these, reaches the client in
+`Set-Better-Auth-Cookie`, also those set by plugins listed after it.
 
 ## Users returned to the client
 
@@ -190,7 +251,23 @@ as they're meant for server code.
 ## Verbose logs
 
 `verbose: true` logs request and response headers with cookies, tokens and API
-keys redacted, and the query string of `location` and `referer` removed. It also
-enables Better Auth's adapter debug logs, which print whole database rows,
-including session tokens, password hashes and verification values. Only enable
-it while debugging, and not in production.
+keys redacted, and the query string of `location` and `referer` removed. It no
+longer enables Better Auth's adapter debug logs, which print whole database
+rows, including session tokens, password hashes and verification values. Those
+have their own `debugLogs` option, off by default, which takes the same values
+as the `debugLogs` of Better Auth's adapters. Better Auth doesn't redact them
+either, so only enable either option while debugging, and `debugLogs` never in
+production.
+
+## Advisories
+
+Upstream `@convex-dev/better-auth` publishes its advisories on
+[GitHub](https://github.com/convex/better-auth/security/advisories). This is how
+the fork handles each:
+
+| Advisory                                                                                             | Upstream issue                                                                               | In this fork                                                                                                                                                                                                                                                                                                                 |
+| ---------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [GHSA-4qvm-r4pr-v3wg](https://github.com/convex/better-auth/security/advisories/GHSA-4qvm-r4pr-v3wg) | Convex JWT issued on password sign-in before two-factor authentication completes             | Fixed in 0.13.7. The JWT is only signed where Better Auth's `jwt` plugin signs, by `/convex/token` and after `/get-session` returns a session, never on sign-in, whatever the plugin order. See [Tokens and revocation](#tokens-and-revocation)                                                                              |
+| [GHSA-9qq3-v9g3-cxhw](https://github.com/convex/better-auth/security/advisories/GHSA-9qq3-v9g3-cxhw) | Emailed links can still use a caller-chosen host with a dynamic `baseURL`                    | Fixed in 0.13.9. The component sets the request URL and `Host`, not only `x-forwarded-*`, to an exactly trusted origin or `CONVEX_SITE_URL`. See [Forwarded host headers](#forwarded-host-headers)                                                                                                                           |
+| [GHSA-j8qq-g9pm-v3c2](https://github.com/convex/better-auth/security/advisories/GHSA-j8qq-g9pm-v3c2) | The cross domain plugin can deliver a session token to a trusted origin an attacker controls | Stricter than upstream's fix since 0.13.3. A one-time token goes to `siteUrl`, or for OAuth to the origin that started the flow in the same browser, only if it's `siteUrl` or an exact `trustedOrigins` entry. Upstream hands it to any exact `trustedOrigins` entry. See [Who receives a session](#who-receives-a-session) |
+| [GHSA-pgx2-m66h-x29f](https://github.com/convex/better-auth/security/advisories/GHSA-pgx2-m66h-x29f) | Emailed links can point at an attacker's host with a dynamic `baseURL`                       | Taken in 0.13.6 and adapted: the forwarded origin is matched in full, protocol and host, against exact trusted origins, not only the host, and the framework handlers drop an incoming `x-forwarded-proto`                                                                                                                   |

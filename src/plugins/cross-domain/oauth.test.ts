@@ -694,6 +694,22 @@ describe("cross domain OAuth from other app origins", () => {
     );
   });
 
+  it("doesn't take a `?` pattern for an exact origin", async () => {
+    // Better Auth treats `?` as a wildcard. As a URL, the entry parses to
+    // the origin https://app, which it never matches.
+    const { auth } = build({
+      trustedOrigins: [SITE, "https://app?.example.com"],
+    });
+    const state = await signInSocial(
+      auth,
+      { callbackURL: `${SITE}/x` },
+      clientHeaders()
+    );
+    expect(
+      (await startOAuth(auth, state, { origin: "https://app" })).status
+    ).toBe(403);
+  });
+
   it("accepts exact origins returned by a trustedOrigins function", async () => {
     const { auth } = build({ trustedOrigins: async () => [SITE, ADMIN] });
     const res = await browserSignInFrom(auth, ADMIN, {

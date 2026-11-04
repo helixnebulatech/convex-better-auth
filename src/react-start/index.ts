@@ -65,9 +65,10 @@ const handler = async (request: Request, opts: { convexSiteUrl: string }) => {
   const nextUrl = `${opts.convexSiteUrl}${requestUrl.pathname}${requestUrl.search}`;
   const headers = toProxyRequestHeaders(request);
   // Convex's edge resolves the deployment from `x-forwarded-host`, so the app
-  // host there 404s. The component restores the app's host and protocol from
-  // the `x-better-auth-forwarded-*` headers, only for hosts listed exactly in
-  // trustedOrigins.
+  // host there 404s. The component gives Better Auth the app's origin from
+  // the `x-better-auth-forwarded-*` headers, as its request URL, `Host` and
+  // `x-forwarded-*`, only for origins listed exactly in trustedOrigins or
+  // allowedHosts.
   headers.delete("x-forwarded-host");
   headers.delete("x-forwarded-proto");
   headers.set("accept-encoding", "application/json");

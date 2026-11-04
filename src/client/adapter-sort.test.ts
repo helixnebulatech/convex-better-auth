@@ -141,3 +141,156 @@ describe("sortBy with an eq null clause", () => {
     expect(names).toEqual(["a", "b"]);
   });
 });
+
+// An index scan with a range on one field returns rows in that field's order,
+// so it can't serve a sort on another field, even when the index has the sort
+// field next (session.expiresAt_userId).
+describe("sortBy with a range on another field", () => {
+  const setup = async () => {
+    const t = convexTest(schema, import.meta.glob("../component/**/*.*s"));
+    const now = Date.now();
+    // Created a, b, c, d; userId order c, a, d, b; expiresAt order d, c, b, a
+    const rows = [
+      { userId: "u2", expiresAt: now + 4000 },
+      { userId: "u4", expiresAt: now + 3000 },
+      { userId: "u1", expiresAt: now + 2000 },
+      { userId: "u3", expiresAt: now + 1000 },
+    ];
+    await t.run(async (ctx) => {
+      for (const [i, row] of rows.entries()) {
+        await ctx.db.insert("session", {
+          ...row,
+          token: `token-${i}`,
+          createdAt: now + i,
+          updatedAt: now,
+        });
+      }
+    });
+    const ctx = {
+      runQuery: t.query.bind(t),
+      runMutation: t.mutation.bind(t),
+    } as any;
+    const adapter = createClient<DataModel>({ adapter: api.adapter } as any, {
+      verbose: false,
+    }).adapter(ctx)({});
+    return { adapter, now };
+  };
+  const userIds = (rows: { userId: string }[]) => rows.map((row) => row.userId);
+
+  it("sorts by the other field", async () => {
+    const { adapter, now } = await setup();
+    const find = (direction: "asc" | "desc", limit?: number) =>
+      adapter.findMany<{ userId: string }>({
+        model: "session",
+        where: [
+          { field: "expiresAt", operator: "gt", value: new Date(now + 500) },
+        ],
+        sortBy: { field: "userId", direction },
+        limit,
+      });
+    expect(userIds(await find("asc"))).toEqual(["u1", "u2", "u3", "u4"]);
+    expect(userIds(await find("desc", 2))).toEqual(["u4", "u3"]);
+  });
+
+  it("sorts by createdAt", async () => {
+    const { adapter, now } = await setup();
+    const find = (direction: "asc" | "desc", limit?: number) =>
+      adapter.findMany<{ userId: string }>({
+        model: "session",
+        where: [
+          { field: "expiresAt", operator: "gt", value: new Date(now + 500) },
+        ],
+        sortBy: { field: "createdAt", direction },
+        limit,
+      });
+    expect(userIds(await find("asc"))).toEqual(["u2", "u4", "u1", "u3"]);
+    expect(userIds(await find("desc", 2))).toEqual(["u3", "u1"]);
+  });
+
+  it("sorts an in lookup with a range on another field", async () => {
+    const { adapter, now } = await setup();
+    const rows = await adapter.findMany<{ userId: string }>({
+      model: "session",
+      where: [
+        { field: "userId", operator: "in", value: ["u1", "u2", "u3", "u4"] },
+        { field: "expiresAt", operator: "gt", value: new Date(now + 500) },
+      ],
+      sortBy: { field: "createdAt", direction: "desc" },
+    });
+    expect(userIds(rows)).toEqual(["u3", "u1", "u4", "u2"]);
+  });
+
+  it("still uses the index for a range on the sort field", async () => {
+    const { adapter, now } = await setup();
+    const rows = await adapter.findMany<{ userId: string }>({
+      model: "session",
+      where: [
+        { field: "expiresAt", operator: "gt", value: new Date(now + 1500) },
+      ],
+      sortBy: { field: "expiresAt", direction: "asc" },
+    });
+    expect(userIds(rows)).toEqual(["u1", "u4", "u2"]);
+  });
+});
+
+// Ids and unique fields in an `in` are looked up one by one and sorted here,
+// in the order every other path sorts: a Convex index's, nulls first.
+describe("sortBy on an id in lookup", () => {
+  it("sorts nulls and unset values first ascending, last descending", async () => {
+    const t = convexTest(schema, import.meta.glob("../component/**/*.*s"));
+    const now = Date.now();
+    const ids = await t.run(async (ctx) => {
+      const ids: string[] = [];
+      for (const [name, image] of [
+        ["b", "img-b"],
+        ["unset", undefined],
+        ["a", "img-a"],
+        ["null", null],
+        ["c", "img-c"],
+        ["a2", "img-a"],
+      ] as const) {
+        ids.push(
+          await ctx.db.insert("user", {
+            name,
+            email: `${name}@example.com`,
+            emailVerified: false,
+            ...(image === undefined ? {} : { image }),
+            createdAt: now,
+            updatedAt: now,
+          })
+        );
+      }
+      return ids;
+    });
+    const ctx = {
+      runQuery: t.query.bind(t),
+      runMutation: t.mutation.bind(t),
+    } as any;
+    const adapter = createClient<DataModel>({ adapter: api.adapter } as any, {
+      verbose: false,
+    }).adapter(ctx)({});
+    const find = (field: string, direction: "asc" | "desc") =>
+      adapter.findMany<{ name: string }>({
+        model: "user",
+        where: [{ field: "id", operator: "in", value: ids }],
+        sortBy: { field, direction },
+      });
+    expect(names(await find("image", "asc"))).toEqual([
+      "unset",
+      "null",
+      "a",
+      "a2",
+      "b",
+      "c",
+    ]);
+    expect(names(await find("image", "desc"))).toEqual([
+      "c",
+      "b",
+      "a2",
+      "a",
+      "null",
+      "unset",
+    ]);
+  });
+});
+const names = (rows: { name: string }[]) => rows.map((row) => row.name);

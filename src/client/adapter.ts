@@ -15,13 +15,39 @@ import type defaultSchema from "../component/schema.js";
 import type { Where } from "better-auth/types";
 import type { BetterAuthOptions } from "better-auth/minimal";
 import { asyncMap } from "convex-helpers";
-import { compareValues } from "./adapter-utils.js";
+import { compareValues, incrementedFields } from "./adapter-utils.js";
 import { isRunMutationCtx } from "../utils/index.js";
 import type { Doc, TableNames } from "../component/_generated/dataModel.js";
 import type { ComponentApi } from "../component/_generated/component.js";
 import type { AuthFunctions, GenericCtx, Triggers } from "./index.js";
 
 let didWarnJoinsUnsupported = false;
+// Module state only lasts for one function run on Convex, so this warns once
+// per run, such as once per rate limited request
+let didWarnIncrementOneMissing = false;
+
+// The error Convex throws when a Local Install's adapter.ts doesn't export
+// incrementOne. A Local Install's component api is a proxy, so the function
+// reference always exists and only the call fails. The backend says
+// "Child component 'betterAuth' does not export 'adapter.incrementOne'" from a
+// mutation and "Couldn't resolve betterAuth.adapter.incrementOne" from an
+// action, and convex-test "Could not find function ... there is no such
+// export". The message must name incrementOne, so a missing function called
+// from a trigger inside it isn't mistaken for it.
+export const isMissingIncrementOneError = (error: unknown) => {
+  const message = error instanceof Error ? error.message : String(error);
+  return (
+    /\bincrementOne/.test(message) &&
+    /does not export|Couldn't resolve|Could(?: not|n't) find (?:public )?function|there is no such export/.test(
+      message
+    )
+  );
+};
+
+// Fields Better Auth's atomic fallback puts in its compare-and-swap guard:
+// strings, numbers, booleans and null. Arrays can't be compared with eq.
+const isGuardValue = (value: unknown) =>
+  value === null || ["string", "number", "boolean"].includes(typeof value);
 
 const handlePagination = async (
   next: ({
@@ -47,11 +73,10 @@ const handlePagination = async (
   const onResult = (
     result: SetOptional<PaginationResult<any>, "page"> & { count?: number }
   ) => {
-    state.cursor =
-      result.pageStatus === "SplitRecommended" ||
-      result.pageStatus === "SplitRequired"
-        ? (result.splitCursor ?? result.continueCursor)
-        : result.continueCursor;
+    // The page holds every row up to continueCursor, also when Convex
+    // suggests a split. splitCursor only marks where the page could be cut in
+    // two, so resuming from it reads the second half of the page again.
+    state.cursor = result.continueCursor;
     if (result.page) {
       state.docs.push(...result.page);
       state.isDone = (limit && state.docs.length >= limit) || result.isDone;
@@ -115,6 +140,19 @@ const parseWhere = (
     }
   }
   return whereArray.map((w) => {
+    // Better Auth's SQL adapters bind undefined as NULL, and a comparison
+    // with NULL is never true, so the clause matches no row (`= NULL`, unlike
+    // `IS NULL`). Convex can't send undefined, so send a clause that matches
+    // no row either. Mapping it to null instead would match rows where the
+    // field is null, and deleteMany would delete them.
+    if (w.value === undefined) {
+      return {
+        field: "_id",
+        operator: "in",
+        value: [],
+        ...(w.connector ? { connector: w.connector } : {}),
+      };
+    }
     if (w.value instanceof Date) {
       return {
         ...w,
@@ -201,7 +239,10 @@ export const convexAdapter = <
 >(
   ctx: Ctx,
   api: {
-    adapter: ComponentApi["adapter"];
+    // A Local Install written before 0.13.9 doesn't export consumeOne and
+    // incrementOne
+    adapter: Omit<ComponentApi["adapter"], "consumeOne" | "incrementOne"> &
+      Partial<Pick<ComponentApi["adapter"], "consumeOne" | "incrementOne">>;
   },
   config: {
     debugLogs?: DBAdapterDebugLogOption;
@@ -394,12 +435,15 @@ export const convexAdapter = <
               );
               let docs = dedupeDocsById(results.flatMap((r) => r.docs));
               if (data.sortBy) {
-                // Same order as the component, and as a Convex index
+                // Same order as the component, and as a Convex index.
+                // createdAt sorts by _creationTime, as in the component.
                 const { field, direction } = data.sortBy;
                 const sign = direction === "desc" ? -1 : 1;
                 docs = docs.sort(
                   (a, b) =>
-                    sign * compareValues(a[field], b[field]) ||
+                    (field === "createdAt"
+                      ? 0
+                      : sign * compareValues(a[field], b[field])) ||
                     sign *
                       ((a._creationTime as number) -
                         (b._creationTime as number))
@@ -526,6 +570,97 @@ export const convexAdapter = <
             });
             return doc ?? null;
           },
+          // A single mutation reads, checks and writes the row, so it's
+          // atomic. Better Auth's fallback reads the row and writes it with
+          // a compare-and-swap updateMany, retried 5 times, and fails rate
+          // limiting and two factor lockouts under contention.
+          incrementOne: async (data): Promise<any> => {
+            if (!("runMutation" in ctx)) {
+              throw new Error("ctx is not a mutation ctx");
+            }
+            if (data.where.some((w) => w.connector === "OR")) {
+              throw new Error("where clause not supported");
+            }
+            const onUpdateHandle =
+              config.authFunctions?.onUpdate &&
+              config.triggers?.[data.model]?.onUpdate
+                ? ((await createFunctionHandle(
+                    config.authFunctions.onUpdate
+                  )) as FunctionHandle<"mutation">)
+                : undefined;
+            const where = parseWhere(data.where);
+            const incrementOne = api.adapter.incrementOne;
+            if (incrementOne) {
+              try {
+                return await ctx.runMutation(incrementOne, {
+                  input: {
+                    model: data.model as TableNames,
+                    where,
+                    increment: data.increment,
+                    set: data.set as any,
+                  },
+                  onUpdateHandle,
+                });
+              } catch (error) {
+                if (!isMissingIncrementOneError(error)) {
+                  throw error;
+                }
+              }
+            }
+            if (!didWarnIncrementOneMissing) {
+              didWarnIncrementOneMissing = true;
+              // eslint-disable-next-line no-console
+              console.warn(
+                "[convex-better-auth] The component has no adapter.incrementOne function, falling back to a compare-and-swap update. Export consumeOne and incrementOne from createApi in convex/betterAuth/adapter.ts (Local Install)."
+              );
+            }
+            // Better Auth's atomic fallback: read the row, then update it
+            // only if the where and every field read still match
+            for (let attempt = 0; attempt < 5; attempt++) {
+              const row = await ctx.runQuery(api.adapter.findOne, {
+                model: data.model as TableNames,
+                where,
+              });
+              if (!row) {
+                return null;
+              }
+              const update = incrementedFields(
+                data.model,
+                row,
+                data.increment,
+                data.set
+              );
+              const fields = new Set([
+                ...where.map((w) => w.field),
+                ...Object.keys(update),
+              ]);
+              const guard = [...fields].flatMap((field) => {
+                const value = row[field] ?? null;
+                return field === "_id" || !isGuardValue(value)
+                  ? []
+                  : [{ field, operator: "eq" as const, value }];
+              });
+              const result = await ctx.runMutation(api.adapter.updateMany, {
+                input: {
+                  model: data.model as TableNames,
+                  where: [
+                    { field: "_id", operator: "eq", value: row._id },
+                    ...where,
+                    ...guard,
+                  ] as ConvexCleanedWhere[],
+                  update: update as any,
+                },
+                paginationOpts: { numItems: 1, cursor: null },
+                onUpdateHandle,
+              });
+              if (result.count === 1) {
+                return { ...row, ...update };
+              }
+            }
+            throw new Error(
+              `Could not increment ${data.model} due to contention. Export incrementOne from convex/betterAuth/adapter.ts to update it atomically.`
+            );
+          },
           deleteMany: async ({ modelKey: _modelKey, ...data }) => {
             if (!("runMutation" in ctx)) {
               throw new Error("ctx is not a mutation ctx");
@@ -580,45 +715,37 @@ export const convexAdapter = <
                     config.authFunctions.onUpdate
                   )) as FunctionHandle<"mutation">)
                 : undefined;
+            // Collect the matching ids first, then update by id, as SQL's
+            // UPDATE ... WHERE touches each matching row once. Patching while
+            // paginating the index the where filters on moves a row past the
+            // cursor, and the next page patched it again.
             const orWhere = splitOrWhere(data.where);
-            if (orWhere) {
-              const ids = await collectIdsForOrWhere({
-                model: data.model as string,
-                orWhere,
-              });
-              if (!ids.length) {
-                return 0;
-              }
-              const result = await handlePagination(
-                async ({ paginationOpts }) => {
-                  return await ctx.runMutation(api.adapter.updateMany, {
-                    input: {
-                      model: data.model as TableNames,
-                      where: [{ field: "_id", operator: "in", value: ids }],
-                      update: data.update,
-                    },
-                    paginationOpts,
-                    onUpdateHandle: onUpdateHandle,
-                  });
+            const ids = await collectIdsForOrWhere({
+              model: data.model as string,
+              orWhere: orWhere ?? [data.where ?? []],
+            });
+            // The where is applied again in each mutation, so a row that
+            // stopped matching since it was collected is left alone. An OR
+            // where can't be, the component only takes AND clauses.
+            const guard = orWhere ? [] : parseWhere(data.where);
+            let count = 0;
+            for (let i = 0; i < ids.length; i += 200) {
+              const chunk = ids.slice(i, i + 200);
+              const result = await ctx.runMutation(api.adapter.updateMany, {
+                input: {
+                  model: data.model as TableNames,
+                  where: [
+                    { field: "_id", operator: "in", value: chunk },
+                    ...guard,
+                  ],
+                  update: data.update,
                 },
-                { limit: ids.length }
-              );
-              return result.count ?? 0;
+                paginationOpts: { numItems: chunk.length, cursor: null },
+                onUpdateHandle: onUpdateHandle,
+              });
+              count += result.count ?? 0;
             }
-            const result = await handlePagination(
-              async ({ paginationOpts }) => {
-                return await ctx.runMutation(api.adapter.updateMany, {
-                  input: {
-                    ...data,
-                    model: data.model as TableNames,
-                    where: parseWhere(data.where),
-                  },
-                  paginationOpts,
-                  onUpdateHandle: onUpdateHandle,
-                });
-              }
-            );
-            return result.count;
+            return count;
           },
         };
       },
