@@ -86,7 +86,11 @@ const datesToMillis = (value: unknown): any => {
 
 // Whether a response expires a cookie, as Better Auth's expireCookie does:
 // an empty value with Max-Age=0
-const expiresCookie = (headers: Headers | undefined, name: string) =>
+const expiresCookie = (
+  headers: Headers | undefined,
+  name: string | undefined
+) =>
+  Boolean(name) &&
   (headers?.getSetCookie() ?? []).some((entry) => {
     const [pair = "", ...attributes] = entry.split(";");
     return (
@@ -450,7 +454,7 @@ export const convex = (opts: {
                 (ctx.context.newSession ||
                   expiresCookie(
                     ctx.context.responseHeaders,
-                    ctx.context.authCookies.sessionToken.name
+                    ctx.context.authCookies?.sessionToken.name
                   )))
             );
           },
