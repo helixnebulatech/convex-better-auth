@@ -128,6 +128,19 @@ const parseWhere = (
     }
   }
   return whereArray.map((w) => {
+    // Better Auth's SQL adapters bind undefined as NULL, and a comparison
+    // with NULL is never true, so the clause matches no row (`= NULL`, unlike
+    // `IS NULL`). Convex can't send undefined, so send a clause that matches
+    // no row either. Mapping it to null instead would match rows where the
+    // field is null, and deleteMany would delete them.
+    if (w.value === undefined) {
+      return {
+        field: "_id",
+        operator: "in",
+        value: [],
+        ...(w.connector ? { connector: w.connector } : {}),
+      };
+    }
     if (w.value instanceof Date) {
       return {
         ...w,

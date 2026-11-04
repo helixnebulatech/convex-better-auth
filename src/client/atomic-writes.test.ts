@@ -276,3 +276,35 @@ describe("native incrementOne", () => {
     vi.restoreAllMocks();
   });
 });
+
+// Better Auth's Kysely and memory adapters, and its atomic fallback, take the
+// first row when the where is empty, and so does the component
+describe("atomic writes with an empty where", () => {
+  it("consume and increment the first row", async () => {
+    const t = convexTest(schema, import.meta.glob("../component/**/*.*s"));
+    const ctx = {
+      runQuery: t.query.bind(t),
+      runMutation: t.mutation.bind(t),
+    } as any;
+    const adapter = createClient<DataModel>({ adapter: api.adapter } as any, {
+      verbose: false,
+    }).adapter(ctx)({ rateLimit: { storage: "database" } });
+    for (const key of ["a", "b"]) {
+      await adapter.create({
+        model: "rateLimit",
+        data: { key, count: 0, lastRequest: Date.now() },
+      });
+    }
+    expect(
+      await adapter.incrementOne({
+        model: "rateLimit",
+        where: [],
+        increment: { count: 1 },
+      })
+    ).toMatchObject({ key: "a", count: 1 });
+    expect(
+      await adapter.consumeOne({ model: "rateLimit", where: [] })
+    ).toMatchObject({ key: "a" });
+    expect(await adapter.count({ model: "rateLimit" })).toBe(1);
+  });
+});

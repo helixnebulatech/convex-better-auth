@@ -148,7 +148,23 @@ database:
   and no index. Nulls and unset values come first, as in a Convex index. On a
   large table this can hit Convex's read limit, which fails the query instead of
   returning the wrong rows. Add an index ending in the sort field for lists you
-  sort often.
+  sort often. A range (`lt`, `gt`...) on another field also sorts this way, as
+  an index scan with a range returns rows in the order of the ranged field.
+- **Updating many rows.** `updateMany` updates every row that matches when it
+  runs once, as SQL's `UPDATE ... WHERE`. The component collects the matching
+  ids first and updates them in chunks of 200, applying the `where` again in
+  each chunk, so an update that moves a row in the index the `where` reads
+  doesn't update it twice. From an action, each chunk is its own transaction.
+- **Atomic counters.** Better Auth's `incrementOne` (rate limits, two factor
+  lockouts, team seats) and `consumeOne` (verification values, one-time tokens)
+  read, check and write one row in a single mutation, which Convex runs as a
+  transaction, as Kysely does in one `UPDATE ... WHERE` or `DELETE ... WHERE`.
+  An unset or null counter counts as 0, as in Better Auth's memory adapter and
+  its atomic fallback.
+- **Comparisons with `undefined`.** A `where` clause whose value is `undefined`
+  matches no row, as Better Auth's SQL adapters bind it as NULL and a
+  comparison with NULL is never true. It doesn't match rows where the field is
+  null, as `eq null` does.
 
 ## Adapter calls without a where clause
 
@@ -160,6 +176,7 @@ one too. With an empty `where`:
 | ---------------------------------------- | --------------------------------- |
 | Adapter `delete`                         | Deletes the first document        |
 | Adapter `consumeOne`                     | Deletes and returns the first one |
+| Adapter `incrementOne`                   | Updates and returns the first one |
 | Adapter `update`                         | Does nothing and returns `null`   |
 | Adapter `deleteMany` / `updateMany`      | Deletes / updates every document  |
 | Component `adapter.deleteOne` (no where) | Deletes the first document        |
@@ -167,6 +184,8 @@ one too. With an empty `where`:
 
 Better Auth's own adapters don't agree on this either. With Postgres, Better
 Auth runs `delete from "session" where 1 = 1` and deletes every row.
+`consumeOne` and `incrementOne` take the first row as Better Auth's Kysely and
+memory adapters and its atomic fallback do; upstream returns `null` instead.
 
 ## Tokens and revocation
 
