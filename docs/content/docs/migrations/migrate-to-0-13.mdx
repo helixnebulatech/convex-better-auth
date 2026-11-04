@@ -35,8 +35,9 @@ description: Migrate to @convex-dev/better-auth@0.13
 ### Use `signIn.social` for Generic OAuth providers
 
 Better Auth 1.7 registers each Generic OAuth provider as a social provider.
-Remove `genericOAuthClient()` from your auth client, and use `signIn.social`
-instead of `signIn.oauth2`.
+Remove `genericOAuthClient()` from your auth client. Use `signIn.social`
+instead of `signIn.oauth2`, and `linkSocial` instead of `oauth2.link` to link a
+provider to the signed-in user.
 
 ```ts
 export const authClient = createAuthClient({
@@ -48,6 +49,9 @@ export const authClient = createAuthClient({
 
 await authClient.signIn.oauth2({ providerId: "slack" }); // [!code --]
 await authClient.signIn.social({ provider: "slack" }); // [!code ++]
+
+await authClient.oauth2.link({ providerId: "slack" }); // [!code --]
+await authClient.linkSocial({ provider: "slack" }); // [!code ++]
 ```
 
 The callback URL changes from `/api/auth/oauth2/callback/<providerId>` to
@@ -477,3 +481,9 @@ Since Better Auth 1.7.16, opening the link that confirms an email change updates
 the email but no longer signs in whoever opens it. With the cross domain plugin
 the link redirects to `siteUrl` without a session, and users who aren't signed
 in there sign in again.
+
+### SCIM
+
+`@better-auth/scim` 1.7.16 refuses to start unless the database adapter has
+native transactions, which the Convex adapter doesn't have, so the SCIM plugin
+can't be used. The SCIM list indexes from 0.13.7 stay in the schema.
