@@ -34,8 +34,9 @@ Better Auth's `jwt` and `oauthProvider` plugins (`/token`, `/jwks`,
 The discovery document at `/convex/.well-known/openid-configuration` describes
 only the Convex JWT: its `issuer`, `jwks_uri`, signing algorithm and claims. It
 lists no authorization or token endpoints, since the plugin isn't an OAuth
-server; use `oauthProvider` for that. Both plugins keep their keys in the `jwks` table. The Convex plugin only signs
-with, publishes and rotates keys of the algorithm in your Convex auth config.
+server; use `oauthProvider` for that. Both plugins keep their keys in the `jwks`
+table. The Convex plugin only signs with, publishes and rotates keys of the
+algorithm in your Convex auth config.
 
 ### Options
 

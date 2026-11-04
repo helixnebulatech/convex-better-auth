@@ -11,5 +11,5 @@ a warning, since their callers don't depend on them, but an atomic write decides
 what the caller does next: returning the row would accept a one-time token or a
 rate limited request without recording it, and a miss makes callers retry or
 report the wrong error. Upstream 0.13.0 reverted the same no-ops and lets the
-adapter throw; the component throws from the plugin instead, so the error is
-the same with any adapter and says what to do.
+adapter throw; the component throws from the plugin instead, so the error is the
+same with any adapter and says what to do.
