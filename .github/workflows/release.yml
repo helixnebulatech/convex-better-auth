@@ -114,24 +114,19 @@ jobs:
       - name: Install Dependencies
         run: pnpm install --frozen-lockfile
 
-      # changeset publish only publishes a version that isn't on npm yet, so a
-      # re-run is safe. What it published is the package.json version when
-      # npm didn't have it before; its output isn't parsed, as its format
-      # changes between changesets versions (3.x dropped the "New tag:"
-      # lines). A stale "not on npm" only re-runs the GitHub Release job,
-      # which leaves an existing release as is.
+      # Like Vercel's AI SDK and Better Auth, the changesets action runs the
+      # publish and reports what it published (published-packages, from the
+      # CLI's machine-readable CHANGESETS_OUTPUT, not its log). changeset
+      # publish only publishes a version that isn't on npm yet, so a re-run is
+      # safe. Tags and releases are left to the GitHub Release job, as this
+      # job can't write to the repo.
       - name: Publish
         id: publish
-        run: |
-          name="$(jq -r .name package.json)"
-          version="$(jq -r .version package.json)"
-          if npm view "$name@$version" version --prefer-online 2>/dev/null | grep -qxF "$version"; then
-            packages='[]'
-          else
-            packages="$(jq -nc --arg name "$name" --arg version "$version" '[{name: $name, version: $version}]')"
-          fi
-          pnpm ci:release
-          echo "published-packages=$packages" >> "$GITHUB_OUTPUT"
+        uses: changesets/action@ae32849d5ba541f9ae29e40e22a623bc13562f51 # v2.1.2
+        with:
+          publish-script: pnpm ci:release
+          create-github-releases: false
+          push-git-tags: false
 
   # Tag, GitHub Release and provenance for what was published, outside the
   # environment (it needs to write, not to publish).
