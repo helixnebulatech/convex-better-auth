@@ -74,48 +74,69 @@ Two differences make the plugin stricter than Better Auth:
 
 ## Forwarded host headers
 
-Without Convex, Better Auth learns the app's host from the `x-forwarded-host`
-and `x-forwarded-proto` headers your hosting platform's proxy sets, when
-`advanced.trustedProxyHeaders` is enabled. With Convex, the request goes through
-a second proxy, Convex's edge, which has its own `x-forwarded-*`. So the
-framework handlers (`convexBetterAuthNextJs`, `convexBetterAuthReactStart`) and
-the server helpers that fetch the Convex token send the app's host and protocol
-in `x-better-auth-forwarded-host` and `x-better-auth-forwarded-proto` instead,
-and don't send `x-forwarded-*`. Like any proxy, they set these headers from the
+Without Convex, Better Auth learns the app's origin from the request: from the
+`x-forwarded-host` and `x-forwarded-proto` headers your hosting platform's proxy
+sets when `advanced.trustedProxyHeaders` is enabled, and otherwise from the
+`Host` header and the request URL. A dynamic `baseURL` checks that host against
+`allowedHosts`, wildcards included, and without a `baseURL` Better Auth uses the
+request URL. With Convex, the request goes through a second proxy, Convex's
+edge, which has its own `x-forwarded-*`. So the framework handlers
+(`convexBetterAuthNextJs`, `convexBetterAuthReactStart`) and the server helpers
+that fetch the Convex token send the app's host and protocol in
+`x-better-auth-forwarded-host` and `x-better-auth-forwarded-proto` instead, and
+don't send `x-forwarded-*`. Like any proxy, they set these headers from the
 request URL or the platform's headers, and replace values a client sent.
 
 Your Convex site URL is publicly reachable, so any client can set these headers,
-and `x-forwarded-*` too. Convex's cloud edge replaces the `x-forwarded-*` a
-client sends with its own, but a self-hosted Convex backend passes them through
-to your HTTP actions. So the component, as the proxy in front of Better Auth,
-sets `x-forwarded-host` and `x-forwarded-proto` itself on every request, from
-`x-better-auth-forwarded-*` or else from the `x-forwarded-*` the request arrived
-with, only when together they form an origin listed exactly in `trustedOrigins`,
-`BETTER_AUTH_TRUSTED_ORIGINS` or the `allowedHosts` of a dynamic `baseURL`.
-Otherwise it removes them, and Better Auth falls back to the `Host` header and
-the request URL, as without a trusted proxy. Wildcard entries such as
-`*.vercel.app` don't count, since anyone can deploy to a shared platform domain.
-Both headers are set together or not at all.
+`x-forwarded-*` and, on a self-hosted backend, `Host` too. So the component, as
+the proxy in front of Better Auth, decides the origin of every request and sets
+the request URL, `Host`, `x-forwarded-host` and `x-forwarded-proto` all to it,
+whatever `trustedProxyHeaders` says. It picks the first of:
 
-Better Auth ignores `x-forwarded-*` unless `advanced.trustedProxyHeaders` is
-enabled. With it, the base URL, and so the links in emails such as password
-reset and verification links, uses the restored host. The worst a caller can do
-is pick another of the origins you listed exactly.
+1. The app's origin from `x-better-auth-forwarded-*`, or else the
+   `x-forwarded-*` the request arrived with, when together they form an origin
+   listed exactly in `trustedOrigins`, `BETTER_AUTH_TRUSTED_ORIGINS` or the
+   `allowedHosts` and `fallback` of a dynamic `baseURL`.
+2. The request's own origin, when it's listed exactly, such as a custom domain
+   for your Convex site.
+3. `CONVEX_SITE_URL`, which only the deployment sets. On Convex's cloud this is
+   the origin requests arrive at anyway, so nothing needs configuring. Convex
+   always sets it; if it's missing, the request's own origin is used.
+
+The `x-better-auth-forwarded-*` headers are removed before Better Auth sees the
+request. Origins are compared as protocol and host, so an origin listed only
+with `https://` is never used over `http://`, and a host with a path, user info
+or an explicit default port doesn't count.
+
+This is stricter than Better Auth in two ways:
+
+- Wildcard entries such as `*.vercel.app` in `trustedOrigins` or `allowedHosts`
+  don't count. Better Auth accepts them for a dynamic `baseURL`, but anyone can
+  deploy to a shared platform domain, and the base URL decides where links in
+  emails such as password reset and verification links point. A request from an
+  app on a wildcard host gets the `fallback` origin.
+- A host only reaches Better Auth through the component, so a client can't pick
+  one Better Auth would accept but you didn't list exactly. The worst a caller
+  can do is pick another of the origins you listed exactly.
+
+Better Auth only uses the app's origin when it takes the base URL from the
+request: with a dynamic `baseURL`, or without a `baseURL`. Then links in emails,
+OAuth callback URLs and, with `crossSubDomainCookies`, the cookie domain follow
+the app's origin. With a static `baseURL` they always use that URL.
 
 ### Self-hosted Convex
 
-Without trusted forwarded headers, Better Auth builds the base URL from the
-`Host` header and, without that, the request URL. On Convex's cloud these come
-from Convex. A self-hosted Convex backend, tested with the local backend that
-`convex dev` runs, passes the `x-forwarded-*` headers a client sends to your
-HTTP actions and builds the request URL from them. So on a self-hosted
-deployment:
+A self-hosted Convex backend, tested with the local backend that `convex dev`
+runs, passes the `Host` and `x-forwarded-*` headers a client sends to your HTTP
+actions and builds the request URL from them. The component replaces all of them
+as described above, so a self-hosted deployment needs no reverse proxy for this.
+Before 0.13.9, it only replaced `x-forwarded-*`, and a dynamic `baseURL` with a
+wildcard in `allowedHosts` took a client's `Host` header
+([GHSA-9qq3-v9g3-cxhw](https://github.com/convex/better-auth/security/advisories/GHSA-9qq3-v9g3-cxhw)).
 
-- Set a static `baseURL`, as the framework guides do. Then Better Auth doesn't
-  take the base URL from the request at all.
-- If you need a dynamic `baseURL`, list each host in `allowedHosts` exactly,
-  without wildcards, and put a reverse proxy in front of the backend that sets
-  `Host` and `x-forwarded-*` itself instead of passing the client's.
+Make sure `CONVEX_SITE_URL` is your backend's public site URL (set from
+`CONVEX_SITE_ORIGIN` on a self-hosted backend), since it's the origin used when
+a request's own isn't listed.
 
 ## Database adapter
 
@@ -201,7 +222,12 @@ The Convex JWT is only signed where Better Auth's `jwt` plugin signs its own: by
 when it's also stored in the `convex_jwt` cookie. It's never signed on sign-in,
 so a plugin that holds a sign-in back, such as `twoFactor` waiting for the
 second factor, can't leave a JWT behind whatever the plugin order. A request
-that starts a new session, and sign-out, clear the cookie.
+that starts a new session, sign-out, and any response that expires the session
+cookie clear the `convex_jwt` cookie, the way Better Auth's
+`deleteSessionCookie` clears the cookies derived from the session
+(`session_data`, `account_data`). So when `twoFactor` holds a sign-in, which
+expires the session cookie, the JWT of a user who was signed in before in the
+same browser is cleared too, whatever the plugin order.
 
 ## Users returned to the client
 
@@ -216,7 +242,23 @@ as they're meant for server code.
 ## Verbose logs
 
 `verbose: true` logs request and response headers with cookies, tokens and API
-keys redacted, and the query string of `location` and `referer` removed. It also
-enables Better Auth's adapter debug logs, which print whole database rows,
-including session tokens, password hashes and verification values. Only enable
-it while debugging, and not in production.
+keys redacted, and the query string of `location` and `referer` removed. It no
+longer enables Better Auth's adapter debug logs, which print whole database
+rows, including session tokens, password hashes and verification values. Those
+have their own `debugLogs` option, off by default, which takes the same values
+as the `debugLogs` of Better Auth's adapters. Better Auth doesn't redact them
+either, so only enable either option while debugging, and `debugLogs` never in
+production.
+
+## Advisories
+
+Upstream `@convex-dev/better-auth` publishes its advisories on
+[GitHub](https://github.com/convex/better-auth/security/advisories). This is how
+the fork handles each:
+
+| Advisory                                                                                             | Upstream issue                                                                               | In this fork                                                                                                                                                                                                                                                                                                                 |
+| ---------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [GHSA-4qvm-r4pr-v3wg](https://github.com/convex/better-auth/security/advisories/GHSA-4qvm-r4pr-v3wg) | Convex JWT issued on password sign-in before two-factor authentication completes             | Fixed in 0.13.7. The JWT is only signed where Better Auth's `jwt` plugin signs, by `/convex/token` and after `/get-session` returns a session, never on sign-in, whatever the plugin order. See [Tokens and revocation](#tokens-and-revocation)                                                                              |
+| [GHSA-9qq3-v9g3-cxhw](https://github.com/convex/better-auth/security/advisories/GHSA-9qq3-v9g3-cxhw) | Emailed links can still use a caller-chosen host with a dynamic `baseURL`                    | Fixed in 0.13.9. The component sets the request URL and `Host`, not only `x-forwarded-*`, to an exactly trusted origin or `CONVEX_SITE_URL`. See [Forwarded host headers](#forwarded-host-headers)                                                                                                                           |
+| [GHSA-j8qq-g9pm-v3c2](https://github.com/convex/better-auth/security/advisories/GHSA-j8qq-g9pm-v3c2) | The cross domain plugin can deliver a session token to a trusted origin an attacker controls | Stricter than upstream's fix since 0.13.3. A one-time token goes to `siteUrl`, or for OAuth to the origin that started the flow in the same browser, only if it's `siteUrl` or an exact `trustedOrigins` entry. Upstream hands it to any exact `trustedOrigins` entry. See [Who receives a session](#who-receives-a-session) |
+| [GHSA-pgx2-m66h-x29f](https://github.com/convex/better-auth/security/advisories/GHSA-pgx2-m66h-x29f) | Emailed links can point at an attacker's host with a dynamic `baseURL`                       | Taken in 0.13.6 and adapted: the forwarded origin is matched in full, protocol and host, against exact trusted origins, not only the host, and the framework handlers drop an incoming `x-forwarded-proto`                                                                                                                   |

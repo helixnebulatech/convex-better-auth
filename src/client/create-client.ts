@@ -17,6 +17,7 @@ import type { Infer } from "convex/values";
 import { getAuthTables, parseUserOutput } from "better-auth/db";
 import type { BetterAuthOptions } from "better-auth/minimal";
 import { convexAdapter } from "./adapter.js";
+import type { DBAdapterDebugLogOption } from "better-auth/adapters";
 import { corsRouter } from "convex-helpers/server/cors";
 import type defaultSchema from "../component/schema.js";
 import type { CreateAuth, GenericCtx } from "./index.js";
@@ -120,6 +121,19 @@ const redactHeaders = (headers: Headers) =>
         : value,
   ]);
 
+// Normalized `scheme://host` of an http(s) URL, or null
+const parseHttpOrigin = (value: string) => {
+  try {
+    const url = new URL(value);
+    if (url.protocol !== "http:" && url.protocol !== "https:") {
+      return null;
+    }
+    return url.origin;
+  } catch {
+    return null;
+  }
+};
+
 // Origins named exactly in trustedOrigins, BETTER_AUTH_TRUSTED_ORIGINS and,
 // with a dynamic baseURL, allowedHosts. Wildcard patterns and non-http(s)
 // entries are left out.
@@ -144,16 +158,17 @@ const exactTrustedOrigins = async (
   }
   const result = new Set<string>();
   for (const origin of origins) {
-    if (typeof origin !== "string" || origin.includes("*")) {
+    // Better Auth treats `*` and `?` as wildcards (matchesOriginPattern)
+    if (
+      typeof origin !== "string" ||
+      origin.includes("*") ||
+      origin.includes("?")
+    ) {
       continue;
     }
-    try {
-      const url = new URL(origin);
-      if (url.protocol === "http:" || url.protocol === "https:") {
-        result.add(url.origin);
-      }
-    } catch {
-      // not a URL
+    const parsed = parseHttpOrigin(origin);
+    if (parsed) {
+      result.add(parsed);
     }
   }
   return result;
@@ -174,86 +189,71 @@ const toOrigin = (host: string | null, proto: string | null) => {
   }
 };
 
-// Better Auth trusts x-forwarded-* (with trustedProxyHeaders) because the
-// proxy in front of it sets them. Here that proxy is the component, so it
-// decides them on every request:
-// - the app's host and protocol the framework handlers send in
-//   x-better-auth-forwarded-*, or else the x-forwarded-* the request arrived
-//   with, if together they form an origin listed exactly in trustedOrigins;
-// - otherwise neither, and Better Auth falls back to the Host header and the
-//   request URL, as without a trusted proxy.
-// Convex's cloud edge replaces any x-forwarded-* a client sends with its own,
-// but a self-hosted backend passes them through, and builds the request URL
-// from them, so they can't be trusted unchecked.
-const restoreOriginalForwardedHeaders = async (
+// The component sits in front of Better Auth as its reverse proxy, so it
+// decides which origin Better Auth sees. Better Auth reads x-forwarded-*
+// with advanced.trustedProxyHeaders, otherwise the Host header and then the
+// request URL (getHostFromSource), and the request URL alone without a
+// baseURL. So the URL, Host and x-forwarded-* are all set to one origin, in
+// this order:
+// 1. the app's host and protocol the framework handlers send in
+//    x-better-auth-forwarded-*, or else the x-forwarded-* the request
+//    arrived with, if together they form an origin trusted exactly;
+// 2. the request's own origin, if trusted exactly (a custom domain);
+// 3. CONVEX_SITE_URL, which only the deployment controls, or the request's
+//    own origin if it isn't set.
+// Convex's cloud edge sets the URL, Host and x-forwarded-* to the
+// deployment's site, but a self-hosted backend passes a client's Host and
+// x-forwarded-* through and builds the request URL from them, so none of
+// them can be trusted unchecked.
+const normalizeRequestOrigin = async (
   auth: Parameters<typeof exactTrustedOrigins>[0],
   request: Request
 ) => {
-  // Without trusted forwarded headers Better Auth uses the Host header and
-  // the request URL. If x-forwarded-* say the same, keeping or removing them
-  // gives Better Auth the same host and protocol, so there's nothing to check
-  // and trustedOrigins isn't evaluated. It's the case of every request on
-  // Convex's cloud that didn't come through the framework handlers: the edge
-  // puts its own host in both headers.
-  const incomingHost = request.headers.get("x-forwarded-host");
-  const incomingProto = request.headers.get("x-forwarded-proto");
-  const requestHost = request.headers.get("host");
-  if (
-    !request.headers.has("x-better-auth-forwarded-host") &&
-    !request.headers.has("x-better-auth-forwarded-proto") &&
-    incomingHost !== null &&
-    requestHost !== null &&
-    incomingHost.toLowerCase() === requestHost.toLowerCase() &&
-    (incomingProto === null ||
-      `${incomingProto}:` === new URL(request.url).protocol)
-  ) {
+  const url = new URL(request.url);
+  const ownOrigin = parseHttpOrigin(request.url);
+  const siteOrigin = process.env.CONVEX_SITE_URL
+    ? parseHttpOrigin(process.env.CONVEX_SITE_URL)
+    : null;
+  const fallback = siteOrigin ?? ownOrigin;
+  // A candidate equal to the fallback gives the same result either way, so
+  // trustedOrigins is only evaluated when there's something else to check.
+  // On Convex's cloud, requests that didn't come through the framework
+  // handlers have nothing else.
+  const candidates = [
+    toOrigin(
+      request.headers.get("x-better-auth-forwarded-host"),
+      request.headers.get("x-better-auth-forwarded-proto")
+    ),
+    toOrigin(
+      request.headers.get("x-forwarded-host"),
+      request.headers.get("x-forwarded-proto")
+    ),
+    ownOrigin,
+  ].filter((origin) => origin && origin !== fallback);
+  let origin = fallback;
+  if (candidates.length > 0) {
+    const trusted = await exactTrustedOrigins(auth, request);
+    origin = candidates.find((origin) => trusted.has(origin!)) ?? fallback;
+  }
+  if (!origin) {
     return request;
   }
-  const candidates = [
-    [
-      request.headers.get("x-better-auth-forwarded-host"),
-      request.headers.get("x-better-auth-forwarded-proto"),
-    ],
-    [incomingHost, incomingProto],
-  ] as const;
-  let trusted: Set<string> | undefined;
-  let forwarded: readonly [string, string] | undefined;
-  for (const [host, proto] of candidates) {
-    const origin = toOrigin(host, proto);
-    if (!origin) {
-      continue;
-    }
-    trusted ??= await exactTrustedOrigins(auth, request);
-    if (trusted.has(origin)) {
-      forwarded = [host!, proto!];
-      break;
-    }
-  }
+  const target = new URL(origin);
   const headers = new Headers(request.headers);
-  if (forwarded) {
-    headers.set("x-forwarded-host", forwarded[0]);
-    headers.set("x-forwarded-proto", forwarded[1]);
-  } else {
-    headers.delete("x-forwarded-host");
-    headers.delete("x-forwarded-proto");
-  }
-  return new Request(request, { headers });
+  headers.set("host", target.host);
+  headers.set("x-forwarded-host", target.host);
+  headers.set("x-forwarded-proto", target.protocol.slice(0, -1));
+  headers.delete("x-better-auth-forwarded-host");
+  headers.delete("x-better-auth-forwarded-proto");
+  return new Request(`${target.origin}${url.pathname}${url.search}`, {
+    method: request.method,
+    headers,
+    body: request.body,
+    // @ts-expect-error - duplex is required for streaming request bodies
+    duplex: "half",
+  });
 };
 
-/**
- * Backend API for the Better Auth component.
- * Responsible for exposing the `client` and `triggers` APIs to the client, http
- * route registration, and having convenience methods for interacting with the
- * component from the backend.
- *
- * @param component - Generally `components.betterAuth` from
- * `./_generated/api` once you've configured it in `convex.config.ts`.
- * @param config - Configuration options for the component.
- * @param config.local - Local schema configuration.
- * @param config.verbose - Whether to enable verbose logging.
- * @param config.triggers - Triggers configuration.
- * @param config.authFunctions - Authentication functions configuration.
- */
 // Fields every Better Auth user has, plus the Convex document fields and the
 // app user link. Used when clientApi doesn't get createAuth.
 const coreUserFields = new Set([
@@ -269,6 +269,25 @@ const pickCoreUserFields = (user: Record<string, unknown>) =>
     Object.entries(user).filter(([key]) => coreUserFields.has(key))
   );
 
+/**
+ * Backend API for the Better Auth component.
+ * Responsible for exposing the `client` and `triggers` APIs to the client, http
+ * route registration, and having convenience methods for interacting with the
+ * component from the backend.
+ *
+ * @param component - Generally `components.betterAuth` from
+ * `./_generated/api` once you've configured it in `convex.config.ts`.
+ * @param config - Configuration options for the component.
+ * @param config.local - Local schema configuration.
+ * @param config.verbose - Whether to log the configured `baseURL` and the
+ * request and response headers of each auth request, with credentials
+ * redacted. It no longer turns on the adapter's debug logs.
+ * @param config.debugLogs - Better Auth's adapter debug logs, off by default.
+ * They print whole database rows without redaction, including session tokens
+ * and password hashes.
+ * @param config.triggers - Triggers configuration.
+ * @param config.authFunctions - Authentication functions configuration.
+ */
 export const createClient = <
   DataModel extends GenericDataModel,
   Schema extends SchemaDefinition<GenericSchema, true> = typeof defaultSchema,
@@ -280,6 +299,7 @@ export const createClient = <
       schema?: Schema;
     };
     verbose?: boolean;
+    debugLogs?: DBAdapterDebugLogOption;
   } & (
     | {
         triggers: Triggers<DataModel, Schema>;
@@ -367,10 +387,7 @@ export const createClient = <
      * @returns The Convex database adapter
      */
     adapter: (ctx: GenericCtx<DataModel>) =>
-      convexAdapter<DataModel, typeof ctx, Schema>(ctx, component, {
-        ...config,
-        debugLogs: config?.verbose,
-      }),
+      convexAdapter<DataModel, typeof ctx, Schema>(ctx, component, config),
 
     /**
      * Returns the Better Auth auth object and headers for using Better Auth API
@@ -560,10 +577,7 @@ export const createClient = <
           console.log("request headers", redactHeaders(request.headers));
         }
         const auth = createAuth(ctx as any);
-        const normalizedRequest = await restoreOriginalForwardedHeaders(
-          auth,
-          request
-        );
+        const normalizedRequest = await normalizeRequestOrigin(auth, request);
         const response = await auth.handler(normalizedRequest);
         if (config?.verbose) {
           // eslint-disable-next-line no-console
@@ -685,10 +699,7 @@ export const createClient = <
           console.log("request headers", redactHeaders(request.headers));
         }
         const auth = createAuth(ctx as any);
-        const normalizedRequest = await restoreOriginalForwardedHeaders(
-          auth,
-          request
-        );
+        const normalizedRequest = await normalizeRequestOrigin(auth, request);
         const response = await auth.handler(normalizedRequest);
         if (config?.verbose) {
           // eslint-disable-next-line no-console

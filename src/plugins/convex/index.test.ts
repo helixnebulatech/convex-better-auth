@@ -10,7 +10,7 @@ import { createLocalJWKSet, decodeJwt, jwtVerify } from "jose";
 import type { MemoryDB } from "better-auth/adapters/memory";
 import { getAuthConfigProvider } from "../../auth-config.js";
 import { convex } from "./index.js";
-import type { BetterAuthPlugin } from "better-auth";
+import type { AuthContext, BetterAuthPlugin } from "better-auth";
 import { createAuthEndpoint } from "better-auth/api";
 
 const authConfig = {
@@ -38,6 +38,48 @@ describe("convex plugin OpenID configuration", () => {
       "https://example.convex.site/api/auth/convex/jwks"
     );
   });
+
+  // Convex reads issuer and jwks_uri. The rest is what OpenID Connect
+  // Discovery requires, for the tokens the plugin actually issues: no
+  // /oauth2/* endpoints, which nothing serves since Better Auth 1.7, and the
+  // algorithm the JWT is signed with
+  it.each([
+    ["EdDSA", { applicationID: "convex", domain: "https://example.com" }],
+    [
+      "RS256",
+      {
+        type: "customJwt",
+        issuer: "https://example.convex.site",
+        jwks: "https://example.convex.site/api/auth/convex/jwks",
+        algorithm: "RS256",
+        applicationID: "convex",
+      },
+    ],
+  ] as const)(
+    "describes only what the plugin serves, signed with %s",
+    async (alg, provider) => {
+      process.env.CONVEX_SITE_URL = "https://example.convex.site";
+      const auth = betterAuth({
+        baseURL: "https://example.convex.site",
+        secret: "test-secret-at-least-thirty-two-characters-long",
+        database: memoryAdapter({ user: [], session: [], jwks: [] }),
+        plugins: [convex({ authConfig: { providers: [provider] } })],
+      });
+      const response = await auth.handler(
+        new Request(
+          "https://example.convex.site/api/auth/convex/.well-known/openid-configuration"
+        )
+      );
+      expect(await response.json()).toEqual({
+        issuer: "https://example.convex.site",
+        jwks_uri: "https://example.convex.site/api/auth/convex/jwks",
+        response_types_supported: ["id_token"],
+        subject_types_supported: ["public"],
+        id_token_signing_alg_values_supported: [alg],
+        claims_supported: ["sub", "iss", "aud", "exp", "iat", "sessionId"],
+      });
+    }
+  );
 });
 
 const baseURL = "https://example.convex.site";
@@ -491,6 +533,34 @@ describe("convex plugin JWT cookie", () => {
       expect((await signIn.json()).twoFactorRedirect).toBe(true);
       expect(jwtOf(signIn) ?? "").toBe("");
     });
+
+    // twoFactor's after hook expires the session cookie and clears
+    // newSession, so with twoFactor first the convex plugin's hook sees
+    // neither a sign-out nor a new session
+    it(`drops the previous JWT when 2FA holds a sign-in, with ${order}`, async () => {
+      const { auth, db } = build(order);
+      await call(auth, "/sign-up/email", {
+        body: { ...credentials, name: "JWT" },
+      });
+      db.user[0]!.twoFactorEnabled = true;
+      db.twoFactor.push({
+        id: "tf",
+        userId: db.user[0]!.id,
+        secret: "totp-secret",
+        backupCodes: "codes",
+        verified: true,
+      });
+      const signIn = await call(auth, "/sign-in/email", {
+        body: credentials,
+        cookie: "better-auth.convex_jwt=previous-user-jwt",
+      });
+      expect((await signIn.json()).twoFactorRedirect).toBe(true);
+      const expired = signIn.headers
+        .getSetCookie()
+        .filter((c) => c.includes("better-auth.convex_jwt="));
+      expect(expired).toHaveLength(1);
+      expect(expired[0]).toMatch(/better-auth\.convex_jwt=;.*Max-Age=0/i);
+    });
   }
 
   it("drops the previous JWT on sign-in and sets one from get-session", async () => {
@@ -533,9 +603,15 @@ describe("convex plugin JWT cookie", () => {
 });
 
 describe("convex plugin in query context", () => {
-  // Queries can't write, so the plugin turns adapter writes into no-ops
-  // there. Atomic writes return null, as when no row matches.
-  it("turns consumeOne and incrementOne into no-ops", async () => {
+  // Queries can't write. The plugin turns fire-and-forget writes into no-ops
+  // there, but consumeOne and incrementOne throw: their callers act on the
+  // result, and neither a faked row nor a faked miss is safe.
+  const queryCtxAuth = (
+    endpoint: (ctx: {
+      context: AuthContext;
+      json: (data: Record<string, unknown>) => unknown;
+    }) => Promise<unknown>
+  ) => {
     process.env.CONVEX_SITE_URL = baseURL;
     const db: MemoryDB = {
       user: [],
@@ -559,19 +635,7 @@ describe("convex plugin in query context", () => {
         queryCtxProbe: createAuthEndpoint(
           "/query-ctx-probe",
           { method: "GET" },
-          async (ctx) => {
-            const consumed = await ctx.context.adapter.consumeOne({
-              model: "verification",
-              where: [{ field: "id", value: "v1" }],
-            });
-            const incremented = await ctx.context.adapter.incrementOne({
-              model: "verification",
-              where: [{ field: "id", value: "v1" }],
-              field: "value",
-              by: 1,
-            } as any);
-            return ctx.json({ consumed, incremented });
-          }
+          async (ctx) => endpoint(ctx)
         ),
       },
     } satisfies BetterAuthPlugin;
@@ -586,10 +650,78 @@ describe("convex plugin in query context", () => {
         probe,
       ],
     });
-    const res = await auth.handler(
+    return { auth, db };
+  };
+
+  it("throws on consumeOne and incrementOne instead of faking a result", async () => {
+    const errors: string[] = [];
+    const { auth, db } = queryCtxAuth(async (ctx) => {
+      for (const call of [
+        () =>
+          ctx.context.adapter.consumeOne({
+            model: "verification",
+            where: [{ field: "id", value: "v1" }],
+          }),
+        () =>
+          ctx.context.adapter.incrementOne({
+            model: "verification",
+            where: [{ field: "id", value: "v1" }],
+            increment: {},
+            set: { value: "2" },
+          }),
+      ]) {
+        try {
+          await call();
+        } catch (error) {
+          errors.push((error as Error).message);
+        }
+      }
+      return ctx.json({ ok: true });
+    });
+    await auth.handler(new Request(`${baseURL}/api/auth/query-ctx-probe`));
+    expect(errors).toHaveLength(2);
+    expect(errors[0]).toMatch(/"consumeOne" can't run in a query/);
+    expect(errors[1]).toMatch(/"incrementOne" can't run in a query/);
+    expect(db.verification).toEqual([
+      expect.objectContaining({ id: "v1", value: "1" }),
+    ]);
+  });
+
+  // @better-auth/api-key's rate limiting (consumeRateLimit) retries with a
+  // fresh row whenever its guarded incrementOne returns null, so a faked
+  // miss recursed until the heap ran out in verifyApiKey from a query
+  it("fails a caller that retries on a miss instead of looping", async () => {
+    let attempts = 0;
+    const { auth } = queryCtxAuth(async (ctx) => {
+      const consume = async (): Promise<unknown> => {
+        attempts++;
+        if (attempts > 50) {
+          return "looped";
+        }
+        const incremented = await ctx.context.adapter.incrementOne({
+          model: "verification",
+          where: [
+            { field: "id", value: "v1" },
+            { field: "value", value: "1" },
+          ],
+          increment: {},
+          set: { value: "2" },
+        });
+        if (incremented) {
+          return incremented;
+        }
+        await ctx.context.adapter.findOne({
+          model: "verification",
+          where: [{ field: "id", value: "v1" }],
+        });
+        return consume();
+      };
+      return ctx.json({ result: await consume() });
+    });
+    const response = await auth.handler(
       new Request(`${baseURL}/api/auth/query-ctx-probe`)
     );
-    expect(await res.json()).toEqual({ consumed: null, incremented: null });
-    expect(db.verification).toHaveLength(1);
+    expect(attempts).toBe(1);
+    expect(response.status).toBe(500);
   });
 });

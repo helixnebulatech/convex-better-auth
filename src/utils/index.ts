@@ -188,8 +188,8 @@ export const getToken = async (
   // take them only from there: an x-better-auth-forwarded-* header on the
   // inbound request was sent by the client and is replaced. Only the
   // x-better-auth-forwarded-* headers reach the Convex site, whose edge has
-  // its own x-forwarded-*; the component restores them for exact trusted
-  // origins.
+  // its own x-forwarded-*; the component uses them as the request origin
+  // for exact trusted origins.
   const forwardedHost = headers.get("x-forwarded-host");
   const forwardedProto = headers.get("x-forwarded-proto");
   headers.delete("x-better-auth-forwarded-host");

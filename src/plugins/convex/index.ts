@@ -84,6 +84,21 @@ const datesToMillis = (value: unknown): any => {
   return value;
 };
 
+// Whether a response expires a cookie, as Better Auth's expireCookie does:
+// an empty value with Max-Age=0
+const expiresCookie = (
+  headers: Headers | undefined,
+  name: string | undefined
+) =>
+  Boolean(name) &&
+  (headers?.getSetCookie() ?? []).some((entry) => {
+    const [pair = "", ...attributes] = entry.split(";");
+    return (
+      pair.trim() === `${name}=` &&
+      attributes.some((attribute) => /^\s*max-age=0\s*$/i.test(attribute))
+    );
+  });
+
 export const convex = (opts: {
   /**
    * @param {AuthConfig} authConfig - Auth config from your Convex project.
@@ -367,16 +382,22 @@ export const convex = (opts: {
             ctx.context.adapter.updateMany = noopWrite("updateMany") as any;
             ctx.context.adapter.delete = noopWrite("delete") as any;
             ctx.context.adapter.deleteMany = noopWrite("deleteMany") as any;
-            // Atomic writes return the affected row, null means no match
-            const noopAtomicWrite = (method: string) => {
-              const warn = noopWrite(method);
-              return async (...args: any[]) => {
-                await warn(...args);
-                return null;
-              };
+            // The other writes above are side effects whose callers don't
+            // depend on them (session cleanup, deleting an expired key), so
+            // skipping them leaves the read the caller asked for intact.
+            // consumeOne and incrementOne decide the caller's next step:
+            // returning a row would accept a token or a request without
+            // recording it, and null, a miss, makes some callers retry
+            // forever (@better-auth/api-key rate limiting). So they fail, as
+            // the adapter does for writes outside a mutation.
+            const atomicWriteInQuery = (method: string) => async () => {
+              throw new Error(
+                `[convex-better-auth] "${method}" can't run in a query${ctx.path ? ` (${ctx.path})` : ""}. Call this Better Auth endpoint from a mutation, an action or an HTTP action.`
+              );
             };
-            ctx.context.adapter.consumeOne = noopAtomicWrite("consumeOne");
-            ctx.context.adapter.incrementOne = noopAtomicWrite("incrementOne");
+            ctx.context.adapter.consumeOne = atomicWriteInQuery("consumeOne");
+            ctx.context.adapter.incrementOne =
+              atomicWriteInQuery("incrementOne");
             return { context: ctx };
           }),
         },
@@ -416,14 +437,25 @@ export const convex = (opts: {
           }),
         },
         {
-          // Sign-out, and any request that starts a new session, such as a
-          // sign-in or a 2FA verification: drop the JWT of the previous
-          // session. /get-session or /convex/token sets the new one.
+          // Sign-out, any request that starts a new session, such as a
+          // sign-in or a 2FA verification, and any response that expires
+          // the session cookie: drop the JWT of the previous session, as
+          // Better Auth's deleteSessionCookie drops the cookies derived from
+          // the session (session_data, account_data). twoFactor holds a
+          // sign-in that way, clearing newSession, so with twoFactor before
+          // this plugin the new session isn't visible here.
+          // /get-session or /convex/token sets the new one. /get-session
+          // handles its own cookie above.
           matcher: (ctx) => {
             return Boolean(
               ctx.path?.startsWith("/sign-out") ||
               ctx.path?.startsWith("/delete-user") ||
-              (ctx.path !== "/get-session" && ctx.context.newSession)
+              (ctx.path !== "/get-session" &&
+                (ctx.context.newSession ||
+                  expiresCookie(
+                    ctx.context.responseHeaders,
+                    ctx.context.authCookies?.sessionToken.name
+                  )))
             );
           },
           handler: createAuthMiddleware(async (ctx) => {
@@ -450,44 +482,23 @@ export const convex = (opts: {
           // TODO: properly type this
         },
         async (ctx) => {
-          // Same document the removed Better Auth oidcProvider plugin served
-          const baseURL = ctx.context.baseURL;
+          // OpenID Connect discovery for the tokens /convex/token issues.
+          // Convex reads only `issuer` and `jwks_uri`, the rest is what the
+          // spec requires. The plugin isn't an authorization server, so no
+          // authorization, token or userinfo endpoint is listed (the
+          // oidcProvider plugin that served /oauth2/* is gone since Better
+          // Auth 1.7), and the algorithm is the one the JWT is signed with.
           return ctx.json({
             issuer: `${process.env.CONVEX_SITE_URL}`,
-            authorization_endpoint: `${baseURL}/oauth2/authorize`,
-            token_endpoint: `${baseURL}/oauth2/token`,
-            userinfo_endpoint: `${baseURL}/oauth2/userinfo`,
             jwks_uri: `${process.env.CONVEX_SITE_URL}${opts.options?.basePath ?? "/api/auth"}/convex/jwks`,
-            registration_endpoint: `${baseURL}/oauth2/register`,
-            end_session_endpoint: `${baseURL}/oauth2/endsession`,
-            scopes_supported: ["openid", "profile", "email", "offline_access"],
-            response_types_supported: ["code"],
-            response_modes_supported: ["query"],
-            grant_types_supported: ["authorization_code", "refresh_token"],
-            acr_values_supported: [
-              "urn:mace:incommon:iap:silver",
-              "urn:mace:incommon:iap:bronze",
-            ],
+            response_types_supported: ["id_token"],
             subject_types_supported: ["public"],
-            id_token_signing_alg_values_supported: ["HS256"],
-            token_endpoint_auth_methods_supported: [
-              "client_secret_basic",
-              "client_secret_post",
-              "none",
-            ],
-            code_challenge_methods_supported: ["S256"],
-            claims_supported: [
-              "sub",
-              "iss",
-              "aud",
-              "exp",
-              "nbf",
-              "iat",
-              "jti",
-              "email",
-              "email_verified",
-              "name",
-            ],
+            id_token_signing_alg_values_supported: [alg],
+            // Claims every token carries: those the jwt plugin always sets,
+            // and iat and sessionId from definePayload above. The rest of
+            // the payload depends on definePayload (by default the user's
+            // fields), so it isn't listed.
+            claims_supported: ["sub", "iss", "aud", "exp", "iat", "sessionId"],
           });
         }
       ),
