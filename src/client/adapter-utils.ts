@@ -650,6 +650,34 @@ export const compareValues = (a: unknown, b: unknown) => {
   return (a as any) < (b as any) ? -1 : (a as any) > (b as any) ? 1 : 0;
 };
 
+// The fields incrementOne writes: `set` as given, and each counter in
+// `increment` added to its current value. An unset or null counter counts as
+// 0, as in Better Auth's memory adapter and atomic fallback. Like the
+// fallback, a counter that isn't a number, or a result that isn't a finite
+// number or loses the increment to rounding, throws instead of writing.
+export const incrementedFields = (
+  model: string,
+  doc: Record<string, unknown>,
+  increment: Record<string, number>,
+  set?: Record<string, unknown>
+) => {
+  const update: Record<string, unknown> = { ...set };
+  for (const [field, delta] of Object.entries(increment)) {
+    const current = doc[field] ?? 0;
+    if (typeof current !== "number") {
+      throw new Error(`Cannot increment non-numeric field ${model}.${field}`);
+    }
+    const next = current + delta;
+    if (!Number.isFinite(next) || (delta !== 0 && next === current)) {
+      throw new Error(
+        `Cannot increment ${model}.${field} by ${delta} from ${current} safely`
+      );
+    }
+    update[field] = next;
+  }
+  return update;
+};
+
 // Sorting by createdAt or the creation order uses _creationTime
 const isCreationSort = (field: string) =>
   field === "createdAt" || field === "_creationTime";

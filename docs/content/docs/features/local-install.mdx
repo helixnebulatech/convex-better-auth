@@ -121,8 +121,17 @@ installed component.
       updateMany,
       deleteOne,
       deleteMany,
+      consumeOne,
+      incrementOne,
     } = createApi(schema, createAuthOptions);
     ```
+
+    `incrementOne` updates rate limit counters and two factor lockouts in a
+    single mutation. Without it, the adapter falls back to reading the row and
+    updating it if nothing changed in between, as Better Auth does for adapters
+    without it, which logs a warning and fails when concurrent requests keep
+    changing the row. `consumeOne` is exported for adapters written for
+    upstream, the client adapter consumes rows with `deleteOne`.
 
   </div>
 
