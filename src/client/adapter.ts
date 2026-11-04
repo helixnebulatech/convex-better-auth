@@ -393,12 +393,15 @@ export const convexAdapter = <
               );
               let docs = dedupeDocsById(results.flatMap((r) => r.docs));
               if (data.sortBy) {
-                // Same order as the component, and as a Convex index
+                // Same order as the component, and as a Convex index.
+                // createdAt sorts by _creationTime, as in the component.
                 const { field, direction } = data.sortBy;
                 const sign = direction === "desc" ? -1 : 1;
                 docs = docs.sort(
                   (a, b) =>
-                    sign * compareValues(a[field], b[field]) ||
+                    (field === "createdAt"
+                      ? 0
+                      : sign * compareValues(a[field], b[field])) ||
                     sign *
                       ((a._creationTime as number) -
                         (b._creationTime as number))
