@@ -1,5 +1,251 @@
 # Changelog
 
+## 0.13.9
+
+### Patch Changes
+
+- 325ae73: Adapter: an account can't be created or updated with the `providerId`
+  and `accountId` of another account. Better Auth checks for an existing account
+  before linking one, but two requests racing to link the same provider account
+  could both pass the check and create two rows. From then on, Better Auth's
+  internal adapter (`findAccountByKey`, `findAccountOwnerByKey`) throws
+  "Multiple accounts match the same accountId" and the user can't sign in with
+  that provider. The component now checks the pair as a unique constraint, in
+  the same mutation as the write, with the `accountId_providerId` index, the
+  same way it checks Better Auth's unique fields, so `create`, `update`,
+  `updateMany` and `incrementOne` all enforce it, and a renamed `accountId` or
+  `providerId` field is covered. This is stricter than Better Auth's SQL schema,
+  which declares no constraint for the pair, as allowed where Better Auth itself
+  breaks on duplicates. Upstream checks only on create; checking on update too
+  keeps an update from producing the same duplicate.
+- 325ae73: Adapter: native `incrementOne`, and `consumeOne` and `incrementOne`
+  component functions in `createApi`, with upstream's arguments. Better Auth 1.7
+  updates rate limit rows, two factor lockouts and organization team seats with
+  `incrementOne`. Without a native one, Better Auth reads the row and updates it
+  with a compare-and-swap `updateMany`, retried 5 times, so concurrent requests
+  on the same row could fail with "could not complete an atomic increment due to
+  contention". The component's `incrementOne` reads, checks and writes the row
+  in one mutation, which Convex runs as a transaction, as Better Auth's Kysely
+  adapter does in one `UPDATE ... WHERE`. An unset or null counter counts as 0,
+  as in Better Auth's memory adapter and atomic fallback (SQL would leave it
+  null), and the `where` keeps the SQL null semantics of every other query, so a
+  guard like `count lt 5` never matches a null count; upstream needs extra
+  `ne null` guards for that, ours doesn't.
+
+  The client adapter keeps consuming rows with `deleteOne`, which finds and
+  deletes the row in one mutation too, so it's as atomic as the new `consumeOne`
+  and keeps working with every Local Install. For `incrementOne` there is no
+  existing function to fall back on, so when a Local Install's `adapter.ts`
+  doesn't export it yet, the adapter catches the error Convex throws for a
+  function the component doesn't export, logs a warning and runs Better Auth's
+  compare-and-swap fallback itself, instead of breaking rate limiting for apps
+  that haven't updated their `adapter.ts`. `createClient` accepts a component
+  without the two functions, and an `adapter.ts` written for upstream, which
+  exports them, typechecks.
+
+- 325ae73: Adapter: `findMany` with an `in` on ids or a unique field and a
+  `sortBy` puts null and unset values first ascending and last descending, and
+  breaks ties in creation order. It compared values with `>`, which is false
+  both ways between null and a string, so those rows landed anywhere. It now
+  uses the comparison the component's other sort paths use, the order of a
+  Convex index, as the security notes document for `sortBy`. A `createdAt` sort
+  uses `_creationTime` everywhere, as the index paths do, including the
+  in-memory sort and the client sort of OR unions.
+- 325ae73: Adapter: `sortBy` is honoured when the `where` has a range (`lt`,
+  `lte`, `gt`, `gte`) on another field. An index scan with a range returns rows
+  in the order of the ranged field, even when the index has the sort field next,
+  so `findMany` on sessions with `expiresAt gt` sorted by `userId`, or by
+  `createdAt`, came back in `expiresAt` order, and a `limit` kept the wrong
+  rows. These queries are now sorted in memory, as the component already does
+  when no index ends in the sort field, the same as SQL's `ORDER BY` without a
+  usable index in Better Auth's Kysely, Drizzle and Prisma adapters. A range on
+  the sort field itself, or on `createdAt` (applied to the rows the index
+  returns), still uses the index. Upstream refuses these sorts instead; refusing
+  would break queries Better Auth's SQL adapters answer, so we sort.
+- 325ae73: Adapter: a filtered scan past 200 rows no longer reads part of a page
+  twice. When a filter rejects rows inside a page, Convex runs out of the page's
+  row budget and returns the page with a `splitCursor`. The adapter resumed from
+  that cursor, but the page already holds every row up to `continueCursor`, so
+  the rows between the two were returned again: `count` and `findMany` returned
+  too many rows, and `updateMany` and `deleteMany` counted rows twice and fired
+  `onUpdate` triggers twice. The adapter now always continues from
+  `continueCursor`, as Convex's pagination contract says (`splitCursor` only
+  marks where the page can be cut in two for a reactive query) and as upstream
+  does.
+- 325ae73: Adapter: `updateMany` updates each matching row once. It patched rows
+  while paginating the index its `where` filters on, so an update that moved a
+  row past the cursor, such as extending `expiresAt` of sessions selected by
+  `expiresAt gt`, read the row again on the next page and patched it, counted it
+  and fired its `onUpdate` trigger twice. It now collects the matching ids first
+  and updates them in chunks of 200, with the original `where` applied again in
+  each chunk so a row that stopped matching in between is left alone. This is
+  what SQL's `UPDATE ... WHERE` does in Better Auth's Kysely, Drizzle and Prisma
+  adapters: every row that matches when the statement runs is updated once.
+  Upstream made the same change. Paginating in creation order instead would
+  avoid the moving rows but give up the index and scan the whole table.
+  `deleteMany` keeps paginating: a deleted row can't come back after the cursor.
+- 325ae73: Adapter: a `where` clause whose value is `undefined` matches no row,
+  instead of failing Convex validation with "Missing required field `value`".
+  Better Auth's SQL adapters bind `undefined` as a NULL parameter, and a
+  comparison with NULL is never true, so Kysely's `where "image" = ?` with
+  `undefined` returns no row, for `eq`, `ne`, ranges and `not_in` alike. The
+  adapter sends such a clause as one that matches no row, and an OR branch with
+  it drops out of the union. Upstream maps `undefined` to `null` instead, which
+  makes `eq undefined` match every row where the field is null or unset; with
+  `deleteMany` or `updateMany` that would delete or change rows SQL never
+  touches, so we follow SQL.
+- 325ae73: The `better-auth` peer range is now `>=1.7.16 <1.8.0`, up from
+  `>=1.7.5`. Better Auth 1.7.16 has security fixes, and the component is tested
+  with it. Apps on Better Auth 1.7.5 to 1.7.15 must upgrade it with this
+  release, or npm (and pnpm with strict peer dependencies) refuses the install:
+  `better-auth@~1.7.16`. Apps already on 1.7.16 or later don't need to change
+  anything.
+- 325ae73: Convex JWT cookie: with `twoFactor` before `convex` in `plugins`, a
+  sign-in held for the second factor left the `convex_jwt` cookie of the user
+  signed in before in the same browser in place, for up to 15 minutes. The
+  plugin cleared it on sign-out and when `ctx.context.newSession` was set, but
+  `twoFactor`'s after hook expires the session cookie and sets `newSession` to
+  `null` before a later plugin's hook runs. The cookie is now also cleared
+  whenever the response expires the session cookie, the way Better Auth's
+  `deleteSessionCookie` clears the cookies derived from the session
+  (`session_data`, `account_data`). Upstream lists sign-in paths instead;
+  following the session cookie also covers paths a list misses, such as other
+  plugins that cancel or end a session, and doesn't depend on the plugin order.
+- 325ae73: OpenID configuration: `/convex/.well-known/openid-configuration`
+  still served the document of Better Auth's removed `oidcProvider` plugin. It
+  advertised `/oauth2/*` authorization, token, userinfo, registration and end
+  session endpoints that nothing serves since Better Auth 1.7, and
+  `id_token_signing_alg_values_supported: ["HS256"]`, while the Convex JWT is
+  signed with EdDSA or RS256. It now lists what the plugin serves, as upstream
+  0.13.0 does: `issuer` and `jwks_uri`, which are all Convex reads, plus the
+  fields OpenID Connect Discovery requires, with the algorithm from your Convex
+  auth config and the claims every Convex JWT carries. Keeping the old fields
+  would point OpenID clients at endpoints that 404, and Better Auth's own
+  discovery document lives in `oauthProvider`, which serves those endpoints.
+- 325ae73: Cross domain: cookies set by plugins listed after `crossDomain` reach
+  the client. The plugin moved `Set-Cookie` into `Set-Better-Auth-Cookie` in an
+  after hook, and Better Auth runs after hooks in plugin order, so a later
+  hook's cookies went out as plain `Set-Cookie`, which the cross domain client
+  never reads. With `twoFactor` after `crossDomain`, the client got the held
+  session's token but not the `two_factor` cookie, so the second factor couldn't
+  be verified, and with the Convex plugin before `crossDomain`, the expiry of
+  the previous user's `convex_jwt` was lost.
+
+  The after hook still moves the cookies set so far, so `auth.api` callers see
+  the same headers as before, and marks the response. The plugin's `onResponse`,
+  which Better Auth runs after every after hook, moves the rest and removes the
+  mark. No official Better Auth plugin uses `onResponse`, so returning a new
+  response there doesn't skip another plugin's. Documenting a required plugin
+  order instead would leave apps that list `twoFactor` after it, as the docs'
+  examples add plugins, broken. Upstream has the same bug. The Convex plugin
+  also reads `Set-Better-Auth-Cookie` when it checks whether a response expires
+  the session cookie.
+
+- 325ae73: Cross domain client: when `get-session` returns null, the stored
+  session is cleared unless the session token cookie itself changed while the
+  request was in flight. Before, any change to the stored cookies kept it, so a
+  stale session token, `session_data` and `convex_jwt` stayed in storage when an
+  unrelated cookie changed meanwhile, such as a new `two_factor` challenge or a
+  stored cookie expiring between the request and the response.
+
+  This matches upstream 0.13.0, which compares only the session token. Ours
+  matches the cookie name rather than a `.session_token=` substring, so it also
+  works without a cookie prefix and ignores multi session cookies.
+
+- 325ae73: Cross domain: `trustedOrigins` entries containing `?` no longer count
+  as exact origins. Better Auth treats `?` as a wildcard
+  (`matchesOriginPattern`), but the plugin parsed the entry as a URL, so
+  `https://app?.example.com` became the exact origin `https://app`, which Better
+  Auth never trusts, for starting an OAuth flow and receiving its session. The
+  component's request origin check already skips them; both now leave out `*`
+  and `?` entries.
+- 325ae73: Cross domain: the one-time token verify endpoint is
+  `auth.api.verifyCrossDomainOneTimeToken`, the key upstream 0.13.0 uses,
+  instead of `crossDomainVerifyOneTimeToken`. The path
+  (`/cross-domain/one-time-token/verify`), the storage and the client are
+  unchanged, so only code calling the endpoint through `auth.api` needs the new
+  name.
+
+  The old key isn't kept as an alias. Two keys for the same path make Better
+  Auth's `checkEndpointConflicts` log a path conflict on every start, and the
+  client would infer the endpoint twice. Matching upstream's name keeps code
+  portable between the fork and `@convex-dev/better-auth`.
+
+- 325ae73: Cross domain: when a magic link or email verification link redirects
+  to an origin other than `siteUrl`, the plugin logs a warning with both origins
+  instead of redirecting without a session silently, as it already did for an
+  OAuth callback on another origin than the one that started the flow. Upstream
+  logs a similar warning. Tokens aren't logged.
+- 325ae73: `createClient(component, { debugLogs })`: Better Auth's adapter debug
+  logs have their own option, with the type of the `debugLogs` of Better Auth's
+  adapters (`DBAdapterDebugLogOption`), as in upstream 0.13.0. `verbose` turned
+  them on, and they print whole database rows without redaction, including
+  session tokens, password hashes and verification values, so turning on verbose
+  header logs, which redact credentials, also put credentials in the deployment
+  logs.
+
+  Behaviour change: `verbose: true` no longer prints adapter debug logs. Add
+  `debugLogs: true` while debugging to get them back. Upstream made the same
+  change. Keeping `verbose` as a switch for both would leave the one option that
+  looks safe to enable the one that leaks secrets.
+
+- 325ae73: Query context: `consumeOne` and `incrementOne` returned `null` in a
+  query, as if no row matched. `@better-auth/api-key` retries its rate limit
+  update with a fresh row on a miss (`consumeRateLimit`), so `verifyApiKey` from
+  a query, with rate limiting on by default, recursed until the heap ran out.
+  They now throw an error that names the method and the endpoint. The other
+  writes stay no-ops with a warning, since their callers don't depend on them,
+  but an atomic write decides what the caller does next: returning the row would
+  accept a one-time token or a rate limited request without recording it, and a
+  miss makes callers retry or report the wrong error. Upstream 0.13.0 reverted
+  the same no-ops and lets the adapter throw; the component throws from the
+  plugin instead, so the error is the same with any adapter and says what to do.
+- 325ae73: React: `ConvexBetterAuthProvider` and `AuthBoundary` accept any
+  Better Auth React client created with `convexClient()`, whatever its other
+  plugins. `AuthClient` was derived from `createAuthClient()` with a fixed
+  plugin list, so a client with `inferAdditionalFields()` failed with TS2322. It
+  now describes only the parts the component calls, as upstream 0.13.0 does, and
+  the new `AuthClientWithCrossDomain` type adds the cross domain ones.
+
+  Upstream's version types the token and one-time token calls as `any`. Ours
+  keeps their argument and result shapes, so it is not looser than before: a
+  client without `convexClient()` is still rejected, with or without
+  `crossDomainClient()`.
+
+- 325ae73: Removes the unused `remeda` dependency. Nothing in the published code
+  imports it, so installing the component pulls in one package less.
+- 325ae73: Forwarded host (GHSA-9qq3-v9g3-cxhw): the component only set or
+  removed `x-forwarded-host` and `x-forwarded-proto`, and left `Host` and the
+  request URL as received. Better Auth reads those without
+  `advanced.trustedProxyHeaders`: a dynamic `baseURL` takes the `Host` header,
+  then the request URL (`getHostFromSource`), and no `baseURL` takes the request
+  URL. A self-hosted Convex backend passes a client's `Host` through and builds
+  the request URL from it, so with a wildcard in `allowedHosts` a client could
+  have a password reset link point to a host it deployed. And without
+  `trustedProxyHeaders`, the app's origin from the Next.js and TanStack Start
+  handlers was ignored, since only `x-forwarded-*` carried it.
+
+  The component now sets the request URL, `Host`, `x-forwarded-host` and
+  `x-forwarded-proto` to one origin on every request, like upstream 0.12.7: the
+  app's origin from `x-better-auth-forwarded-*` (or the incoming
+  `x-forwarded-*`, which upstream ignores) when it's an exact trusted origin,
+  else the request's own origin when it's exactly trusted, else
+  `CONVEX_SITE_URL`, and it removes `x-better-auth-forwarded-*`. Setting all
+  four gives Better Auth the same origin whichever header its config reads, as a
+  proxy in front of a direct deploy would. Removing only the forwarded headers,
+  or telling self-hosted users to add a reverse proxy, would leave the default
+  Better Auth config exposed. Origins are still compared in full (protocol and
+  host), from `trustedOrigins`, `BETTER_AUTH_TRUSTED_ORIGINS` and Better Auth's
+  own trusted origins, and wildcard entries still don't count, now including `?`
+  patterns, which Better Auth also treats as wildcards.
+
+  A `trustedOrigins` function is called with the request as if it had arrived at
+  `CONVEX_SITE_URL`. Called with the request as received, as upstream does, a
+  function that trusts the origin of the request's own host would make a
+  client's host on a self-hosted backend exactly trusted. Leaving functions out
+  of the exact origins would be stricter still, but would drop the app's origin
+  for apps that list it from a function.
+
 ## 0.13.8
 
 ### Patch Changes
