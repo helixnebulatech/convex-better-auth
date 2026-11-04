@@ -38,6 +38,48 @@ describe("convex plugin OpenID configuration", () => {
       "https://example.convex.site/api/auth/convex/jwks"
     );
   });
+
+  // Convex reads issuer and jwks_uri. The rest is what OpenID Connect
+  // Discovery requires, for the tokens the plugin actually issues: no
+  // /oauth2/* endpoints, which nothing serves since Better Auth 1.7, and the
+  // algorithm the JWT is signed with
+  it.each([
+    ["EdDSA", { applicationID: "convex", domain: "https://example.com" }],
+    [
+      "RS256",
+      {
+        type: "customJwt",
+        issuer: "https://example.convex.site",
+        jwks: "https://example.convex.site/api/auth/convex/jwks",
+        algorithm: "RS256",
+        applicationID: "convex",
+      },
+    ],
+  ] as const)(
+    "describes only what the plugin serves, signed with %s",
+    async (alg, provider) => {
+      process.env.CONVEX_SITE_URL = "https://example.convex.site";
+      const auth = betterAuth({
+        baseURL: "https://example.convex.site",
+        secret: "test-secret-at-least-thirty-two-characters-long",
+        database: memoryAdapter({ user: [], session: [], jwks: [] }),
+        plugins: [convex({ authConfig: { providers: [provider] } })],
+      });
+      const response = await auth.handler(
+        new Request(
+          "https://example.convex.site/api/auth/convex/.well-known/openid-configuration"
+        )
+      );
+      expect(await response.json()).toEqual({
+        issuer: "https://example.convex.site",
+        jwks_uri: "https://example.convex.site/api/auth/convex/jwks",
+        response_types_supported: ["id_token"],
+        subject_types_supported: ["public"],
+        id_token_signing_alg_values_supported: [alg],
+        claims_supported: ["sub", "iss", "aud", "exp", "iat", "sessionId"],
+      });
+    }
+  );
 });
 
 const baseURL = "https://example.convex.site";

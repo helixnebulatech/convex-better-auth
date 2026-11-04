@@ -478,44 +478,23 @@ export const convex = (opts: {
           // TODO: properly type this
         },
         async (ctx) => {
-          // Same document the removed Better Auth oidcProvider plugin served
-          const baseURL = ctx.context.baseURL;
+          // OpenID Connect discovery for the tokens /convex/token issues.
+          // Convex reads only `issuer` and `jwks_uri`, the rest is what the
+          // spec requires. The plugin isn't an authorization server, so no
+          // authorization, token or userinfo endpoint is listed (the
+          // oidcProvider plugin that served /oauth2/* is gone since Better
+          // Auth 1.7), and the algorithm is the one the JWT is signed with.
           return ctx.json({
             issuer: `${process.env.CONVEX_SITE_URL}`,
-            authorization_endpoint: `${baseURL}/oauth2/authorize`,
-            token_endpoint: `${baseURL}/oauth2/token`,
-            userinfo_endpoint: `${baseURL}/oauth2/userinfo`,
             jwks_uri: `${process.env.CONVEX_SITE_URL}${opts.options?.basePath ?? "/api/auth"}/convex/jwks`,
-            registration_endpoint: `${baseURL}/oauth2/register`,
-            end_session_endpoint: `${baseURL}/oauth2/endsession`,
-            scopes_supported: ["openid", "profile", "email", "offline_access"],
-            response_types_supported: ["code"],
-            response_modes_supported: ["query"],
-            grant_types_supported: ["authorization_code", "refresh_token"],
-            acr_values_supported: [
-              "urn:mace:incommon:iap:silver",
-              "urn:mace:incommon:iap:bronze",
-            ],
+            response_types_supported: ["id_token"],
             subject_types_supported: ["public"],
-            id_token_signing_alg_values_supported: ["HS256"],
-            token_endpoint_auth_methods_supported: [
-              "client_secret_basic",
-              "client_secret_post",
-              "none",
-            ],
-            code_challenge_methods_supported: ["S256"],
-            claims_supported: [
-              "sub",
-              "iss",
-              "aud",
-              "exp",
-              "nbf",
-              "iat",
-              "jti",
-              "email",
-              "email_verified",
-              "name",
-            ],
+            id_token_signing_alg_values_supported: [alg],
+            // Claims every token carries: those the jwt plugin always sets,
+            // and iat and sessionId from definePayload above. The rest of
+            // the payload depends on definePayload (by default the user's
+            // fields), so it isn't listed.
+            claims_supported: ["sub", "iss", "aud", "exp", "iat", "sessionId"],
           });
         }
       ),
