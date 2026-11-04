@@ -41,7 +41,8 @@ redeems it automatically.
   `missing_or_null_origin`. See
   [Referrer policy](/framework-guides/react#referrer-policy).
 - One-time tokens are only handed to the apps listed below. Callback URLs on
-  other origins are redirected to without a session.
+  other origins are redirected to without a session, and the plugin logs a
+  warning with the two origins.
 - The one-time tokens have their own endpoint and storage, separate from Better
   Auth's `oneTimeToken` plugin, so the two can be used together and neither can
   redeem the other's tokens.
@@ -55,12 +56,12 @@ Better Auth keeps the session in a cookie of the auth server. Its official
 plugins hand it to another place only in these cases, and the cross domain
 plugin follows the same rules:
 
-| Flow                 | Better Auth                                                                                                                                                           | Cross domain plugin                                                                                                                                          |
-| -------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| OAuth from a web app | `oauth-popup` and `oauth-proxy` hand it back to the trusted origin that started the flow, in the browser that started it                                              | Handed back to the origin that started the flow, if it's `siteUrl` or an exact entry of `trustedOrigins`, and only redeemable by the browser that started it |
-| Magic link           | Core keeps it on the auth server. `expo` hands it only to the app's own scheme, never to another web origin, since anyone can request a link with any callback URL    | Only handed to `siteUrl`, your app, as `expo` does with the app's scheme                                                                                     |
-| Email verification   | With `autoSignInAfterVerification`, and when confirming an email change, core signs in whoever opens the link. `expo` hands that session only to the app's own scheme | Only handed to `siteUrl`, like a magic link                                                                                                                  |
-| Native app           | `expo` hands it to a trusted custom scheme such as `myapp://`                                                                                                         | Left to the `expo` plugin                                                                                                                                    |
+| Flow                 | Better Auth                                                                                                                                                                                                                 | Cross domain plugin                                                                                                                                          |
+| -------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| OAuth from a web app | `oauth-popup` and `oauth-proxy` hand it back to the trusted origin that started the flow, in the browser that started it                                                                                                    | Handed back to the origin that started the flow, if it's `siteUrl` or an exact entry of `trustedOrigins`, and only redeemable by the browser that started it |
+| Magic link           | Core keeps it on the auth server. `expo` hands it only to the app's own scheme, never to another web origin, since anyone can request a link with any callback URL                                                          | Only handed to `siteUrl`, your app, as `expo` does with the app's scheme                                                                                     |
+| Email verification   | With `autoSignInAfterVerification`, core signs in whoever opens the link. Since 1.7.16, confirming an email change only refreshes a session the browser already has. `expo` hands that session only to the app's own scheme | Only handed to `siteUrl`, like a magic link                                                                                                                  |
+| Native app           | `expo` hands it to a trusted custom scheme such as `myapp://`                                                                                                                                                               | Left to the `expo` plugin                                                                                                                                    |
 
 Two differences make the plugin stricter than Better Auth:
 

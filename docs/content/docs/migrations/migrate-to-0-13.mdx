@@ -448,7 +448,7 @@ their own. If you called these endpoints on the server, rename the calls:
 | `auth.api.getToken()` (Convex)                 | `auth.api.getConvexToken()`                |
 | `auth.api.getJwks()` (Convex)                  | `auth.api.getConvexJwks()`                 |
 | `auth.api.getOpenIdConfig()`                   | `auth.api.getConvexOpenIdConfig()`         |
-| `auth.api.verifyOneTimeToken()` (cross domain) | `auth.api.crossDomainVerifyOneTimeToken()` |
+| `auth.api.verifyOneTimeToken()` (cross domain) | `auth.api.verifyCrossDomainOneTimeToken()` |
 | `auth.api.startOAuth()`                        | `auth.api.crossDomainOAuthStart()`         |
 
 The paths and the clients don't change. A cross domain sign-in that is between

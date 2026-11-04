@@ -375,6 +375,9 @@ export const crossDomain = ({ siteUrl }: { siteUrl: string }) => {
             } else if (url.origin !== siteOrigin) {
               // Magic link and email verification: only to the app at
               // siteUrl, as expo only hands them to the app's scheme
+              ctx.context.logger.warn(
+                `Not handing off the session: the callback URL is on ${url.origin}, but magic link and email verification sessions are only handed to siteUrl (${siteOrigin})`
+              );
               return;
             }
             const token = generateRandomString(32);
@@ -484,7 +487,7 @@ export const crossDomain = ({ siteUrl }: { siteUrl: string }) => {
           throw ctx.redirect(pending.url);
         }
       ),
-      crossDomainVerifyOneTimeToken: createAuthEndpoint(
+      verifyCrossDomainOneTimeToken: createAuthEndpoint(
         "/cross-domain/one-time-token/verify",
         {
           method: "POST",

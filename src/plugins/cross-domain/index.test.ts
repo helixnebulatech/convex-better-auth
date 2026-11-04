@@ -13,6 +13,7 @@ const BASE_PATH = "/api/auth";
 describe("crossDomain plugin", async () => {
   let capturedMagicLinkUrl = "";
   const loggedErrors: string[] = [];
+  const loggedWarnings: string[] = [];
 
   const db: MemoryDB = {
     user: [],
@@ -30,6 +31,9 @@ describe("crossDomain plugin", async () => {
       log: (level, message) => {
         if (level === "error") {
           loggedErrors.push(message);
+        }
+        if (level === "warn") {
+          loggedWarnings.push(message);
         }
       },
     },
@@ -174,6 +178,48 @@ describe("crossDomain plugin", async () => {
       const location = new URL(response.headers.get("location")!);
       expect(location.origin).toBe(SITE_URL);
       expect(location.searchParams.get("ott")).toMatch(/^.{32}$/);
+    });
+
+    it("warns when a magic link callback isn't on siteUrl", async () => {
+      capturedMagicLinkUrl = "";
+      loggedWarnings.length = 0;
+      const sent = await post("/sign-in/magic-link", {
+        email: db.user[0].email as string,
+        callbackURL: "https://other.example.com/callback",
+      });
+      expect(sent.status).toBe(200);
+      const response = await auth.handler(new Request(capturedMagicLinkUrl));
+      expect(response.status).toBe(302);
+      const location = new URL(response.headers.get("location")!);
+      expect(location.origin).toBe("https://other.example.com");
+      expect(location.searchParams.has("ott")).toBe(false);
+      expect(loggedWarnings).toHaveLength(1);
+      expect(loggedWarnings[0]).toContain("https://other.example.com");
+      expect(loggedWarnings[0]).toContain(SITE_URL);
+      // The session token and the magic link token aren't logged
+      expect(loggedWarnings[0]).not.toContain(
+        new URL(capturedMagicLinkUrl).searchParams.get("token")!
+      );
+      const sessionToken = db.session[db.session.length - 1].token as string;
+      expect(loggedWarnings[0]).not.toContain(sessionToken);
+    });
+  });
+
+  describe("verify endpoint", () => {
+    it("is registered under upstream's key", async () => {
+      expect(Object.keys(crossDomain({ siteUrl: SITE_URL }).endpoints)).toEqual(
+        ["crossDomainOAuthStart", "verifyCrossDomainOneTimeToken"]
+      );
+      capturedMagicLinkUrl = "";
+      await post("/sign-in/magic-link", { email: db.user[0].email as string });
+      const response = await auth.handler(new Request(capturedMagicLinkUrl));
+      const ott = new URL(response.headers.get("location")!).searchParams.get(
+        "ott"
+      )!;
+      const result = await auth.api.verifyCrossDomainOneTimeToken({
+        body: { token: ott },
+      });
+      expect(result.session.token).toBeTypeOf("string");
     });
   });
 
