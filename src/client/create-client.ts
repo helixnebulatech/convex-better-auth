@@ -70,6 +70,10 @@ type SlimComponentApi = {
     updateMany: FunctionReference<"mutation", "internal">;
     deleteOne: FunctionReference<"mutation", "internal">;
     deleteMany: FunctionReference<"mutation", "internal">;
+    // Optional so Local Installs that don't export them yet keep working,
+    // see convexAdapter
+    consumeOne?: FunctionReference<"mutation", "internal">;
+    incrementOne?: FunctionReference<"mutation", "internal">;
   };
 };
 

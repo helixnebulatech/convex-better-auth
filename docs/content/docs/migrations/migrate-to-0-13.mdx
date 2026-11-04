@@ -454,3 +454,42 @@ their own. If you called these endpoints on the server, rename the calls:
 The paths and the clients don't change. A cross domain sign-in that is between
 the redirect and the token exchange during the upgrade fails, and the user has
 to sign in again.
+
+## Upgrading to 0.13.9
+
+### Atomic counters
+
+The adapter now updates counters, such as rate limit rows and two factor
+lockouts, with the component's `incrementOne` function, in a single mutation.
+Before, Better Auth read the row and updated it only if it hadn't changed,
+retrying 5 times, so concurrent requests on the same rate limit could fail with
+`could not complete an atomic increment due to contention`.
+
+Apps using the default install get it on their next deploy. Apps using
+[Local Install](/local-install) export the two new functions from
+`convex/betterAuth/adapter.ts`, as in an adapter written for upstream 0.13:
+
+```ts title="convex/betterAuth/adapter.ts"
+export const {
+  create,
+  findOne,
+  findMany,
+  updateOne,
+  updateMany,
+  deleteOne,
+  deleteMany,
+  consumeOne, // [!code ++]
+  incrementOne, // [!code ++]
+} = createApi(schema, createAuthOptions);
+```
+
+Until they do, the adapter keeps the old behaviour and logs a warning asking to
+export them.
+
+### Account keys
+
+Creating or updating an account with the `providerId` and `accountId` of
+another account now fails. Better Auth already refuses to sign in with a
+provider account that two accounts share, so this only stops new duplicates.
+If an app ran into `Multiple accounts match the same accountId`, delete the
+extra account rows.
