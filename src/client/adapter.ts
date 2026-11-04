@@ -22,6 +22,8 @@ import type { ComponentApi } from "../component/_generated/component.js";
 import type { AuthFunctions, GenericCtx, Triggers } from "./index.js";
 
 let didWarnJoinsUnsupported = false;
+// Module state only lasts for one function run on Convex, so this warns once
+// per run, such as once per rate limited request
 let didWarnIncrementOneMissing = false;
 
 // The error Convex throws when a Local Install's adapter.ts doesn't export

@@ -5,6 +5,7 @@ import {
   createAuthMiddleware,
   sessionMiddleware,
 } from "better-auth/api";
+import { parseSetCookieHeader } from "better-auth/cookies";
 import { bearer as bearerPlugin } from "better-auth/plugins/bearer";
 import { createJwk, jwt as jwtPlugin, signJWT } from "better-auth/plugins/jwt";
 import type { JwtOptions, Jwk } from "better-auth/plugins/jwt";
@@ -89,15 +90,29 @@ const datesToMillis = (value: unknown): any => {
 const expiresCookie = (
   headers: Headers | undefined,
   name: string | undefined
-) =>
-  Boolean(name) &&
-  (headers?.getSetCookie() ?? []).some((entry) => {
+) => {
+  if (!name || !headers) {
+    return false;
+  }
+  const expired = (entry: string) => {
     const [pair = "", ...attributes] = entry.split(";");
     return (
       pair.trim() === `${name}=` &&
       attributes.some((attribute) => /^\s*max-age=0\s*$/i.test(attribute))
     );
-  });
+  };
+  if (headers.getSetCookie().some(expired)) {
+    return true;
+  }
+  // With crossDomain listed before this plugin, its after hook has already
+  // moved the cookies to Set-Better-Auth-Cookie
+  const moved = headers.get("set-better-auth-cookie");
+  if (!moved) {
+    return false;
+  }
+  const cookie = parseSetCookieHeader(moved).get(name);
+  return Boolean(cookie && !cookie.value && cookie["max-age"] === 0);
+};
 
 export const convex = (opts: {
   /**

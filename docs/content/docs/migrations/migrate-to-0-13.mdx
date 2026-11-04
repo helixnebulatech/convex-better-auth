@@ -516,8 +516,9 @@ export const {
 } = createApi(schema, createAuthOptions);
 ```
 
-Until they do, the adapter keeps the old behaviour and logs a warning asking to
-export them.
+Until they do, the adapter keeps the old behaviour, at the cost of one failed
+call per increment, and logs a warning asking to export them in every function
+run that increments a counter, such as each rate limited request.
 
 ### Account keys
 

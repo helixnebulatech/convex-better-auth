@@ -20,8 +20,9 @@ The client adapter keeps consuming rows with `deleteOne`, which finds and
 deletes the row in one mutation too, so it's as atomic as the new `consumeOne`
 and keeps working with every Local Install. For `incrementOne` there is no
 existing function to fall back on, so when a Local Install's `adapter.ts`
-doesn't export it yet, the adapter catches Convex's "Could not find function"
-error, logs a warning and runs Better Auth's compare-and-swap fallback itself,
-instead of breaking rate limiting for apps that haven't updated their
-`adapter.ts`. `createClient` accepts a component without the two functions, and
-an `adapter.ts` written for upstream, which exports them, typechecks.
+doesn't export it yet, the adapter catches the error Convex throws for a
+function the component doesn't export, logs a warning and runs Better Auth's
+compare-and-swap fallback itself, instead of breaking rate limiting for apps
+that haven't updated their `adapter.ts`. `createClient` accepts a component
+without the two functions, and an `adapter.ts` written for upstream, which
+exports them, typechecks.

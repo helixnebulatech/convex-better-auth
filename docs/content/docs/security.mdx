@@ -234,7 +234,9 @@ cookie clear the `convex_jwt` cookie, the way Better Auth's
 `deleteSessionCookie` clears the cookies derived from the session
 (`session_data`, `account_data`). So when `twoFactor` holds a sign-in, which
 expires the session cookie, the JWT of a user who was signed in before in the
-same browser is cleared too, whatever the plugin order.
+same browser is cleared too, whatever the plugin order. With the cross domain
+plugin, every cookie of the response, including these, reaches the client in
+`Set-Better-Auth-Cookie`, also those set by plugins listed after it.
 
 ## Users returned to the client
 

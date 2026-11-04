@@ -194,7 +194,9 @@ installed component.
 ### Updating the schema
 
 Certain options changes may require schema generation. The Better Auth docs will
-often note when this is the case. To regenerate the schema at any time (as it's
+often note when this is the case. For example, `rateLimit: { storage: "database" }`
+needs a `rateLimit` table, which the schema only has once it's regenerated with
+that option. To regenerate the schema at any time (as it's
 generally safe to do), move into the component directory and run the Better Auth
 CLI generate command.
 
