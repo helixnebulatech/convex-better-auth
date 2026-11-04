@@ -485,3 +485,11 @@ export const {
 
 Until they do, the adapter keeps the old behaviour and logs a warning asking to
 export them.
+
+### Account keys
+
+Creating or updating an account with the `providerId` and `accountId` of
+another account now fails. Better Auth already refuses to sign in with a
+provider account that two accounts share, so this only stops new duplicates.
+If an app ran into `Multiple accounts match the same accountId`, delete the
+extra account rows.

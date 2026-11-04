@@ -62,16 +62,32 @@ export const adapterArgsValidator = v.object({
 // Unique constraints of a model, as lists of database field names. Better Auth
 // declares them on fields (`unique: true`) and, since 1.7, as table-level
 // indexes (`indexes: [{ fields, unique: true }]`), which can be compound.
+//
+// An account's providerId and accountId are unique too, stricter than Better
+// Auth's SQL schema, which has no constraint for them. Better Auth's internal
+// adapter (findAccountByKey, findAccountOwnerByKey) throws "Multiple accounts
+// match" when two accounts share them, so a duplicate left by two racing
+// links would break sign-in with that provider for the user.
 const getUniqueConstraints = (
   betterAuthSchema: BetterAuthDBSchema,
   model: string
 ) => {
-  const table = Object.values(betterAuthSchema).find(
-    (value) => value.modelName === model
-  );
+  const [modelKey, table] =
+    Object.entries(betterAuthSchema).find(
+      ([, value]) => value.modelName === model
+    ) ?? [];
   if (!table) {
     return [];
   }
+  const accountKeyConstraints =
+    modelKey === "account" && table.fields.accountId && table.fields.providerId
+      ? [
+          [
+            table.fields.accountId.fieldName ?? "accountId",
+            table.fields.providerId.fieldName ?? "providerId",
+          ],
+        ]
+      : [];
   const fieldConstraints = Object.entries(table.fields)
     .filter(([, value]) => value.unique)
     .map(([key, value]) => [value.fieldName ?? key]);
@@ -80,7 +96,7 @@ const getUniqueConstraints = (
     .map((index) =>
       index.fields.map((field) => table.fields[field]?.fieldName ?? field)
     );
-  return [...fieldConstraints, ...indexConstraints];
+  return [...fieldConstraints, ...indexConstraints, ...accountKeyConstraints];
 };
 const isUniqueField = (
   betterAuthSchema: BetterAuthDBSchema,
