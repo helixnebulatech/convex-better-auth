@@ -1,25 +1,27 @@
-# Changes to the published package (src/**) need a changeset. Run
-# `pnpm changeset` to add one, or `pnpm changeset --empty` for changes that do
-# not need a release.
+# Changes to the published package (packages/convex-better-auth/src) need a
+# changeset. Run `bun run changeset` to add one, or `bun run changeset --empty`
+# for changes that do not need a release.
 name: Verify Changesets
 
 on:
   pull_request:
     branches:
       - main
-  # Dispatched by the release workflow for the "Version Packages" pull request.
+  # Dispatched by the release workflow for the "chore: release" pull request.
   # The job is skipped there, which still satisfies the required check.
   workflow_dispatch:
 
-permissions:
-  contents: read
+permissions: {}
 
 jobs:
   verify-changesets:
+    # Required by the `main` ruleset under this name.
     name: Verify Changesets
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
-    # The "Version Packages" pull request consumes the changesets
+    permissions:
+      contents: read
+    # The release pull request consumes the changesets
     if:
       github.event_name == 'pull_request' && !startsWith(github.head_ref,
       'changeset-release/')
@@ -29,16 +31,13 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
-      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
-
-      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with:
-          node-version: 24
-          cache: "pnpm"
+          bun-version-file: package.json
 
-      - run: pnpm install --frozen-lockfile
+      - run: bun install --frozen-lockfile --ignore-scripts
 
       - name: Check for changesets
-        run: pnpm changeset status --since="origin/$BASE_REF"
+        run: bun run changeset status --since="origin/$BASE_REF"
         env:
           BASE_REF: ${{ github.base_ref }}
