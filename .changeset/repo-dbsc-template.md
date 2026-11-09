@@ -3,7 +3,7 @@
 ---
 
 The repository now follows the layout of the Vercel AI SDK and of
-better-auth-dbsc: a Bun workspace run with Turborepo, the package in
+better-auth-dbsc: a Bun workspace with the package in
 `packages/convex-better-auth`, built with tsdown and linted and formatted with
 Ultracite (oxlint and oxfmt) instead of ESLint and Prettier. The published files
 are the same as in 0.13.9, one module per file as before, plus `CHANGELOG.md`.

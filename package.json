@@ -10,11 +10,11 @@
   "type": "module",
   "scripts": {
     "dev": "bun run build && bun run --cwd examples/react dev",
-    "build": "turbo run build --filter=@helixnebulatech/convex-better-auth",
-    "check-types": "turbo run check-types",
-    "test": "turbo run test --filter=@helixnebulatech/convex-better-auth",
+    "build": "bun run --cwd packages/convex-better-auth build",
+    "check-types": "bun run build && bun run --cwd packages/convex-better-auth check-types && bun run --filter './examples/*' check-types",
+    "test": "bun run --cwd packages/convex-better-auth test",
     "test:e2e": "bun run build && cd e2e && bun run test",
-    "publint": "turbo run publint --filter=@helixnebulatech/convex-better-auth",
+    "publint": "bun run build && bun run --cwd packages/convex-better-auth publint",
     "check": "ultracite check",
     "fix": "ultracite fix",
     "changeset": "changeset",
@@ -28,7 +28,6 @@
     "oxfmt": "0.77.0",
     "oxlint": "1.92.0",
     "oxlint-tsgolint": "7.0.2006",
-    "turbo": "2.11.10",
     "typescript": "7.0.2",
     "ultracite": "8.1.1"
   },

@@ -1,8 +1,7 @@
 # Developing guide
 
-This repo is a [Bun](https://bun.sh) workspace run with
-[Turborepo](https://turborepo.com), laid out like the Vercel AI SDK. The Bun
-version is pinned in the `packageManager` field of `package.json`.
+This repo is a [Bun](https://bun.sh) workspace, laid out like the Vercel AI SDK.
+The Bun version is pinned in the `packageManager` field of `package.json`.
 
 | Path                          | What                                                          |
 | ----------------------------- | ------------------------------------------------------------- |

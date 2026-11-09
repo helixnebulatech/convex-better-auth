@@ -196,7 +196,7 @@ the repository root. Git follows the move for files changed on both sides
 (`src/**`, `CHANGELOG.md`), so most merges apply as is. Files upstream adds at
 the root under `src/` have to be moved by hand, and upstream changes to its
 tooling (`package.json` scripts, ESLint, Prettier, pnpm, workflows) don't apply:
-port what's needed to the Bun, Turborepo and Ultracite setup instead.
+port what's needed to the Bun and Ultracite setup instead.
 
 Keep `name`, `repository`, `homepage`, `bugs` and `publishConfig` in
 `packages/convex-better-auth/package.json` on the fork values when resolving
@@ -207,12 +207,11 @@ apps back to `@convex-dev/better-auth`.
 
 The repo follows the layout of the Vercel AI SDK and of
 [better-auth-dbsc](https://github.com/helixnebulatech/better-auth-dbsc): a Bun
-workspace run with Turborepo, the published package in
-`packages/convex-better-auth`, built with tsdown, type checked with tsrs, and
-linted and formatted with Ultracite (oxlint and oxfmt). The examples, `e2e` and
-`docs` are workspace packages that share one `bun.lock`, so a single
-`bun install` at the root sets everything up. See
-[CONTRIBUTING.md](./CONTRIBUTING.md).
+workspace with the published package in `packages/convex-better-auth`, built
+with tsdown, type checked with tsrs, and linted and formatted with Ultracite
+(oxlint and oxfmt). The examples, `e2e` and `docs` are workspace packages that
+share one `bun.lock`, so a single `bun install` at the root sets everything up.
+See [CONTRIBUTING.md](./CONTRIBUTING.md).
 
 ## Update Better Auth
 
