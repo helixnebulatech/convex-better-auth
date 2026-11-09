@@ -1,6 +1,6 @@
 {
   "name": "@helixnebulatech/convex-better-auth",
-  "version": "0.13.9",
+  "version": "0.13.10",
   "description": "Fork of @convex-dev/better-auth that tracks the latest Better Auth release.",
   "keywords": [
     "auth",
