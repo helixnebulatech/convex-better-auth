@@ -215,6 +215,30 @@ Auth runs `delete from "session" where 1 = 1` and deletes every row.
 `consumeOne` and `incrementOne` take the first row as Better Auth's Kysely and
 memory adapters and its atomic fallback do; upstream returns `null` instead.
 
+## Calling `auth.api` from Convex functions
+
+Better Auth runs its origin and CSRF checks only for requests that reach
+`auth.handler`, which with Convex is the HTTP routes from
+`authComponent.registerRoutes`. A direct `auth.api` call skips them, even with
+the headers from `authComponent.getAuth` or `getHeaders`. It also skips the
+`trustedOrigins` check of `callbackURL`, `errorCallbackURL`,
+`newUserCallbackURL` and `redirectTo`. The component behaves as Better Auth does
+here (see Better Auth's
+[security reference](https://better-auth.com/docs/reference/security)).
+
+- The headers from `getHeaders` carry the session as a bearer token from the
+  Convex JWT, not as a cookie the browser sends on its own, so a cross-site
+  request can't make a Convex function act as the user. Calling `auth.api` from
+  a mutation or action doesn't need an origin check.
+- If a function takes one of those URLs as an argument and passes it to
+  `auth.api`, for example `callbackURL` to `sendVerificationEmail` or
+  `redirectTo` to `requestPasswordReset`, validate it first, for example
+  against your `siteUrl`. Better Auth checks it again when the user opens an
+  email verification, password reset, email change or magic link, so an
+  untrusted URL there only makes the link fail. Others, such as the
+  `callbackURL` of `signInSocial`, are only checked on the call, and the user is
+  redirected to them after signing in.
+
 ## Tokens and revocation
 
 The JWT Convex uses holds the user's fields, except `id`, `image` and fields
