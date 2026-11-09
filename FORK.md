@@ -4,17 +4,18 @@ Fork of [`get-convex/better-auth`](https://github.com/get-convex/better-auth),
 published to npm as `@helixnebulatech/convex-better-auth` so our apps can use
 the latest Better Auth without waiting for upstream releases.
 
-| Fork   | Better Auth       | Based on                                                                       |
-| ------ | ----------------- | ------------------------------------------------------------------------------ |
-| 0.13.0 | `>=1.7.5 <1.8.0`  | upstream `0.12.5` + [#444](https://github.com/get-convex/better-auth/pull/444) |
-| 0.13.2 | `>=1.7.5 <1.8.0`  | 0.13.0 + fixes audited from open upstream pull requests                        |
-| 0.13.3 | `>=1.7.5 <1.8.0`  | 0.13.2 + security fixes                                                        |
-| 0.13.4 | `>=1.7.5 <1.8.0`  | 0.13.3 + dates returned to Better Auth as `Date` objects                       |
-| 0.13.5 | `>=1.7.5 <1.8.0`  | 0.13.4 + missing indexes, single row lookups without an index                  |
-| 0.13.6 | `>=1.7.5 <1.8.0`  | 0.13.5 + upstream `0.12.6`, ids chosen by Better Auth, tested with 1.7.13      |
-| 0.13.7 | `>=1.7.5 <1.8.0`  | 0.13.6 + fixes from a full review: JWT on sign-in, forwarded headers, adapter  |
-| 0.13.8 | `>=1.7.5 <1.8.0`  | 0.13.7 + fixes from a security audit: `clientApi` output, adapter `in` clauses |
-| 0.13.9 | `>=1.7.16 <1.8.0` | 0.13.8 + fixes backported and audited from upstream `0.12.7` and `0.13.0`      |
+| Fork    | Better Auth       | Based on                                                                       |
+| ------- | ----------------- | ------------------------------------------------------------------------------ |
+| 0.13.0  | `>=1.7.5 <1.8.0`  | upstream `0.12.5` + [#444](https://github.com/get-convex/better-auth/pull/444) |
+| 0.13.2  | `>=1.7.5 <1.8.0`  | 0.13.0 + fixes audited from open upstream pull requests                        |
+| 0.13.3  | `>=1.7.5 <1.8.0`  | 0.13.2 + security fixes                                                        |
+| 0.13.4  | `>=1.7.5 <1.8.0`  | 0.13.3 + dates returned to Better Auth as `Date` objects                       |
+| 0.13.5  | `>=1.7.5 <1.8.0`  | 0.13.4 + missing indexes, single row lookups without an index                  |
+| 0.13.6  | `>=1.7.5 <1.8.0`  | 0.13.5 + upstream `0.12.6`, ids chosen by Better Auth, tested with 1.7.13      |
+| 0.13.7  | `>=1.7.5 <1.8.0`  | 0.13.6 + fixes from a full review: JWT on sign-in, forwarded headers, adapter  |
+| 0.13.8  | `>=1.7.5 <1.8.0`  | 0.13.7 + fixes from a security audit: `clientApi` output, adapter `in` clauses |
+| 0.13.9  | `>=1.7.16 <1.8.0` | 0.13.8 + fixes backported and audited from upstream `0.12.7` and `0.13.0`      |
+| 0.13.10 | `>=1.7.18 <1.8.0` | 0.13.9 + Better Auth 1.7.18, security notes on direct `auth.api` calls         |
 
 ## Use it in an app
 
@@ -22,9 +23,9 @@ Install it under the upstream name with a package alias, so no imports change:
 
 ```sh
 # npm
-npm install @convex-dev/better-auth@npm:@helixnebulatech/convex-better-auth@^0.13.9 better-auth@~1.7.16
+npm install @convex-dev/better-auth@npm:@helixnebulatech/convex-better-auth@^0.13.10 better-auth@~1.7.18
 # pnpm
-pnpm add @convex-dev/better-auth@npm:@helixnebulatech/convex-better-auth@^0.13.9 better-auth@~1.7.16
+pnpm add @convex-dev/better-auth@npm:@helixnebulatech/convex-better-auth@^0.13.10 better-auth@~1.7.18
 ```
 
 Then follow the

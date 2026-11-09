@@ -9,41 +9,7 @@ packages:
 # minimumReleaseAgeExclude.
 minimumReleaseAge: 4320
 
-# One-time exception for the Better Auth 1.7.16 and Next.js 16.4.5 security
-# releases, published 2026-11-03. Exact versions only, so later releases wait
-# the full 3 days. Drop these entries once they're older than
-# minimumReleaseAge (2026-11-06).
-minimumReleaseAgeExclude:
-  - better-auth@1.7.16
-  - "@better-auth/core@1.7.16"
-  - "@better-auth/drizzle-adapter@1.7.16"
-  - "@better-auth/kysely-adapter@1.7.16"
-  - "@better-auth/memory-adapter@1.7.16"
-  - "@better-auth/mongo-adapter@1.7.16"
-  - "@better-auth/prisma-adapter@1.7.16"
-  - "@better-auth/telemetry@1.7.16"
-  - "@better-auth/test-utils@1.7.16"
-  - next@16.4.5
-  - "@next/env@16.4.5"
-  - eslint-config-next@16.4.5
-  - "@next/eslint-plugin-next@16.4.5"
-  - "@next/swc-darwin-arm64@16.4.5"
-  - "@next/swc-darwin-x64@16.4.5"
-  - "@next/swc-linux-arm64-gnu@16.4.5"
-  - "@next/swc-linux-arm64-musl@16.4.5"
-  - "@next/swc-linux-x64-gnu@16.4.5"
-  - "@next/swc-linux-x64-musl@16.4.5"
-  - "@next/swc-win32-arm64-msvc@16.4.5"
-  - "@next/swc-win32-x64-msvc@16.4.5"
-  - better-call@1.4.5
-
 allowBuilds:
   esbuild: true
   unrs-resolver: true
 
-# Patched transitive versions (GHSA-p6vx-979v-rg4c, GHSA-jp82-f5mq-hwhp,
-# GHSA-pqg4-j6r4-53mv). Drop once solid-js >=1.9.16 and concurrently >=10.0.6
-# are older than minimumReleaseAge.
-overrides:
-  seroval@<1.6.3: ^1.6.3
-  shell-quote@>=1.8.4 <1.11.0: ^1.11.0

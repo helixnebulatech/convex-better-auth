@@ -10,7 +10,7 @@ description: Migrate to @convex-dev/better-auth@0.13
   <div className="fd-step">
     ### Install dependencies
 
-    Update Better Auth and the component. Better Auth must be on `1.7.16` or
+    Update Better Auth and the component. Better Auth must be on `1.7.18` or
     later in the `1.7.x` line.
 
     <Callout>
@@ -19,7 +19,7 @@ description: Migrate to @convex-dev/better-auth@0.13
 
     ```npm
     npm install @convex-dev/better-auth@^0.13.0
-    npm install better-auth@~1.7.16
+    npm install better-auth@~1.7.18
     ```
 
   </div>
@@ -552,3 +552,29 @@ such as verifying an API key with rate limiting, now throw an error naming the
 method, instead of returning no row. See
 [Calling Better Auth from a query](/basic-usage#calling-better-auth-from-a-query).
 Run them from a mutation or action.
+
+## Upgrading to 0.13.10
+
+0.13.10 needs Better Auth 1.7.18 or later:
+
+```npm
+npm install better-auth@~1.7.18
+```
+
+The component code doesn't change. Better Auth 1.7.17 and 1.7.18 fix bugs that
+also affect Convex apps:
+
+- A sign-in with `rememberMe` now clears the `dont_remember` cookie left by an
+  earlier sign-in without it, so the session is refreshed again. With the cross
+  domain plugin the client drops that cookie too.
+- Two factor accepts API key sessions when verifying TOTP enrollment, and honors
+  trusted devices when your own hook runs the two factor step on another
+  sign-in path, such as email OTP.
+- Denying a device authorization request rejects a revoked session that is
+  still in the cookie cache.
+- The phone number plugin no longer stores an empty `phoneNumber`.
+- A `passkey()` plugin shared between auth instances keeps the `baseURL` mode
+  of each instance.
+
+See [Calling `auth.api` from Convex functions](/security#calling-authapi-from-convex-functions)
+for the URLs to validate when a function passes them to `auth.api`.
