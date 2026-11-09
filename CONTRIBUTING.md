@@ -55,7 +55,7 @@ rules run through oxlint's JS plugins.
 - Dev dependencies are pinned to exact versions. Runtime and peer dependencies
   use `^` ranges.
 - `bunfig.toml` sets `minimumReleaseAge` to 3 days: Bun does not install
-  versions younger than that. Dependabot uses the same cooldown.
+  versions younger than that.
 - GitHub Actions are pinned to commit SHAs.
 
 ## Changesets

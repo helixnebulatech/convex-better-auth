@@ -55,12 +55,6 @@ jobs:
       - name: Unit tests
         run: bun run test
 
-      - name: Publish package for testing branch
-        working-directory: packages/convex-better-auth
-        run:
-          bun x pkg-pr-new publish || echo "Have you set up pkg-pr-new for this
-          repo?"
-
   e2e:
     name: End-to-end tests
     runs-on: ubuntu-24.04
