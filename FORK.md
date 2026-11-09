@@ -266,17 +266,29 @@ ships with
    approve the pull request once they pass.
 4. Merge that pull request by hand. The Release workflow then builds, tests and
    packs the tarball in the `pack` job, and the `publish` job waits in the
-   `Release` environment until you approve it. It publishes the tarball that
-   `pack` built, then creates the git tag and the GitHub release.
+   `Release` environment until you approve it and publishes that tarball. A
+   separate "GitHub Release" job then creates the git tag and the GitHub release
+   and attaches the provenance.
 
-The workflow splits the work so that only the last job can publish.
-`select-mode` decides between versioning and publishing. `version` opens the
-pull request; it never publishes, so it needs no approval and never gets the npm
-OIDC token. `pack` builds and tests but has no OIDC token either. `publish` is
-the only job in the `Release` environment: it doesn't build or run project
-scripts (dependencies are installed with `--ignore-scripts`), and only uploads
-what `pack` produced. It has the OIDC token and write access to create the tag
-and the release. Snapshots also run in the environment.
+The jobs are split by what each one can do, so that a compromised dependency
+can't both publish to npm and run in a job that holds the npm token:
+
+| Job              | Can                                      | Runs project code                                |
+| ---------------- | ---------------------------------------- | ------------------------------------------------ |
+| `select-mode`    | read the repo                            | no (`--ignore-scripts`)                          |
+| `version`        | push the release branch, open the PR     | yes: `changeset version`, `bun install`          |
+| `pack`           | read the repo                            | yes: install, build, test                        |
+| `publish`        | publish to npm (OIDC), only in `Release` | no: uploads `pack`'s tarball, `--ignore-scripts` |
+| `GitHub Release` | create the tag and the release           | no: two scripts in `.github/scripts`             |
+
+Better Auth and the Vercel AI SDK publish from a single job in their release
+environment that also installs, builds and writes the tag (the AI SDK with
+`contents: write`, Better Auth with a GitHub App token). Here the job holding
+the npm token can't write to the repo and doesn't run install scripts or the
+build, as in better-auth-dbsc, and the tag and release come from a job without
+the npm token, as this fork did before. Snapshots also publish from the
+environment, but build in the same job, as Better Auth's snapshots do; they only
+reach the `snapshot` dist-tag.
 
 npm only trusts the workflow when it runs in the `Release` environment, and the
 environment only accepts `main` and needs a reviewer's approval. Started by

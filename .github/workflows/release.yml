@@ -3,12 +3,13 @@
 # Same model as Better Auth and the Vercel AI SDK: npm Trusted Publishing
 # (OIDC, no npm token stored anywhere), provenance, and a `Release`
 # environment that only `main` can deploy to. The work is split into jobs so
-# that only the last one can publish, and it neither installs project scripts
-# nor builds: it uploads the tarballs that the `pack` job built and tested.
+# that only `publish` can publish to npm, and it neither runs project code nor
+# writes to the repo: it uploads the tarballs that `pack` built and tested.
 #
 #   select-mode -> version   (opens or updates the "chore: release" PR)
-#               -> pack      (build, test, npm pack)
-#                  -> publish (Release environment: npm publish + GitHub release)
+#               -> pack      (build, test, npm pack; no secrets)
+#                  -> publish (Release environment: npm publish, read-only)
+#                     -> github-release (tag, release, provenance; no npm token)
 #
 # A manual run with "snapshot" checked publishes a snapshot instead. One-time
 # setup is described in FORK.md ("Release").
@@ -152,10 +153,15 @@ jobs:
     timeout-minutes: 15
     # Only `main` may deploy to this environment (Settings > Environments),
     # and npm's Trusted Publisher accepts tokens from this environment only.
+    # The job holding the npm OIDC token can't write to the repo and runs no
+    # project code: no lifecycle scripts, no build, only the tarball `pack`
+    # built. The github-release job writes the tag and the release.
     environment: Release
     permissions:
-      contents: write # git tag + GitHub release
+      contents: read
       id-token: [SECRET] # npm Trusted Publishing (OIDC) and provenance
+    outputs:
+      published-packages: ${{ steps.publish.outputs.published-packages }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -176,9 +182,47 @@ jobs:
       - run: bun install --frozen-lockfile --ignore-scripts
 
       - name: Publish to npm
+        id: publish
         uses: changesets/action/publish@ae32849d5ba541f9ae29e40e22a623bc13562f51 # v2.1.2
         with:
           pack-dir-artifact-id: ${{ needs.pack.outputs.pack-dir-artifact-id }}
+          create-github-releases: false
+          push-git-tags: false
+
+  # Tag, GitHub Release and provenance for what was published, outside the
+  # environment and without the npm OIDC token.
+  github-release:
+    name: GitHub Release
+    needs: publish
+    if:
+      needs.publish.outputs.published-packages != '[]' &&
+      needs.publish.outputs.published-packages != ''
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+          package-manager-cache: false
+
+      - name: Create GitHub Release
+        run: node .github/scripts/github-release.mjs
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          PUBLISHED_PACKAGES: ${{ needs.publish.outputs.published-packages }}
+
+      - name: Attach SLSA provenance to GitHub Releases
+        run: node .github/scripts/upload-provenance.mjs
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          PUBLISHED_PACKAGES: ${{ needs.publish.outputs.published-packages }}
 
   # Snapshot release, also through the protected environment (and so only
   # from main). Publishes 0.0.0-<sha>-<timestamp> under the `snapshot` tag.
