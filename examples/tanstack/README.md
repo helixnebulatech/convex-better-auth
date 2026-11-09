@@ -33,8 +33,8 @@ npx convex dev --once
 npm run dev
 ```
 
-If you're making changes to the component, open a separate terminal
-and run the build watch task
+If you're making changes to the component, open a separate terminal and run the
+build watch task
 
 ```bash
 npm run build:watch

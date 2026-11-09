@@ -191,40 +191,51 @@ git fetch upstream
 git merge upstream/main
 ```
 
+The package lives in `packages/convex-better-auth`, while upstream keeps it at
+the repository root. Git follows the move for files changed on both sides
+(`src/**`, `CHANGELOG.md`), so most merges apply as is. Files upstream adds at
+the root under `src/` have to be moved by hand, and upstream changes to its
+tooling (`package.json` scripts, ESLint, Prettier, pnpm, workflows) don't apply:
+port what's needed to the Bun and Ultracite setup instead.
+
 Keep `name`, `repository`, `homepage`, `bugs` and `publishConfig` in
-`package.json` on the fork values when resolving conflicts. When upstream
-supports the Better Auth line we need, consider moving apps back to
-`@convex-dev/better-auth`.
+`packages/convex-better-auth/package.json` on the fork values when resolving
+conflicts. When upstream supports the Better Auth line we need, consider moving
+apps back to `@convex-dev/better-auth`.
 
 ## Development
 
-The repo uses pnpm, pinned in `packageManager`. The examples, `e2e` and `docs`
-are workspace packages that share one `pnpm-lock.yaml`, so a single
-`pnpm install` at the root sets everything up. See
-[CONTRIBUTING.md](./CONTRIBUTING.md).
+The repo follows the layout of the Vercel AI SDK and of
+[better-auth-dbsc](https://github.com/helixnebulatech/better-auth-dbsc): a Bun
+workspace with the published package in `packages/convex-better-auth`, built
+with tsdown, type checked with tsrs, and linted and formatted with Ultracite
+(oxlint and oxfmt). The examples, `e2e` and `docs` are workspace packages that
+share one `bun.lock`, so a single `bun install` at the root sets everything up.
+See [CONTRIBUTING.md](./CONTRIBUTING.md).
 
 ## Update Better Auth
 
-Set the new version in the root `package.json` (`better-auth`,
-`@better-auth/core`, `@better-auth/test-utils`) and in each example's
-`package.json`, then:
+Set the new version in `packages/convex-better-auth/package.json`
+(`better-auth`, `@better-auth/core`, `@better-auth/test-utils`) and in each
+example's `package.json`, then:
 
 ```sh
-pnpm install
-pnpm dlx auth@<version> generate --output src/component/schema.ts
-pnpm run build:codegen  # needs a Convex deployment (CONVEX_DEPLOYMENT)
-pnpm test && pnpm run typecheck && pnpm run lint
+bun install
+cd packages/convex-better-auth
+bun x auth@<version> generate --output src/component/schema.ts
+bun run build:codegen  # needs a Convex deployment (CONVEX_DEPLOYMENT)
+cd ../..
+bun run test && bun run check-types && bun run check
 ```
 
-`pnpm-workspace.yaml` blocks versions published less than 3 days ago, also on
-`pnpm install --frozen-lockfile` in CI. To use a newer Better Auth release
-before that, add the exact versions pnpm reports to `minimumReleaseAgeExclude`,
+`bunfig.toml` blocks versions published less than 3 days ago, also on
+`bun install --frozen-lockfile` in CI. To use a newer Better Auth release before
+that, add the exact packages to `minimumReleaseAgeExcludes` in `bunfig.toml`,
 and drop them once they're 3 days old:
 
-```yaml
-minimumReleaseAgeExclude:
-  - better-auth@1.7.13
-  - "@better-auth/core@1.7.13"
+```toml
+[install]
+minimumReleaseAgeExcludes = ["better-auth", "@better-auth/core"]
 ```
 
 Check the Better Auth changelog for new adapter methods or arguments. The
@@ -234,44 +245,55 @@ calls until the adapter strips or handles it.
 ## Release
 
 Releases are published from GitHub Actions with
-[Changesets](https://github.com/changesets/changesets), the same flow Vercel
-uses for the AI SDK. npm
+[Changesets](https://github.com/changesets/changesets), the same flow as Better
+Auth and the Vercel AI SDK. npm
 [trusted publishing](https://docs.npmjs.com/trusted-publishers) authenticates
 the workflow with OIDC, so there is no npm token in the repo, and every version
 ships with
 [provenance](https://docs.npmjs.com/generating-provenance-statements).
 
-1. Every pull request that changes `src/` adds a changeset with
-   `pnpm changeset`. The Verify Changesets check fails without one. Use
-   `pnpm changeset --empty` when a change does not need a release.
+1. Every pull request that changes `packages/convex-better-auth/src` adds a
+   changeset with `bun run changeset`. The Verify Changesets check fails without
+   one. Use `bun run changeset --empty` when a change does not need a release.
 2. When changesets land on `main`, the Release workflow opens or updates a
-   "Version Packages" pull request. It bumps the version, syncs `src/version.ts`
-   and writes `CHANGELOG.md`.
-3. Review the "Version Packages" pull request: check the version bump and the
+   "chore: release" pull request. It bumps the version, syncs `src/version.ts`
+   and writes `CHANGELOG.md`, with links to the pull requests.
+3. Review the release pull request: check the version bump and the
    `CHANGELOG.md` entry. GitHub holds its "Test and lint" and "Verify
    Changesets" runs until someone approves them, because a bot opened the pull
    request. Approve them from the pull request checks ("Approve and run"), then
    approve the pull request once they pass.
-4. Merge that pull request by hand. The Release workflow then starts the
-   "Publish to npm" job, which waits in the `Release` environment until you
-   approve it, and publishes. A separate "GitHub Release" job then creates the
-   git tag and the GitHub release and attaches the provenance.
+4. Merge that pull request by hand. The Release workflow then builds, tests and
+   packs the tarball in the `pack` job, and the `publish` job waits in the
+   `Release` environment until you approve it and publishes that tarball. A
+   separate "GitHub Release" job then creates the git tag and the GitHub release
+   and attaches the provenance.
 
-The workflow has three jobs. "Version Packages PR" opens the pull request and
-runs its checks; it never publishes, so it needs no approval and never gets the
-npm OIDC token. "Publish to npm" is the only job in the `Release` environment,
-and it only has read access to the repo and the OIDC token. "GitHub Release"
-writes the tag and the release, outside the environment. Snapshots also run in
-the environment.
+The jobs are split by what each one can do, so that a compromised dependency
+can't both publish to npm and run in a job that holds the npm token:
+
+| Job              | Can                                      | Runs project code                                |
+| ---------------- | ---------------------------------------- | ------------------------------------------------ |
+| `select-mode`    | read the repo                            | no (`--ignore-scripts`)                          |
+| `version`        | push the release branch, open the PR     | yes: `changeset version`, `bun install`          |
+| `pack`           | read the repo                            | yes: install, build, test                        |
+| `publish`        | publish to npm (OIDC), only in `Release` | no: uploads `pack`'s tarball, `--ignore-scripts` |
+| `GitHub Release` | create the tag and the release           | no: two scripts in `.github/scripts`             |
+
+Better Auth and the Vercel AI SDK publish from a single job in their release
+environment that also installs, builds and writes the tag (the AI SDK with
+`contents: write`, Better Auth with a GitHub App token). Here the job holding
+the npm token can't write to the repo and doesn't run install scripts or the
+build, as in better-auth-dbsc, and the tag and release come from a job without
+the npm token, as this fork did before. Snapshots also publish from the
+environment, but build in the same job, as Better Auth's snapshots do; they only
+reach the `snapshot` dist-tag.
 
 npm only trusts the workflow when it runs in the `Release` environment, and the
 environment only accepts `main` and needs a reviewer's approval. Started by
-hand, a normal release only runs from `main`. Better Auth's release workflow
-does the same. Vercel's AI SDK workflow, which ours started from, has neither:
-anyone with write access could run it on an unreviewed branch and publish that
-branch with valid provenance. The `if:` in the workflow only prevents mistakes,
-as a branch can edit it. The environment's branch rule and required reviewer are
-what stop a publish nobody approved.
+hand, a normal release only runs from `main`. The `if:` in the workflow only
+prevents mistakes, as a branch can edit it. The environment's branch rule and
+required reviewer are what stop a publish nobody approved.
 
 To try a change before releasing it, run the Release workflow manually with
 "snapshot" checked. It publishes `0.0.0-<sha>-<timestamp>` under the `snapshot`
@@ -287,21 +309,21 @@ A ruleset protects `main`:
 
 - Changes land through pull requests, merged with squash. Direct pushes, force
   pushes and deleting the branch are blocked.
-- Every pull request needs 1 approval, and the "Test and lint" and "Verify
-  Changesets" checks must pass.
+- Every pull request needs 1 approval, and the "Test and lint", "End-to-end
+  tests" and "Verify Changesets" checks must pass.
 - Commits must be signed. Squash merges are signed by GitHub.
 - Repository admins can bypass the rules, but only inside a pull request. With a
   single maintainer this is how your own pull requests get merged, since GitHub
   doesn't let authors approve their own pull requests. GitHub records each
-  bypass. Pull requests opened by a bot, such as "Version Packages", can be
+  bypass. Pull requests opened by a bot, such as "chore: release", can be
   approved normally.
 
 ### One-time setup
 
 - In the GitHub repo settings, under Actions > General, allow GitHub Actions to
   create and approve pull requests.
-- Publish the first version by hand with `pnpm publish`, as npm needs the
-  package to exist before it can trust a publisher.
+- Publish the first version by hand with `npm publish`, as npm needs the package
+  to exist before it can trust a publisher.
 - Trust the Release workflow on npm. This needs npm 11.15 or later and 2FA on
   the npm account. The same setting is in the package settings on npmjs.com.
 
@@ -311,5 +333,5 @@ A ruleset protects `main`:
 
 - Create the `Release` environment under Settings > Environments, with yourself
   as a required reviewer and "Deployment branches and tags" limited to `main`.
-  Publishing and snapshots then wait for that approval; opening the "Version
-  Packages" pull request does not.
+  Publishing and snapshots then wait for that approval; opening the release pull
+  request does not.

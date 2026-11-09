@@ -13,7 +13,7 @@ import React from "react";
 export interface BaseEmailProps {
   children: React.ReactNode;
   previewText: string;
-  footerLinks?: Array<{ text: string; href: string }>;
+  footerLinks?: { text: string; href: string }[];
   footerText?: string;
   brandName?: string;
   brandTagline?: string;
@@ -104,6 +104,7 @@ export function BaseEmail({
                 <Link
                   href={link.href}
                   target="_blank"
+                  rel="noreferrer"
                   style={{ ...styles.link, color: "#898989" }}
                 >
                   {link.text}

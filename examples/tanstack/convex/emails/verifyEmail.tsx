@@ -26,6 +26,7 @@ export default function VerifyEmail({
       <Link
         href={url}
         target="_blank"
+        rel="noreferrer"
         style={{
           ...styles.link,
           display: "block",

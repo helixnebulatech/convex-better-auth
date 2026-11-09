@@ -575,7 +575,9 @@ To use Better Auth's
 rendering, server functions, or any other SvelteKit server code, use Convex
 functions and call the function from your server code.
 
-With `withServerConvexToken` set up in your hook (see [Set up authentication token](#set-up-authentication-token-for-server-side-code)), the token is automatically available — no need to pass it explicitly:
+With `withServerConvexToken` set up in your hook (see
+[Set up authentication token](#set-up-authentication-token-for-server-side-code)),
+the token is automatically available — no need to pass it explicitly:
 
 ```ts title="src/routes/+page.server.ts"
 import type { PageServerLoad } from "./$types";
@@ -594,13 +596,18 @@ You can also use `convexLoad` for SSR with automatic live subscription upgrade.
 It needs the `ConvexLoadResult` transport in your universal hooks:
 
 ```ts title="src/hooks.ts"
-import { initConvex, encodeConvexLoad, decodeConvexLoad } from 'convex-svelte/sveltekit'; // [!code ++]
-import { PUBLIC_CONVEX_URL } from '$app/env/public';
+import {
+  initConvex,
+  encodeConvexLoad,
+  decodeConvexLoad,
+} from "convex-svelte/sveltekit"; // [!code ++]
+import { PUBLIC_CONVEX_URL } from "$app/env/public";
 
 initConvex(PUBLIC_CONVEX_URL);
 
-export const transport = { // [!code ++]
-  ConvexLoadResult: { encode: encodeConvexLoad, decode: decodeConvexLoad } // [!code ++]
+export const transport = {
+  // [!code ++]
+  ConvexLoadResult: { encode: encodeConvexLoad, decode: decodeConvexLoad }, // [!code ++]
 }; // [!code ++]
 ```
 
@@ -609,13 +616,13 @@ import { convexLoad } from "convex-svelte/sveltekit";
 import { api } from "#convex/_generated/api.js";
 
 export const load = async () => ({
-  currentUser: await convexLoad(api.auth.getCurrentUser, {})
+  currentUser: await convexLoad(api.auth.getCurrentUser, {}),
 });
 ```
 
 Load data that needs auth in `+page.server.ts`, as above: its result reaches the
-browser through the transport, and the live subscription starts once the user
-is authenticated. A universal `+page.ts` load runs again in the browser during
+browser through the transport, and the live subscription starts once the user is
+authenticated. A universal `+page.ts` load runs again in the browser during
 hydration, before auth is set up, so an auth-dependent query briefly returns its
 signed-out result there. To use `+page.ts` anyway, pass the load's `fetch` to
 `convexLoad()` and add convex-svelte's
@@ -670,7 +677,8 @@ of gating every query, gate the area once:
    export const handle: Handle = async ({ event, resolve }) => {
      const token = getToken(event.cookies);
      event.locals.token = token;
-     if (!token && event.route.id?.startsWith("/(app)")) redirect(303, "/sign-in"); // [!code ++]
+     if (!token && event.route.id?.startsWith("/(app)"))
+       redirect(303, "/sign-in"); // [!code ++]
      return withServerConvexToken(token, () => resolve(event));
    };
    ```
@@ -697,9 +705,9 @@ of gating every query, gate the area once:
    {/if}
    ```
 
-3. **Pass the server's auth state** (see [SSR](#ssr-optional)). Signed-in
-   users then render the area on the first paint, and their first queries are
-   already authenticated.
+3. **Pass the server's auth state** (see [SSR](#ssr-optional)). Signed-in users
+   then render the area on the first paint, and their first queries are already
+   authenticated.
 
 <Callout>
   These steps shape what users see. They don't protect your data: every Convex
@@ -826,15 +834,15 @@ load.
 
 ## SvelteKit 2
 
-`@mmailaender/convex-better-auth-svelte` supports SvelteKit 2 as well. Follow the
-guide above with these differences:
+`@mmailaender/convex-better-auth-svelte` supports SvelteKit 2 as well. Follow
+the guide above with these differences:
 
-- **Environment variables:** skip `src/env.ts` and import from `$env/static/public`
-  instead of `$app/env/public`.
+- **Environment variables:** skip `src/env.ts` and import from
+  `$env/static/public` instead of `$app/env/public`.
 
   ```ts title="src/hooks.ts"
-  import { initConvex } from 'convex-svelte/sveltekit';
-  import { PUBLIC_CONVEX_URL } from '$env/static/public';
+  import { initConvex } from "convex-svelte/sveltekit";
+  import { PUBLIC_CONVEX_URL } from "$env/static/public";
 
   initConvex(PUBLIC_CONVEX_URL);
   ```
@@ -846,8 +854,8 @@ guide above with these differences:
   alias to `svelte.config.js`, and import with `$convex/...` and `$lib/...`:
 
   ```ts title="svelte.config.js"
-  import adapter from '@sveltejs/adapter-auto';
-  import { vitePreprocess } from '@sveltejs/vite-plugin-svelte';
+  import adapter from "@sveltejs/adapter-auto";
+  import { vitePreprocess } from "@sveltejs/vite-plugin-svelte";
 
   /** @type {import('@sveltejs/kit').Config} */
   const config = {
@@ -855,14 +863,14 @@ guide above with these differences:
     kit: {
       adapter: adapter(),
       alias: {
-        $convex: './src/convex' // [!code ++]
-      }
-    }
+        $convex: "./src/convex", // [!code ++]
+      },
+    },
   };
 
   export default config;
   ```
 
-To upgrade an existing app to SvelteKit 3, run `npx sv migrate sveltekit-3`, then
-declare your Convex variables in `src/env.ts` as shown in
+To upgrade an existing app to SvelteKit 3, run `npx sv migrate sveltekit-3`,
+then declare your Convex variables in `src/env.ts` as shown in
 [Set environment variables](#set-environment-variables).

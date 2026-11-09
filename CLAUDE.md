@@ -2,7 +2,8 @@
 
 - Follow [CONTRIBUTING.md](./CONTRIBUTING.md) and [FORK.md](./FORK.md).
 - When a fix or feature can be done in more than one way, check what Better Auth
-  core and its official plugins (`node_modules/better-auth/dist`,
+  core and its official plugins
+  (`packages/convex-better-auth/node_modules/better-auth/dist`,
   `@better-auth/*`) do in the same situation and replicate it. Stricter than
   Better Auth is allowed when Convex needs it, looser never. See
   [How we decide](./FORK.md#how-we-decide).

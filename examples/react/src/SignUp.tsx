@@ -135,15 +135,15 @@ export default function SignUp() {
             <Label htmlFor="image">Profile Image (optional)</Label>
             <div className="flex items-end gap-4">
               {imagePreview && (
-                <div className="relative w-16 h-16 rounded-sm overflow-hidden">
+                <div className="relative h-16 w-16 overflow-hidden rounded-sm">
                   <img
                     src={imagePreview}
                     alt="Profile preview"
-                    className="w-full h-full object-cover"
+                    className="h-full w-full object-cover"
                   />
                 </div>
               )}
-              <div className="flex items-center gap-2 w-full">
+              <div className="flex w-full items-center gap-2">
                 <Input
                   id="image"
                   type="file"
@@ -178,7 +178,7 @@ export default function SignUp() {
         </div>
       </CardContent>
       <CardFooter>
-        <div className="flex justify-center w-full border-t py-4">
+        <div className="flex w-full justify-center border-t py-4">
           <p className="text-center text-xs text-neutral-500">
             Secured by <span className="text-orange-400">better-auth.</span>
           </p>

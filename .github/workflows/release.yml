@@ -1,12 +1,24 @@
+# Versioning and npm publishing with Changesets.
+#
+# Same model as Better Auth and the Vercel AI SDK: npm Trusted Publishing
+# (OIDC, no npm token stored anywhere), provenance, and a `Release`
+# environment that only `main` can deploy to. The work is split into jobs so
+# that only `publish` can publish to npm, and it neither runs project code nor
+# writes to the repo: it uploads the tarballs that `pack` built and tested.
+#
+#   select-mode -> version   (opens or updates the "chore: release" PR)
+#               -> pack      (build, test, npm pack; no secrets)
+#                  -> publish (Release environment: npm publish, read-only)
+#                     -> github-release (tag, release, provenance; no npm token)
+#
+# A manual run with "snapshot" checked publishes a snapshot instead. One-time
+# setup is described in FORK.md ("Release").
 name: Release
 
 on:
   push:
     branches:
       - main
-    paths:
-      - ".changeset/**"
-      - ".github/workflows/release.yml"
   workflow_dispatch:
     inputs:
       snapshot:
@@ -14,185 +26,240 @@ on:
         type: boolean
         default: false
 
-concurrency:
-  group: "release-${{ github.ref_name }}"
-  cancel-in-progress: false
-
 permissions: {}
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
-  # Opens or updates the "Version Packages" pull request while there are
-  # changesets. No environment: it never publishes, so it needs no approval
-  # and never holds the npm OIDC token.
+  select-mode:
+    if: >
+      github.repository == 'helixnebulatech/convex-better-auth' &&
+      inputs.snapshot != true && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    outputs:
+      mode: ${{ steps.select-mode.outputs.mode }}
+      publish-plan-artifact-id:
+        ${{ steps.select-mode.outputs.publish-plan-artifact-id }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version-file: package.json
+          no-cache: true
+
+      - run: bun install --frozen-lockfile --ignore-scripts
+
+      - name: Select Changesets mode
+        id: select-mode
+        uses: changesets/action/select-mode@ae32849d5ba541f9ae29e40e22a623bc13562f51 # v2.1.2
+
   version:
-    name: Version Packages PR
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
+    needs: select-mode
+    if: needs.select-mode.outputs.mode == 'version'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
     permissions:
       contents: write
       pull-requests: write
-      # dispatch CI for the "Version Packages" pull request
+      # dispatch CI for the release pull request
       actions: write
-    # do not attempt running in forks; a manual normal release only from main
-    if: >
-      github.repository_owner == 'helixnebulatech' && inputs.snapshot != true &&
-      github.ref == 'refs/heads/main'
-    outputs:
-      has-changesets: ${{ steps.changesets.outputs.has-changesets }}
     steps:
-      - name: Checkout Repo
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          fetch-depth: 0
           persist-credentials: false
 
-      # Reads the pnpm version from packageManager in package.json
-      - name: Setup pnpm
-        uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
-
-      - name: Setup Node.js 24
-        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with:
-          node-version: 24
+          bun-version-file: package.json
+          no-cache: true
 
-      - name: Install Dependencies
-        run: pnpm install --frozen-lockfile
+      - run: bun install --frozen-lockfile --ignore-scripts
 
-      # Without a publish script the action only versions: with no changesets
-      # left it does nothing and the publish job takes over.
-      - name: Create or update the Version Packages pull request
-        id: changesets
-        uses: changesets/action@ae32849d5ba541f9ae29e40e22a623bc13562f51 # v2.1.2
+      - name: Create or update the release pull request
+        id: version
+        uses: changesets/action/version@ae32849d5ba541f9ae29e40e22a623bc13562f51 # v2.1.2
         with:
-          version-script: pnpm ci:version
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          script: bun run ci:version
+          commit-message: "chore: release"
+          pr-title: "chore: release"
 
       # Pull requests opened by GITHUB_TOKEN do not trigger workflows, so run
-      # the required checks on the "Version Packages" branch explicitly.
+      # the checks the `main` ruleset requires on the release branch explicitly.
       - name: Run checks on the release pull request
-        if: steps.changesets.outputs.pr-number != ''
+        if: steps.version.outputs.pr-number != ''
         run: |
-          gh workflow run test.yml --ref changeset-release/main
+          gh workflow run ci.yml --ref changeset-release/main
           gh workflow run verify-changesets.yml --ref changeset-release/main
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
 
-  # Publishes once the "Version Packages" pull request is merged (no
-  # changesets left). Like Better Auth's release workflow, publishing runs in
-  # the protected "Release" environment (required reviewer, main only), which
-  # npm trusted publishing is bound to, with read-only contents and the OIDC
-  # token only.
+  pack:
+    needs: select-mode
+    if: needs.select-mode.outputs.mode == 'publish'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    outputs:
+      pack-dir-artifact-id: ${{ steps.pack.outputs.pack-dir-artifact-id }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version-file: package.json
+          no-cache: true
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+          package-manager-cache: false
+
+      - run: bun install --frozen-lockfile
+
+      - name: Build
+        run: bun run build
+
+      - name: Test
+        run: bun run test
+
+      - name: Lint package
+        run: bun run publint
+
+      - name: Pack packages
+        id: pack
+        uses: changesets/action/pack@ae32849d5ba541f9ae29e40e22a623bc13562f51 # v2.1.2
+        with:
+          publish-plan-artifact-id:
+            ${{ needs.select-mode.outputs.publish-plan-artifact-id }}
+
   publish:
-    name: Publish to npm
-    needs: version
-    if: needs.version.outputs.has-changesets == 'false'
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
+    needs: pack
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    # Only `main` may deploy to this environment (Settings > Environments),
+    # and npm's Trusted Publisher accepts tokens from this environment only.
+    # The job holding the npm OIDC token can't write to the repo and runs no
+    # project code: no lifecycle scripts, no build, only the tarball `pack`
+    # built. The github-release job writes the tag and the release.
     environment: Release
     permissions:
       contents: read
-      # npm trusted publishing (OIDC) and provenance
-      id-token: write
+      id-token: write # npm Trusted Publishing (OIDC) and provenance
     outputs:
       published-packages: ${{ steps.publish.outputs.published-packages }}
     steps:
-      - name: Checkout Repo
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
-      - name: Setup pnpm
-        uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version-file: package.json
+          no-cache: true
 
-      - name: Setup Node.js 24
-        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+      # npm >= 11.5.1 is required for Trusted Publishing; Node 24 ships it.
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 24
+          registry-url: https://registry.npmjs.org
+          package-manager-cache: false
 
-      - name: Install Dependencies
-        run: pnpm install --frozen-lockfile
+      - run: bun install --frozen-lockfile --ignore-scripts
 
-      # Like Vercel's AI SDK and Better Auth, the changesets action runs the
-      # publish and reports what it published (published-packages, from the
-      # CLI's machine-readable CHANGESETS_OUTPUT, not its log). changeset
-      # publish only publishes a version that isn't on npm yet, so a re-run is
-      # safe. Tags and releases are left to the GitHub Release job, as this
-      # job can't write to the repo.
-      - name: Publish
+      - name: Publish to npm
         id: publish
-        uses: changesets/action@ae32849d5ba541f9ae29e40e22a623bc13562f51 # v2.1.2
+        uses: changesets/action/publish@ae32849d5ba541f9ae29e40e22a623bc13562f51 # v2.1.2
         with:
-          publish-script: pnpm ci:release
+          pack-dir-artifact-id: ${{ needs.pack.outputs.pack-dir-artifact-id }}
           create-github-releases: false
           push-git-tags: false
 
   # Tag, GitHub Release and provenance for what was published, outside the
-  # environment (it needs to write, not to publish).
+  # environment and without the npm OIDC token.
   github-release:
     name: GitHub Release
     needs: publish
-    if: needs.publish.outputs.published-packages != '[]'
-    runs-on: ubuntu-latest
+    if:
+      needs.publish.outputs.published-packages != '[]' &&
+      needs.publish.outputs.published-packages != ''
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     permissions:
       contents: write
     steps:
-      - name: Checkout Repo
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+          package-manager-cache: false
 
       - name: Create GitHub Release
         run: node .github/scripts/github-release.mjs
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
           PUBLISHED_PACKAGES: ${{ needs.publish.outputs.published-packages }}
 
       - name: Attach SLSA provenance to GitHub Releases
         run: node .github/scripts/upload-provenance.mjs
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ github.token }}
           PUBLISHED_PACKAGES: ${{ needs.publish.outputs.published-packages }}
 
-  # Snapshot release path, also through the protected environment (and so
-  # only from main).
+  # Snapshot release, also through the protected environment (and so only
+  # from main). Publishes 0.0.0-<sha>-<timestamp> under the `snapshot` tag.
   snapshot:
     name: Snapshot Release
-    runs-on: ubuntu-latest
+    if: >
+      github.repository == 'helixnebulatech/convex-better-auth' &&
+      inputs.snapshot == true
+    runs-on: ubuntu-24.04
     timeout-minutes: 30
     environment: Release
     permissions:
       contents: read
-      id-token: write
-    if: github.repository_owner == 'helixnebulatech' && inputs.snapshot == true
+      id-token: write # npm Trusted Publishing (OIDC) and provenance
     steps:
-      - name: Checkout Repo
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
           persist-credentials: false
 
-      - name: Setup pnpm
-        uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version-file: package.json
+          no-cache: true
 
-      - name: Setup Node.js 24
-        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 24
+          registry-url: https://registry.npmjs.org
+          package-manager-cache: false
 
-      - name: Install Dependencies
-        run: pnpm install --frozen-lockfile
+      - run: bun install --frozen-lockfile
 
-      - name: Version Packages (snapshot)
+      - name: Version packages (snapshot)
         run: |
-          pnpm changeset version --snapshot "${GITHUB_SHA::8}"
-          node scripts/sync-version.mjs
+          bun run changeset version --snapshot "${GITHUB_SHA::8}"
+          bun run --cwd packages/convex-better-auth sync-version
 
       - name: Build
-        run: rm -rf dist ./*.tsbuildinfo && pnpm run build
+        run: bun run build
 
-      - name: Publish Snapshot Release
-        run: pnpm changeset publish --no-git-tag --tag snapshot
+      - name: Publish snapshot
+        run: bun run changeset publish --no-git-tag --tag snapshot

@@ -19,7 +19,7 @@ const backendSitePort = 3211;
 const parsedUrl = new URL(`http://127.0.0.1:${backendCloudPort}`);
 
 function logToStderr(...args) {
-  process.stderr.write(args.join(" ") + "\n");
+  process.stderr.write(`${args.join(" ")}\n`);
 }
 
 async function isBackendRunning(backendUrl) {
@@ -34,7 +34,7 @@ async function isBackendRunning(backendUrl) {
         },
         (res) => {
           resolve(res.statusCode === 200);
-        },
+        }
       )
       .on("error", () => {
         resolve(false);
@@ -77,22 +77,25 @@ function cleanup() {
 
 function getDownloadPath() {
   switch (process.platform) {
-    case "darwin":
+    case "darwin": {
       if (process.arch === "arm64") {
         return "convex-local-backend-aarch64-apple-darwin.zip";
       } else if (process.arch === "x64") {
         return "convex-local-backend-x86_64-apple-darwin.zip";
       }
       break;
-    case "linux":
+    }
+    case "linux": {
       if (process.arch === "arm64") {
         return "convex-local-backend-aarch64-unknown-linux-gnu.zip";
       } else if (process.arch === "x64") {
         return "convex-local-backend-x86_64-unknown-linux-gnu.zip";
       }
       break;
-    case "win32":
+    }
+    case "win32": {
       return "convex-local-backend-x86_64-pc-windows-msvc.zip";
+    }
   }
   return null;
 }
@@ -100,7 +103,7 @@ function getDownloadPath() {
 async function downloadAndStartBackend() {
   const latest = await fetch(
     "https://github.com/convex/convex-backend/releases/latest",
-    { redirect: "manual" },
+    { redirect: "manual" }
   );
   if (latest.status !== 302) {
     throw new Error(`Error fetching latest release: ${latest.status}`);
@@ -111,11 +114,11 @@ async function downloadAndStartBackend() {
   const downloadPath = getDownloadPath();
   if (!downloadPath) {
     throw new Error(
-      `Unsupported platform: ${process.platform} ${process.arch}`,
+      `Unsupported platform: ${process.platform} ${process.arch}`
     );
   }
   const response = await fetch(
-    `https://github.com/convex/convex-backend/releases/download/${version}/${downloadPath}`,
+    `https://github.com/convex/convex-backend/releases/download/${version}/${downloadPath}`
   );
 
   const zipLocation = "convex-backend.zip";
@@ -145,29 +148,31 @@ async function downloadAndStartBackend() {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ instanceName, instanceSecret }),
-    },
+    }
   );
   if (!keyResponse.ok) {
     throw new Error(
-      `Failed to generate admin key: ${keyResponse.status} ${await keyResponse.text()}`,
+      `Failed to generate admin key: ${keyResponse.status} ${await keyResponse.text()}`
     );
   }
   const { adminKey } = await keyResponse.json();
   if (typeof adminKey !== "string" || adminKey.length === 0) {
-    throw new Error(
-      "Provisioning response did not include a valid adminKey",
-    );
+    throw new Error("Provisioning response did not include a valid adminKey");
   }
 
   const process_ = spawn(
     binaryPath,
     [
-      "--port", String(backendCloudPort),
-      "--site-proxy-port", String(backendSitePort),
-      "--instance-name", instanceName,
-      "--instance-secret", instanceSecret,
+      "--port",
+      String(backendCloudPort),
+      "--site-proxy-port",
+      String(backendSitePort),
+      "--instance-name",
+      instanceName,
+      "--instance-secret",
+      instanceSecret,
     ],
-    { env: { CONVEX_TRACE_FILE: "1" } },
+    { env: { CONVEX_TRACE_FILE: "1" } }
   );
   return { process: process_, adminKey };
 }
@@ -176,7 +181,7 @@ async function runWithLocalBackend(command, backendUrl) {
   const isRunning = await isBackendRunning(backendUrl);
   if (isRunning) {
     logToStderr(
-      "Local backend is already running. Stop it and restart this command.",
+      "Local backend is already running. Stop it and restart this command."
     );
     process.exit(1);
   }

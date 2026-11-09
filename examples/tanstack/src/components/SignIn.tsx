@@ -1,5 +1,5 @@
-import { Link, useNavigate, useRouter } from '@tanstack/react-router'
-import { Button } from '@/components/ui/button'
+import { Link, useRouter } from "@tanstack/react-router";
+import { Button } from "@/components/ui/button";
 import {
   Card,
   CardContent,
@@ -7,26 +7,26 @@ import {
   CardTitle,
   CardDescription,
   CardFooter,
-} from '@/components/ui/card'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
-import { useState } from 'react'
-import { Loader2 } from 'lucide-react'
-import { authClient } from '@/lib/auth-client'
+} from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { useState } from "react";
+import { Loader2 } from "lucide-react";
+import { authClient } from "@/lib/auth-client";
 
 export const SignIn = () => {
-  const router = useRouter()
-  const [email, setEmail] = useState('')
-  const [password, setPassword] = useState('')
-  const [otp, setOtp] = useState('')
-  const [magicLinkLoading, setMagicLinkLoading] = useState(false)
-  const [otpLoading, setOtpLoading] = useState(false)
-  const [anonymousLoading, setAnonymousLoading] = useState(false)
-  const [forgotLoading, setForgotLoading] = useState(false)
-  const [signInMethod, setSignInMethod] = useState<'password' | 'passwordless'>(
-    'passwordless',
-  )
-  const [otpSent, setOtpSent] = useState(false)
+  const router = useRouter();
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [otp, setOtp] = useState("");
+  const [magicLinkLoading, setMagicLinkLoading] = useState(false);
+  const [otpLoading, setOtpLoading] = useState(false);
+  const [anonymousLoading, setAnonymousLoading] = useState(false);
+  const [forgotLoading, setForgotLoading] = useState(false);
+  const [signInMethod, setSignInMethod] = useState<"password" | "passwordless">(
+    "passwordless"
+  );
+  const [otpSent, setOtpSent] = useState(false);
 
   const handleSignIn = async () => {
     const { data, error } = await authClient.signIn.email(
@@ -36,40 +36,40 @@ export const SignIn = () => {
       },
       {
         onRequest: () => {
-          setOtpLoading(true)
+          setOtpLoading(true);
         },
         onSuccess: async (ctx) => {
-          setOtpLoading(false)
+          setOtpLoading(false);
           if (ctx.data.twoFactorRedirect) {
             // navigate({ to: '/verify-2fa' })
           } else {
-            router.navigate({ to: '/' })
+            router.navigate({ to: "/" });
           }
         },
         onError: (ctx) => {
-          setOtpLoading(false)
-          alert(ctx.error.message)
+          setOtpLoading(false);
+          alert(ctx.error.message);
         },
-      },
-    )
+      }
+    );
 
-    console.log({ data, error })
-  }
+    console.log({ data, error });
+  };
 
   const handleResetPassword = async () => {
-    setForgotLoading(true)
+    setForgotLoading(true);
     try {
       await authClient.requestPasswordReset({
         email,
         redirectTo: `${import.meta.env.VITE_SITE_URL}/reset-password`,
-      })
-      alert('Check your email for the reset password link!')
+      });
+      alert("Check your email for the reset password link!");
     } catch {
-      alert('Failed to send reset password link. Please try again.')
+      alert("Failed to send reset password link. Please try again.");
     } finally {
-      setForgotLoading(false)
+      setForgotLoading(false);
     }
-  }
+  };
 
   const handleMagicLinkSignIn = async () => {
     await authClient.signIn.magicLink(
@@ -78,97 +78,97 @@ export const SignIn = () => {
       },
       {
         onRequest: () => {
-          setMagicLinkLoading(true)
+          setMagicLinkLoading(true);
         },
         onSuccess: () => {
-          setMagicLinkLoading(false)
-          alert('Check your email for the magic link!')
+          setMagicLinkLoading(false);
+          alert("Check your email for the magic link!");
         },
         onError: (ctx) => {
-          setMagicLinkLoading(false)
-          alert(ctx.error.message)
+          setMagicLinkLoading(false);
+          alert(ctx.error.message);
         },
-      },
-    )
-  }
+      }
+    );
+  };
 
   const handleAnonymousSignIn = async () => {
     await authClient.signIn.anonymous(
       {},
       {
         onRequest: () => {
-          setAnonymousLoading(true)
+          setAnonymousLoading(true);
         },
         onSuccess: async () => {
-          setAnonymousLoading(false)
-          router.navigate({ to: '/' })
+          setAnonymousLoading(false);
+          router.navigate({ to: "/" });
         },
         onError: (ctx) => {
-          setAnonymousLoading(false)
-          alert(ctx.error.message)
+          setAnonymousLoading(false);
+          alert(ctx.error.message);
         },
-      },
-    )
-  }
+      }
+    );
+  };
 
   const handleGithubSignIn = async () => {
     await authClient.signIn.social(
       {
-        provider: 'github',
+        provider: "github",
       },
       {
         onRequest: () => {
-          setOtpLoading(true)
+          setOtpLoading(true);
         },
         onResponse: () => setOtpLoading(false),
         onError: (ctx) => {
-          alert(ctx.error.message)
+          alert(ctx.error.message);
         },
-      },
-    )
-  }
+      }
+    );
+  };
 
   const handleGoogleSignIn = async () => {
     await authClient.signIn.social(
       {
-        provider: 'google',
+        provider: "google",
       },
       {
         onRequest: () => {
-          setOtpLoading(true)
+          setOtpLoading(true);
         },
         onSuccess: () => {
-          setOtpLoading(false)
+          setOtpLoading(false);
         },
         onError: (ctx) => {
-          setOtpLoading(false)
-          alert(ctx.error.message)
+          setOtpLoading(false);
+          alert(ctx.error.message);
         },
-      },
-    )
-  }
+      }
+    );
+  };
 
   const handleOtpSignIn = async () => {
     if (!otpSent) {
       await authClient.emailOtp.sendVerificationOtp(
         {
           email,
-          type: 'sign-in',
+          type: "sign-in",
         },
         {
           onRequest: () => {
-            setOtpLoading(true)
+            setOtpLoading(true);
           },
           onSuccess: () => {
-            setOtpLoading(false)
-            setOtpSent(true)
+            setOtpLoading(false);
+            setOtpSent(true);
           },
           onError: (ctx) => {
-            setOtpLoading(false)
-            alert(ctx.error.message)
+            setOtpLoading(false);
+            alert(ctx.error.message);
           },
-        },
-      )
+        }
+      );
     } else {
       await authClient.signIn.emailOtp(
         {
@@ -177,22 +177,22 @@ export const SignIn = () => {
         },
         {
           onRequest: () => {
-            setOtpLoading(true)
+            setOtpLoading(true);
           },
           onSuccess: async () => {
-            setOtpLoading(false)
-            router.navigate({ to: '/' })
+            setOtpLoading(false);
+            router.navigate({ to: "/" });
           },
           onError: (ctx) => {
-            setOtpLoading(false)
-            alert(ctx.error.message)
+            setOtpLoading(false);
+            alert(ctx.error.message);
           },
-        },
-      )
+        }
+      );
     }
-  }
+  };
   return (
-    <div className="min-h-screen w-full flex items-center justify-center p-4">
+    <div className="flex min-h-screen w-full items-center justify-center p-4">
       <div className="w-full max-w-md">
         <Card className="max-w-md">
           <CardHeader>
@@ -204,11 +204,11 @@ export const SignIn = () => {
           <CardContent>
             <form
               onSubmit={(e) => {
-                e.preventDefault()
-                if (signInMethod === 'password') {
-                  void handleSignIn()
+                e.preventDefault();
+                if (signInMethod === "password") {
+                  void handleSignIn();
                 } else if (otpSent) {
-                  void handleOtpSignIn()
+                  void handleOtpSignIn();
                 }
               }}
               className="grid gap-4"
@@ -221,13 +221,13 @@ export const SignIn = () => {
                   placeholder="m@example.com"
                   required
                   onChange={(e) => {
-                    setEmail(e.target.value)
+                    setEmail(e.target.value);
                   }}
                   value={email}
                 />
               </div>
 
-              {signInMethod === 'password' && (
+              {signInMethod === "password" && (
                 <div className="grid gap-2">
                   <div className="flex items-center justify-between">
                     <Label htmlFor="password">Password</Label>
@@ -240,7 +240,7 @@ export const SignIn = () => {
                       disabled={forgotLoading || !email}
                     >
                       {forgotLoading ? (
-                        <Loader2 size={14} className="animate-spin mr-1" />
+                        <Loader2 size={14} className="mr-1 animate-spin" />
                       ) : null}
                       Forgot your password?
                     </Button>
@@ -257,7 +257,7 @@ export const SignIn = () => {
                 </div>
               )}
 
-              {signInMethod === 'passwordless' && otpSent && (
+              {signInMethod === "passwordless" && otpSent && (
                 <div className="grid gap-2">
                   <Label htmlFor="otp">Verification Code</Label>
                   <Input
@@ -275,7 +275,7 @@ export const SignIn = () => {
               )}
 
               <div className="flex flex-col gap-2">
-                {signInMethod === 'password' && (
+                {signInMethod === "password" && (
                   <Button
                     type="submit"
                     className="w-full"
@@ -284,7 +284,7 @@ export const SignIn = () => {
                     Sign in with Password
                   </Button>
                 )}
-                {signInMethod === 'passwordless' && !otpSent && (
+                {signInMethod === "passwordless" && !otpSent && (
                   <div className="flex flex-col gap-2">
                     <Button
                       type="button"
@@ -297,7 +297,7 @@ export const SignIn = () => {
                       {magicLinkLoading ? (
                         <Loader2 size={16} className="animate-spin" />
                       ) : (
-                        'Send Magic Link'
+                        "Send Magic Link"
                       )}
                     </Button>
                     <Button
@@ -312,7 +312,7 @@ export const SignIn = () => {
                       {otpLoading ? (
                         <Loader2 size={16} className="animate-spin" />
                       ) : (
-                        'Send Verification Code'
+                        "Send Verification Code"
                       )}
                     </Button>
 
@@ -328,12 +328,12 @@ export const SignIn = () => {
                       {anonymousLoading ? (
                         <Loader2 size={16} className="animate-spin" />
                       ) : (
-                        'Sign in anonymously'
+                        "Sign in anonymously"
                       )}
                     </Button>
                   </div>
                 )}
-                {signInMethod === 'passwordless' && otpSent && (
+                {signInMethod === "passwordless" && otpSent && (
                   <Button
                     type="submit"
                     className="w-full"
@@ -342,7 +342,7 @@ export const SignIn = () => {
                     {otpLoading ? (
                       <Loader2 size={16} className="animate-spin" />
                     ) : (
-                      'Verify Code'
+                      "Verify Code"
                     )}
                   </Button>
                 )}
@@ -353,16 +353,16 @@ export const SignIn = () => {
                   className="text-sm"
                   onClick={() => {
                     setSignInMethod(
-                      signInMethod === 'password' ? 'passwordless' : 'password',
-                    )
-                    setPassword('')
-                    setOtp('')
-                    setOtpSent(false)
+                      signInMethod === "password" ? "passwordless" : "password"
+                    );
+                    setPassword("");
+                    setOtp("");
+                    setOtpSent(false);
                   }}
                 >
-                  {signInMethod === 'password'
-                    ? 'Sign in with magic link or OTP instead'
-                    : 'Sign in with a password instead'}
+                  {signInMethod === "password"
+                    ? "Sign in with magic link or OTP instead"
+                    : "Sign in with a password instead"}
                 </Button>
               </div>
 
@@ -433,13 +433,14 @@ export const SignIn = () => {
             </form>
           </CardContent>
           <CardFooter>
-            <div className="flex justify-center w-full border-t py-4">
+            <div className="flex w-full justify-center border-t py-4">
               <p className="text-center text-xs text-neutral-500">
-                Powered by{' '}
+                Powered by{" "}
                 <a
                   href="https://better-auth.com"
                   className="underline"
                   target="_blank"
+                  rel="noreferrer"
                 >
                   <span className="dark:text-orange-200/90">better-auth.</span>
                 </a>
@@ -447,16 +448,16 @@ export const SignIn = () => {
             </div>
           </CardFooter>
         </Card>
-        <p className="text-center mt-4 text-sm text-neutral-600 dark:text-neutral-400">
-          Don&apos;t have an account?{' '}
+        <p className="mt-4 text-center text-sm text-neutral-600 dark:text-neutral-400">
+          Don&apos;t have an account?{" "}
           <Link
             to="/sign-up"
-            className="text-orange-400 hover:text-orange-500 dark:text-orange-300 dark:hover:text-orange-200 underline"
+            className="text-orange-400 underline hover:text-orange-500 dark:text-orange-300 dark:hover:text-orange-200"
           >
             Sign up
           </Link>
         </p>
       </div>
     </div>
-  )
-}
+  );
+};

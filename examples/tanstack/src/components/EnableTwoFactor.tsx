@@ -1,115 +1,117 @@
-import { Button } from '@/components/ui/button'
+import { Button } from "@/components/ui/button";
 import {
   Card,
   CardContent,
   CardDescription,
   CardHeader,
   CardTitle,
-} from '@/components/ui/card'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
-import { authClient } from '@/lib/auth-client'
-import { convexQuery } from '@convex-dev/react-query'
-import { api } from '~/convex/_generated/api'
-import { useSuspenseQuery } from '@tanstack/react-query'
-import { ArrowLeft, Check, Copy, Loader2 } from 'lucide-react'
-import { useState } from 'react'
-import QRCode from 'react-qr-code'
+} from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { authClient } from "@/lib/auth-client";
+import { convexQuery } from "@convex-dev/react-query";
+import { api } from "~/convex/_generated/api";
+import { useSuspenseQuery } from "@tanstack/react-query";
+import { ArrowLeft, Check, Copy, Loader2 } from "lucide-react";
+import { useState } from "react";
+import QRCode from "react-qr-code";
 
 type SetupStep =
-  | 'loading'
-  | 'need-password'
-  | 'password'
-  | 'qr-verify'
-  | 'backup'
+  | "loading"
+  | "need-password"
+  | "password"
+  | "qr-verify"
+  | "backup";
 
 export default function EnableTwoFactor({ onBack }: { onBack: () => void }) {
   const { data: user } = useSuspenseQuery(
-    convexQuery(api.auth.getCurrentUser, {}),
-  )
+    convexQuery(api.auth.getCurrentUser, {})
+  );
   const { data: hasPassword } = useSuspenseQuery(
-    convexQuery(api.auth.hasPassword, {}),
-  )
+    convexQuery(api.auth.hasPassword, {})
+  );
   const [step, setStep] = useState<SetupStep>(
-    hasPassword ? 'password' : 'need-password',
-  )
-  const [password, setPassword] = useState('')
-  const [code, setCode] = useState('')
-  const [loading, setLoading] = useState(false)
-  const [totpUri, setTotpUri] = useState<string>()
-  const [backupCodes, setBackupCodes] = useState<string[]>()
-  const [copied, setCopied] = useState(false)
+    hasPassword ? "password" : "need-password"
+  );
+  const [password, setPassword] = useState("");
+  const [code, setCode] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [totpUri, setTotpUri] = useState<string>();
+  const [backupCodes, setBackupCodes] = useState<string[]>();
+  const [copied, setCopied] = useState(false);
 
   const handlePasswordSubmit = async () => {
     try {
-      setLoading(true)
+      setLoading(true);
       const { data } = await authClient.twoFactor.enable({
         password,
-      })
+      });
       if (data?.method === "totp") {
-        setTotpUri(data.totpURI)
+        setTotpUri(data.totpURI);
         if (data.backupCodes) {
-          setBackupCodes(data.backupCodes)
+          setBackupCodes(data.backupCodes);
         }
-        setStep('qr-verify')
+        setStep("qr-verify");
       } else {
-        alert('Failed to enable 2FA. Please check your password and try again.')
+        alert(
+          "Failed to enable 2FA. Please check your password and try again."
+        );
       }
     } catch {
-      alert('Failed to enable 2FA. Please check your password and try again.')
+      alert("Failed to enable 2FA. Please check your password and try again.");
     } finally {
-      setLoading(false)
+      setLoading(false);
     }
-  }
+  };
 
   const handleVerifyCode = async () => {
     try {
-      setLoading(true)
+      setLoading(true);
       await authClient.twoFactor.verifyTotp({
         code,
-      })
-      setStep('backup')
+      });
+      setStep("backup");
     } catch {
-      alert('Failed to verify code. Please try again.')
+      alert("Failed to verify code. Please try again.");
     } finally {
-      setLoading(false)
+      setLoading(false);
     }
-  }
+  };
 
   const copyBackupCodes = async () => {
-    if (!backupCodes) return
-    await navigator.clipboard.writeText(backupCodes.join('\n'))
-    setCopied(true)
-    setTimeout(() => setCopied(false), 2000)
-  }
+    if (!backupCodes) return;
+    await navigator.clipboard.writeText(backupCodes.join("\n"));
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
 
   const handleResetPassword = async () => {
     if (!user.email) {
-      alert('User email not found')
-      return
+      alert("User email not found");
+      return;
     }
     try {
-      setLoading(true)
+      setLoading(true);
       await authClient.requestPasswordReset({
         email: user.email,
         redirectTo: `${import.meta.env.VITE_SITE_URL}/reset-password`,
-      })
-      alert('Check your email for password reset instructions')
+      });
+      alert("Check your email for password reset instructions");
     } catch {
-      alert('Failed to send password reset email. Please try again.')
+      alert("Failed to send password reset email. Please try again.");
     } finally {
-      setLoading(false)
+      setLoading(false);
     }
-  }
+  };
 
   return (
-    <div className="min-h-screen w-full flex items-center justify-center p-4">
+    <div className="flex min-h-screen w-full items-center justify-center p-4">
       <div className="w-full max-w-md">
-        {(step === 'password' || step === 'need-password') && (
+        {(step === "password" || step === "need-password") && (
           <Button
             variant="ghost"
             size="sm"
-            className="flex items-center gap-2 mb-4"
+            className="mb-4 flex items-center gap-2"
             onClick={onBack}
           >
             <ArrowLeft size={16} />
@@ -122,27 +124,27 @@ export default function EnableTwoFactor({ onBack }: { onBack: () => void }) {
               Enable Two-Factor Authentication
             </CardTitle>
             <CardDescription className="text-xs md:text-sm">
-              {step === 'loading'
-                ? 'Loading...'
-                : step === 'need-password'
-                  ? 'You need to set up a password before enabling 2FA'
-                  : step === 'password'
-                    ? 'Enter your password to begin setup'
-                    : step === 'qr-verify'
-                      ? 'Scan this QR code with your authenticator app'
-                      : 'Save these backup codes in a secure place'}
+              {step === "loading"
+                ? "Loading..."
+                : step === "need-password"
+                  ? "You need to set up a password before enabling 2FA"
+                  : step === "password"
+                    ? "Enter your password to begin setup"
+                    : step === "qr-verify"
+                      ? "Scan this QR code with your authenticator app"
+                      : "Save these backup codes in a secure place"}
             </CardDescription>
           </CardHeader>
           <CardContent>
-            {step === 'loading' && (
+            {step === "loading" && (
               <div className="flex justify-center py-4">
                 <Loader2 size={24} className="animate-spin" />
               </div>
             )}
 
-            {step === 'need-password' && (
+            {step === "need-password" && (
               <div className="grid gap-4">
-                <p className="text-sm text-muted-foreground">
+                <p className="text-muted-foreground text-sm">
                   Two-factor authentication requires a password for additional
                   security. Since you signed up with a social account,
                   you&apos;ll need to set up a password first.
@@ -151,17 +153,17 @@ export default function EnableTwoFactor({ onBack }: { onBack: () => void }) {
                   {loading ? (
                     <Loader2 size={16} className="animate-spin" />
                   ) : (
-                    'Set Up Password'
+                    "Set Up Password"
                   )}
                 </Button>
               </div>
             )}
 
-            {step === 'password' && (
+            {step === "password" && (
               <form
                 onSubmit={(e) => {
-                  e.preventDefault()
-                  handlePasswordSubmit()
+                  e.preventDefault();
+                  handlePasswordSubmit();
                 }}
                 className="grid gap-4"
               >
@@ -180,21 +182,21 @@ export default function EnableTwoFactor({ onBack }: { onBack: () => void }) {
                   {loading ? (
                     <Loader2 size={16} className="animate-spin" />
                   ) : (
-                    'Continue'
+                    "Continue"
                   )}
                 </Button>
               </form>
             )}
 
-            {step === 'qr-verify' && totpUri && (
+            {step === "qr-verify" && totpUri && (
               <div className="grid gap-6">
-                <div className="flex justify-center p-4 bg-white rounded-lg">
+                <div className="flex justify-center rounded-lg bg-white p-4">
                   <QRCode value={totpUri} />
                 </div>
                 <form
                   onSubmit={(e) => {
-                    e.preventDefault()
-                    handleVerifyCode()
+                    e.preventDefault();
+                    handleVerifyCode();
                   }}
                   className="grid gap-4"
                 >
@@ -217,18 +219,18 @@ export default function EnableTwoFactor({ onBack }: { onBack: () => void }) {
                     {loading ? (
                       <Loader2 size={16} className="animate-spin" />
                     ) : (
-                      'Verify'
+                      "Verify"
                     )}
                   </Button>
                 </form>
               </div>
             )}
 
-            {step === 'backup' && backupCodes && (
+            {step === "backup" && backupCodes && (
               <div className="grid gap-4">
-                <div className="relative p-4 bg-muted rounded-lg">
-                  <pre className="text-sm font-mono whitespace-pre-line">
-                    {backupCodes.join('\n')}
+                <div className="bg-muted relative rounded-lg p-4">
+                  <pre className="font-mono text-sm whitespace-pre-line">
+                    {backupCodes.join("\n")}
                   </pre>
                   <Button
                     variant="ghost"
@@ -246,5 +248,5 @@ export default function EnableTwoFactor({ onBack }: { onBack: () => void }) {
         </Card>
       </div>
     </div>
-  )
+  );
 }

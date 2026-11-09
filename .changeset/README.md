@@ -1,7 +1,7 @@
 # Changesets
 
 Every pull request that changes the published package needs a changeset. Run
-`pnpm changeset`, pick the bump type and describe the change for users. The
+`bun run changeset`, pick the bump type and describe the change for users. The
 description goes into `CHANGELOG.md`.
 
 - `patch`: bug fixes and Better Auth patch updates

@@ -1,32 +1,31 @@
-import { betterAuth, type BetterAuthOptions } from 'better-auth/minimal'
-import {
-  AuthFunctions,
-  createClient,
-  GenericCtx,
-} from '@convex-dev/better-auth'
-import { anonymous } from 'better-auth/plugins/anonymous'
-import { emailOTP } from 'better-auth/plugins/email-otp'
-import { magicLink } from 'better-auth/plugins/magic-link'
-import { twoFactor } from 'better-auth/plugins/two-factor'
-import { convex } from '@convex-dev/better-auth/plugins'
+import { betterAuth } from "better-auth/minimal";
+import type { BetterAuthOptions } from "better-auth/minimal";
+import type { AuthFunctions, GenericCtx } from "@convex-dev/better-auth";
+import { createClient } from "@convex-dev/better-auth";
+import { anonymous } from "better-auth/plugins/anonymous";
+import { emailOTP } from "better-auth/plugins/email-otp";
+import { magicLink } from "better-auth/plugins/magic-link";
+import { twoFactor } from "better-auth/plugins/two-factor";
+import { convex } from "@convex-dev/better-auth/plugins";
 import {
   sendEmailVerification,
   sendMagicLink,
   sendOTPVerification,
   sendResetPassword,
-} from './email'
-import { requireActionCtx } from '@convex-dev/better-auth/utils'
-import { components, internal } from './_generated/api'
-import betterAuthSchema from './betterAuth/schema'
-import { internalAction, query, QueryCtx } from './_generated/server'
-import { DataModel, Id } from './_generated/dataModel'
-import { asyncMap, withoutSystemFields } from 'convex-helpers'
-import authConfig from './auth.config'
-import { ConvexError } from 'convex/values'
+} from "./email";
+import { requireActionCtx } from "@convex-dev/better-auth/utils";
+import { components, internal } from "./_generated/api";
+import betterAuthSchema from "./betterAuth/schema";
+import type { QueryCtx } from "./_generated/server";
+import { internalAction, query } from "./_generated/server";
+import type { DataModel, Id } from "./_generated/dataModel";
+import { asyncMap, withoutSystemFields } from "convex-helpers";
+import authConfig from "./auth.config";
+import { ConvexError } from "convex/values";
 
-const siteUrl = process.env.SITE_URL
+const siteUrl = process.env.SITE_URL;
 
-const authFunctions: AuthFunctions = internal.auth
+const authFunctions: AuthFunctions = internal.auth;
 
 export const authComponent = createClient<DataModel, typeof betterAuthSchema>(
   components.betterAuth,
@@ -39,39 +38,39 @@ export const authComponent = createClient<DataModel, typeof betterAuthSchema>(
     triggers: {
       user: {
         onCreate: async (ctx, authUser) => {
-          const userId = await ctx.db.insert('users', {
+          const userId = await ctx.db.insert("users", {
             email: authUser.email,
-          })
-          await authComponent.setUserId(ctx, authUser._id, userId)
+          });
+          await authComponent.setUserId(ctx, authUser._id, userId);
         },
         onUpdate: async (ctx, newUser, oldUser) => {
           if (oldUser.email === newUser.email) {
-            return
+            return;
           }
-          await ctx.db.patch(newUser.userId as Id<'users'>, {
+          await ctx.db.patch(newUser.userId as Id<"users">, {
             email: newUser.email,
-          })
+          });
         },
         onDelete: async (ctx, authUser) => {
-          const user = await ctx.db.get(authUser.userId as Id<'users'>)
+          const user = await ctx.db.get(authUser.userId as Id<"users">);
           if (!user) {
-            return
+            return;
           }
           const todos = await ctx.db
-            .query('todos')
-            .withIndex('userId', (q) => q.eq('userId', user._id))
-            .collect()
+            .query("todos")
+            .withIndex("userId", (q) => q.eq("userId", user._id))
+            .collect();
           await asyncMap(todos, async (todo) => {
-            await ctx.db.delete(todo._id)
-          })
-          await ctx.db.delete(user._id)
+            await ctx.db.delete(todo._id);
+          });
+          await ctx.db.delete(user._id);
         },
       },
     },
-  },
-)
+  }
+);
 
-export const { onCreate, onUpdate, onDelete } = authComponent.triggersApi()
+export const { onCreate, onUpdate, onDelete } = authComponent.triggersApi();
 
 export const createAuthOptions = (ctx: GenericCtx<DataModel>) =>
   ({
@@ -87,7 +86,7 @@ export const createAuthOptions = (ctx: GenericCtx<DataModel>) =>
         await sendEmailVerification(requireActionCtx(ctx), {
           to: user.email,
           url,
-        })
+        });
       },
     },
     emailAndPassword: {
@@ -97,7 +96,7 @@ export const createAuthOptions = (ctx: GenericCtx<DataModel>) =>
         await sendResetPassword(requireActionCtx(ctx), {
           to: user.email,
           url,
-        })
+        });
       },
     },
     socialProviders: {
@@ -116,7 +115,7 @@ export const createAuthOptions = (ctx: GenericCtx<DataModel>) =>
       },
       additionalFields: {
         foo: {
-          type: 'string',
+          type: "string",
           required: false,
         },
       },
@@ -127,7 +126,7 @@ export const createAuthOptions = (ctx: GenericCtx<DataModel>) =>
           await sendMagicLink(requireActionCtx(ctx), {
             to: email,
             url,
-          })
+          });
         },
       }),
       emailOTP({
@@ -135,7 +134,7 @@ export const createAuthOptions = (ctx: GenericCtx<DataModel>) =>
           await sendOTPVerification(requireActionCtx(ctx), {
             to: email,
             code: otp,
-          })
+          });
         },
       }),
       twoFactor(),
@@ -144,57 +143,57 @@ export const createAuthOptions = (ctx: GenericCtx<DataModel>) =>
         authConfig,
       }),
     ],
-  }) satisfies BetterAuthOptions
+  }) satisfies BetterAuthOptions;
 
 export const createAuth = (ctx: GenericCtx<DataModel>) =>
-  betterAuth(createAuthOptions(ctx))
+  betterAuth(createAuthOptions(ctx));
 
-export const { getAuthUser } = authComponent.clientApi(createAuth)
+export const { getAuthUser } = authComponent.clientApi(createAuth);
 
 export const rotateKeys = internalAction({
   args: {},
   handler: async (ctx) => {
-    const auth = createAuth(ctx)
-    return auth.api.rotateKeys()
+    const auth = createAuth(ctx);
+    return auth.api.rotateKeys();
   },
-})
+});
 
 // Below are example functions for getting the current user
 // Feel free to edit, omit, etc.
 export const safeGetUser = async (ctx: QueryCtx) => {
-  const authUser = await authComponent.safeGetAuthUser(ctx)
+  const authUser = await authComponent.safeGetAuthUser(ctx);
   if (!authUser) {
-    return
+    return;
   }
-  const user = await ctx.db.get(authUser.userId as Id<'users'>)
+  const user = await ctx.db.get(authUser.userId as Id<"users">);
   if (!user) {
-    return
+    return;
   }
-  return { ...user, ...withoutSystemFields(authUser) }
-}
+  return { ...user, ...withoutSystemFields(authUser) };
+};
 
 export const getUser = async (ctx: QueryCtx) => {
-  const user = await safeGetUser(ctx)
+  const user = await safeGetUser(ctx);
   if (!user) {
-    throw new ConvexError('Unauthenticated')
+    throw new ConvexError("Unauthenticated");
   }
-  return user
-}
+  return user;
+};
 
 export const getCurrentUser = query({
   args: {},
   handler: async (ctx) => {
-    return await getUser(ctx)
+    return await getUser(ctx);
   },
-})
+});
 
 export const hasPassword = query({
   args: {},
   handler: async (ctx) => {
-    const { auth, headers } = await authComponent.getAuth(createAuth, ctx)
+    const { auth, headers } = await authComponent.getAuth(createAuth, ctx);
     const accounts = await auth.api.listUserAccounts({
       headers,
-    })
-    return accounts.some((account) => account.providerId === 'credential')
+    });
+    return accounts.some((account) => account.providerId === "credential");
   },
-})
+});

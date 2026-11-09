@@ -1,4 +1,5 @@
-import { test, expect, type Page, type Route } from "@playwright/test";
+import { test, expect } from "@playwright/test";
+import type { Page, Route } from "@playwright/test";
 
 // OAuth sign-in through the cross-domain plugin, against the mock provider in
 // e2e/mock-oauth-provider.mjs. The SPA (localhost:5176) and the Convex site

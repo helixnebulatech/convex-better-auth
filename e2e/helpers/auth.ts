@@ -1,11 +1,12 @@
-import { Page, expect } from "@playwright/test";
+import type { Page } from "@playwright/test";
+import { expect } from "@playwright/test";
 
 export async function browserSignUp(
   page: Page,
   email: string,
   password: string,
   firstName = "Test",
-  lastName = "User",
+  lastName = "User"
 ) {
   // Wait for unauthenticated state
   await expect(page.getByTestId("auth-unauthenticated")).toBeVisible({
@@ -34,7 +35,7 @@ export async function browserSignUp(
 export async function browserSignIn(
   page: Page,
   email: string,
-  password: string,
+  password: string
 ) {
   // Wait for unauthenticated state
   await expect(page.getByTestId("auth-unauthenticated")).toBeVisible({

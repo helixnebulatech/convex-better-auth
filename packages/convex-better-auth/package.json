@@ -1,0 +1,155 @@
+{
+  "name": "@helixnebulatech/convex-better-auth",
+  "version": "0.13.9",
+  "description": "Fork of @convex-dev/better-auth that tracks the latest Better Auth release.",
+  "keywords": [
+    "auth",
+    "authentication",
+    "better-auth",
+    "component",
+    "convex",
+    "convex-auth"
+  ],
+  "homepage": "https://github.com/helixnebulatech/convex-better-auth#readme",
+  "bugs": {
+    "url": "https://github.com/helixnebulatech/convex-better-auth/issues"
+  },
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/helixnebulatech/convex-better-auth.git",
+    "directory": "packages/convex-better-auth"
+  },
+  "files": [
+    "dist/**/*",
+    "src",
+    "!src/**/*.test.ts",
+    "!src/**/*.test.tsx",
+    "CHANGELOG.md",
+    "README.md"
+  ],
+  "type": "module",
+  "sideEffects": false,
+  "main": "./dist/client/index.js",
+  "module": "./dist/client/index.js",
+  "types": "./dist/client/index.d.ts",
+  "typesVersions": {
+    "*": {
+      "next-js": [
+        "./dist/nextjs/index.d.ts"
+      ]
+    }
+  },
+  "exports": {
+    "./package.json": "./package.json",
+    ".": {
+      "types": "./dist/client/index.d.ts",
+      "default": "./dist/client/index.js"
+    },
+    "./_generated/component.js": {
+      "types": "./dist/component/_generated/component.d.ts"
+    },
+    "./convex.config": {
+      "types": "./dist/component/convex.config.d.ts",
+      "default": "./dist/component/convex.config.js"
+    },
+    "./convex.config.js": {
+      "types": "./dist/component/convex.config.d.ts",
+      "default": "./dist/component/convex.config.js"
+    },
+    "./adapter": {
+      "types": "./dist/component/adapter.d.ts",
+      "default": "./dist/component/adapter.js"
+    },
+    "./auth-config": {
+      "types": "./dist/auth-config.d.ts",
+      "default": "./dist/auth-config.js"
+    },
+    "./client/plugins": {
+      "types": "./dist/client/plugins/index.d.ts",
+      "default": "./dist/client/plugins/index.js"
+    },
+    "./nextjs": {
+      "types": "./dist/nextjs/index.d.ts",
+      "default": "./dist/nextjs/index.js"
+    },
+    "./nextjs/client": {
+      "types": "./dist/nextjs/client.d.ts",
+      "default": "./dist/nextjs/client.js"
+    },
+    "./plugins": {
+      "types": "./dist/plugins/index.d.ts",
+      "default": "./dist/plugins/index.js"
+    },
+    "./react": {
+      "types": "./dist/react/index.d.ts",
+      "default": "./dist/react/index.js"
+    },
+    "./react-start": {
+      "types": "./dist/react-start/index.d.ts",
+      "default": "./dist/react-start/index.js"
+    },
+    "./test": "./src/test.ts",
+    "./utils": {
+      "types": "./dist/utils/index.d.ts",
+      "default": "./dist/utils/index.js"
+    }
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
+  "scripts": {
+    "build": "del-cli dist && tsdown",
+    "build:watch": "tsdown --watch",
+    "build:codegen": "cd ../../examples/react && bun x convex codegen --component-dir ../../packages/convex-better-auth/src/component && cd ../../packages/convex-better-auth && bun run build",
+    "check-types": "tsrs --noEmit",
+    "publint": "publint",
+    "test": "vitest run --typecheck",
+    "test:watch": "vitest --typecheck --clearScreen false",
+    "test:debug": "vitest --inspect-brk --no-file-parallelism",
+    "test:coverage": "vitest run --coverage --coverage.reporter=text",
+    "sync-version": "node scripts/sync-version.mjs"
+  },
+  "dependencies": {
+    "@better-fetch/fetch": "^1.3.3",
+    "common-tags": "^1.8.2",
+    "convex-helpers": "^0.1.134",
+    "jose": "^6.2.15",
+    "semver": "^7.8.6",
+    "type-fest": "^5.10.0",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@better-auth/core": "1.7.18",
+    "@better-auth/test-utils": "1.7.18",
+    "@edge-runtime/vm": "5.0.0",
+    "@tanstack/react-start": "1.169.4",
+    "@testing-library/dom": "10.4.2",
+    "@testing-library/react": "16.3.3",
+    "@types/common-tags": "1.8.4",
+    "@types/node": "24.19.2",
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
+    "@types/semver": "7.8.0",
+    "better-auth": "1.7.18",
+    "convex": "1.49.0",
+    "convex-test": "0.0.67",
+    "del-cli": "8.0.1",
+    "happy-dom": "21.0.4",
+    "next": "16.4.5",
+    "publint": "0.3.25",
+    "react": "19.3.1",
+    "react-dom": "19.3.1",
+    "tsdown": "0.23.7",
+    "tsrs": "0.22.0-ts7.1.0-beta",
+    "typescript": "7.0.2",
+    "vite": "8.3.6",
+    "vitest": "5.1.0"
+  },
+  "peerDependencies": {
+    "better-auth": ">=1.7.18 <1.8.0",
+    "convex": "^1.25.0",
+    "react": "^18.3.1 || ^19.0.0"
+  }
+}

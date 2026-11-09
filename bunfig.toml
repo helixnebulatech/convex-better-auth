@@ -1,0 +1,7 @@
+env = false
+
+[install]
+# Supply-chain guard, as the Vercel AI SDK does: only install versions
+# published at least 3 days ago, so a compromised release has time to be
+# caught and pulled first.
+minimumReleaseAge = 259200 # seconds

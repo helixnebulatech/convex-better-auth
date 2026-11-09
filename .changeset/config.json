@@ -1,6 +1,11 @@
 {
   "$schema": "https://unpkg.com/@changesets/config@4.0.1/schema.json",
-  "changelog": "@changesets/cli/changelog",
+  "changelog": [
+    "@changesets/changelog-github",
+    {
+      "repo": "helixnebulatech/convex-better-auth"
+    }
+  ],
   "commit": false,
   "fixed": [],
   "linked": [],

@@ -1,4 +1,4 @@
 [[redirects]]
-  from = "/*"
-  to = "https://labs.convex.dev/better-auth/:splat"
-  status = 301
+from = "/*"
+to = "https://labs.convex.dev/better-auth/:splat"
+status = 301

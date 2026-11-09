@@ -1,4 +1,4 @@
-import { Button } from '@/components/ui/button'
+import { Button } from "@/components/ui/button";
 import {
   Card,
   CardContent,
@@ -6,30 +6,29 @@ import {
   CardTitle,
   CardDescription,
   CardFooter,
-} from '@/components/ui/card'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
-import { useState } from 'react'
-import { Loader2 } from 'lucide-react'
-import { authClient } from '@/lib/auth-client'
-import { useSearch } from '@tanstack/react-router'
-import { useNavigate } from '@tanstack/react-router'
+} from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { useState } from "react";
+import { Loader2 } from "lucide-react";
+import { authClient } from "@/lib/auth-client";
+import { useSearch, useNavigate } from "@tanstack/react-router";
 
 export default function ResetPassword() {
-  const navigate = useNavigate()
-  const [password, setPassword] = useState('')
-  const [confirmPassword, setConfirmPassword] = useState('')
-  const [loading, setLoading] = useState(false)
-  const searchParams = useSearch({ strict: false })
-  const token: string | undefined = (searchParams as any).token
+  const navigate = useNavigate();
+  const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [loading, setLoading] = useState(false);
+  const searchParams = useSearch({ strict: false });
+  const token: string | undefined = (searchParams as any).token;
 
   const handleResetPassword = async (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!token) return
+    e.preventDefault();
+    if (!token) return;
 
     if (password !== confirmPassword) {
-      alert('Passwords do not match')
-      return
+      alert("Passwords do not match");
+      return;
     }
 
     await authClient.resetPassword(
@@ -39,24 +38,24 @@ export default function ResetPassword() {
       },
       {
         onRequest: () => {
-          setLoading(true)
+          setLoading(true);
         },
         onSuccess: () => {
-          setLoading(false)
-          void navigate({ to: '/' })
+          setLoading(false);
+          void navigate({ to: "/" });
         },
         onError: (ctx) => {
-          setLoading(false)
-          alert(ctx.error.message)
+          setLoading(false);
+          alert(ctx.error.message);
         },
-      },
-    )
-  }
+      }
+    );
+  };
 
   if (!token) {
     return (
-      <div className="min-h-screen w-full flex items-center justify-center p-4">
-        <Card className="max-w-md w-full">
+      <div className="flex min-h-screen w-full items-center justify-center p-4">
+        <Card className="w-full max-w-md">
           <CardHeader className="space-y-2">
             <CardTitle className="text-lg md:text-xl">Invalid Link</CardTitle>
             <CardDescription className="text-xs md:text-sm">
@@ -65,13 +64,14 @@ export default function ResetPassword() {
             </CardDescription>
           </CardHeader>
           <CardFooter>
-            <div className="flex justify-center w-full border-t py-4">
+            <div className="flex w-full justify-center border-t py-4">
               <p className="text-center text-xs text-neutral-500">
-                Powered by{' '}
+                Powered by{" "}
                 <a
                   href="https://better-auth.com"
                   className="underline"
                   target="_blank"
+                  rel="noreferrer"
                 >
                   <span className="dark:text-orange-200/90">better-auth.</span>
                 </a>
@@ -80,12 +80,12 @@ export default function ResetPassword() {
           </CardFooter>
         </Card>
       </div>
-    )
+    );
   }
 
   return (
-    <div className="min-h-screen w-full flex items-center justify-center p-4">
-      <Card className="max-w-md w-full">
+    <div className="flex min-h-screen w-full items-center justify-center p-4">
+      <Card className="w-full max-w-md">
         <CardHeader>
           <CardTitle className="text-lg md:text-xl">Reset Password</CardTitle>
           <CardDescription className="text-xs md:text-sm">
@@ -122,19 +122,20 @@ export default function ResetPassword() {
               {loading ? (
                 <Loader2 size={16} className="animate-spin" />
               ) : (
-                'Reset Password'
+                "Reset Password"
               )}
             </Button>
           </form>
         </CardContent>
         <CardFooter>
-          <div className="flex justify-center w-full border-t py-4">
+          <div className="flex w-full justify-center border-t py-4">
             <p className="text-center text-xs text-neutral-500">
-              Powered by{' '}
+              Powered by{" "}
               <a
                 href="https://better-auth.com"
                 className="underline"
                 target="_blank"
+                rel="noreferrer"
               >
                 <span className="dark:text-orange-200/90">better-auth.</span>
               </a>
@@ -143,5 +144,5 @@ export default function ResetPassword() {
         </CardFooter>
       </Card>
     </div>
-  )
+  );
 }

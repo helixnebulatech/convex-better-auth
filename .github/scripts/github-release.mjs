@@ -10,6 +10,9 @@
 import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 
+// The package's changelog, written by `changeset version`.
+const CHANGELOG = "packages/convex-better-auth/CHANGELOG.md";
+
 const publishedPackages = JSON.parse(process.env.PUBLISHED_PACKAGES || "[]");
 const commit = process.env.GITHUB_SHA;
 
@@ -17,7 +20,7 @@ const commit = process.env.GITHUB_SHA;
 const changelogSection = (version) => {
   let text;
   try {
-    text = readFileSync("CHANGELOG.md", "utf8");
+    text = readFileSync(CHANGELOG, "utf-8");
   } catch {
     return "";
   }

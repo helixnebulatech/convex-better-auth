@@ -123,10 +123,9 @@ description: Migrate to @convex-dev/better-auth@0.8
     ### Move and update Better Auth config
 
 The `createAuth` function should be moved to `convex/auth.ts`. This isn't
-required, but better represents where the code actually runs, colocates it
-with other related server side auth code, and avoids potentially writing
-Convex code outside of the Convex directory for some function based config
-properties.
+required, but better represents where the code actually runs, colocates it with
+other related server side auth code, and avoids potentially writing Convex code
+outside of the Convex directory for some function based config properties.
 
 The Convex database adapter is now provided through a method on the auth
 component, and a `GenericCtx` type from the component library is now used to
@@ -178,10 +177,10 @@ This is not required, but helpful for reducing noise in logs.
 
     ### Update `ctx.auth.getUserIdentity()` usage
 
-The `subject` property of the id token, as well as the user identity object returned from
-`ctx.auth.getUserIdentity()`, was formerly the user id from the application user
-table. It is now the user id from the Better Auth user table. Any direct usage
-of the `subject` property should be replaced with
+The `subject` property of the id token, as well as the user identity object
+returned from `ctx.auth.getUserIdentity()`, was formerly the user id from the
+application user table. It is now the user id from the Better Auth user table.
+Any direct usage of the `subject` property should be replaced with
 `authComponent.getAuthUser(ctx)`, which returns the entire Better Auth user
 object (formerly referred to as user metadata).
 
@@ -237,9 +236,9 @@ export const getCurrentUser = query({
 <div className="fd-step">
   ### Framework specific changes
 
-If your project uses TanStack Start, follow the [last few
-steps](/framework-guides/tanstack-start#mount-handlers)
-of the TanStack Start guide and make sure your code aligns.
+If your project uses TanStack Start, follow the
+[last few steps](/framework-guides/tanstack-start#mount-handlers) of the
+TanStack Start guide and make sure your code aligns.
 
 This migration should not have framework specific impacts for any other
 framework.
@@ -250,8 +249,8 @@ framework.
 
 ### That's it!
 
-Please report any issues or inaccuracies from this guide via [GitHub
-issues](https://github.com/get-convex/better-auth/issues) or in the
+Please report any issues or inaccuracies from this guide via
+[GitHub issues](https://github.com/get-convex/better-auth/issues) or in the
 [**#better-auth**](https://discord.com/channels/1019350475847499849/1365754331873415440)
 channel on Discord.
 

@@ -6,7 +6,7 @@ import React from "react";
 import ResetPasswordEmail from "./emails/resetPassword";
 import { components } from "./_generated/api";
 import { Resend } from "@convex-dev/resend";
-import { type ActionCtx } from "./_generated/server";
+import type { ActionCtx } from "./_generated/server";
 
 export const resend = new Resend(components.resend, {
   testMode: false,
@@ -20,7 +20,7 @@ export const sendEmailVerification = async (
   }: {
     to: string;
     url: string;
-  },
+  }
 ) => {
   await resend.sendEmail(ctx, {
     from: "Test <onboarding@boboddy.business>",
@@ -38,7 +38,7 @@ export const sendOTPVerification = async (
   }: {
     to: string;
     code: string;
-  },
+  }
 ) => {
   await resend.sendEmail(ctx, {
     from: "Test <onboarding@boboddy.business>",
@@ -56,7 +56,7 @@ export const sendMagicLink = async (
   }: {
     to: string;
     url: string;
-  },
+  }
 ) => {
   await resend.sendEmail(ctx, {
     from: "Test <onboarding@boboddy.business>",
@@ -74,7 +74,7 @@ export const sendResetPassword = async (
   }: {
     to: string;
     url: string;
-  },
+  }
 ) => {
   await resend.sendEmail(ctx, {
     from: "Test <onboarding@boboddy.business>",
