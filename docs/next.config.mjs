@@ -1,3 +1,5 @@
+import path from "node:path";
+
 import { createMDX } from "fumadocs-mdx/next";
 
 const withMDX = createMDX();
@@ -5,7 +7,8 @@ const withMDX = createMDX();
 /** @type {import('next').NextConfig} */
 const config = {
   turbopack: {
-    root: ".",
+    // The workspace root: dependencies are symlinked from its node_modules.
+    root: path.resolve(import.meta.dirname, ".."),
   },
   basePath: "/better-auth",
   reactStrictMode: true,

@@ -1,6 +1,6 @@
 import { api } from "@/convex/_generated/api";
 import { useMutation } from "convex/react";
-import { Id } from "@/convex/_generated/dataModel";
+import type { Id } from "@/convex/_generated/dataModel";
 
 // Optimistic todos get a placeholder id until the server assigns a real one.
 // Buttons on a placeholder are disabled, since the server can't act on it.
@@ -46,7 +46,7 @@ export const useToggleCompleted = () =>
       todos.toSpliced(index, 1, {
         ...todo,
         completed: !todo.completed,
-      }),
+      })
     );
   });
 

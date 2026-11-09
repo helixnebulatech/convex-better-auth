@@ -3,14 +3,18 @@
 .idea
 *.local
 *.log
-/.vscode/
+.vscode/*
+!.vscode/settings.json
+!.vscode/extensions.json
 /docs/.vitepress/cache
 dist
 dist-ssr
 explorations
 node_modules
-.eslintcache
 
 # npm pack output
 *.tgz
 *.tsbuildinfo
+
+# Turbo
+.turbo

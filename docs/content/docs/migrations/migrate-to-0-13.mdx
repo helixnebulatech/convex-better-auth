@@ -35,9 +35,9 @@ description: Migrate to @convex-dev/better-auth@0.13
 ### Use `signIn.social` for Generic OAuth providers
 
 Better Auth 1.7 registers each Generic OAuth provider as a social provider.
-Remove `genericOAuthClient()` from your auth client. Use `signIn.social`
-instead of `signIn.oauth2`, and `linkSocial` instead of `oauth2.link` to link a
-provider to the signed-in user.
+Remove `genericOAuthClient()` from your auth client. Use `signIn.social` instead
+of `signIn.oauth2`, and `linkSocial` instead of `oauth2.link` to link a provider
+to the signed-in user.
 
 ```ts
 export const authClient = createAuthClient({
@@ -188,15 +188,15 @@ Check your own queries through the component adapter if they relied on that.
 ### Better Auth returns dates as `Date` objects
 
 The adapter now hands date fields (`createdAt`, `updatedAt`, `expiresAt`, and
-any additional field of type `date`) to Better Auth as `Date` objects instead
-of epoch milliseconds. This is what Better Auth's types have always said, and
-what Better Auth expects: with numbers, the session cookie cache never
-validated, and code paths that call `.getTime()` on a date threw. If you
-disabled `session.cookieCache` because of `Cookie cache payload failed schema
-validation` warnings, you can turn it back on.
+any additional field of type `date`) to Better Auth as `Date` objects instead of
+epoch milliseconds. This is what Better Auth's types have always said, and what
+Better Auth expects: with numbers, the session cookie cache never validated, and
+code paths that call `.getTime()` on a date threw. If you disabled
+`session.cookieCache` because of `Cookie cache payload failed schema validation`
+warnings, you can turn it back on.
 
-Dates are still stored as numbers in Convex, so no data migration is needed,
-and these keep returning numbers:
+Dates are still stored as numbers in Convex, so no data migration is needed, and
+these keep returning numbers:
 
 - `authComponent.getAuthUser()`, `safeGetAuthUser()` and `getAnyUserById()`
 - triggers
@@ -205,8 +205,8 @@ and these keep returning numbers:
 
 What changes is the result of `auth.api.*` calls and of the adapter. Convex
 functions can't return `Date` objects, nor pass them to `ctx.runMutation`,
-`ctx.runQuery` or the scheduler. If a function returns a Better Auth result
-that holds dates, convert them first, or it fails with
+`ctx.runQuery` or the scheduler. If a function returns a Better Auth result that
+holds dates, convert them first, or it fails with
 `Date "…" is not a supported Convex type`:
 
 ```ts
@@ -219,7 +219,8 @@ export const getCurrentSession = query({
       return null;
     }
     return session.session; // [!code --]
-    return { // [!code ++]
+    return {
+      // [!code ++]
       ...session.session, // [!code ++]
       createdAt: session.session.createdAt.getTime(), // [!code ++]
       updatedAt: session.session.updatedAt.getTime(), // [!code ++]
@@ -233,9 +234,8 @@ The same applies to Better Auth's `databaseHooks` and plugin hooks: the rows
 they receive now hold `Date` objects.
 
 Responses of the Better Auth HTTP endpoints, such as `/get-session`, now carry
-dates as ISO strings, as with any other Better Auth adapter, instead of
-numbers. Clients that read them as numbers should parse them with
-`new Date(value)`.
+dates as ISO strings, as with any other Better Auth adapter, instead of numbers.
+Clients that read them as numbers should parse them with `new Date(value)`.
 
 ## Upgrading to 0.13.5
 
@@ -256,10 +256,9 @@ changing or setting a password. Earlier 0.13 releases had no index for it, so
 the lookup read at most 200 rows of the `account` table and missed accounts
 beyond them. When that happened, password reset and set password created a
 second credential account instead of updating the existing one. Sign-in kept
-checking the password of the first account, so the user got a 401 with their
-new password. With fewer than 200 accounts, as in most development
-deployments, the lookup worked and only logged a `Querying without an index`
-warning.
+checking the password of the first account, so the user got a 401 with their new
+password. With fewer than 200 accounts, as in most development deployments, the
+lookup worked and only logged a `Querying without an index` warning.
 
 If your app ran an earlier 0.13 release with more than 200 accounts, check for
 users with more than one account where `providerId` is `credential`. The newest
@@ -285,12 +284,12 @@ result. Add the index the warning asks for.
 - `twoFactor.secret`.
 
 Schema generation now creates an index for every field Better Auth marks with
-`index: true`, as the Drizzle and Prisma generators do. Before, these fields
-had no index, so lookups on them could miss rows past the first 200 of the
-table, as with the credential account. This affects Local Install apps using:
+`index: true`, as the Drizzle and Prisma generators do. Before, these fields had
+no index, so lookups on them could miss rows past the first 200 of the table, as
+with the credential account. This affects Local Install apps using:
 
-- the API key plugin: `apikey.key`, checked on every request authenticated
-  with an API key, plus `referenceId` and `configId`.
+- the API key plugin: `apikey.key`, checked on every request authenticated with
+  an API key, plus `referenceId` and `configId`.
 - the passkey plugin: `passkey.credentialID`, used for passkey sign-in.
 - the OAuth provider plugin: `authorizationCodeId` in `oauthAccessToken` and
   `oauthRefreshToken`.
@@ -314,8 +313,8 @@ Local Install apps also get indexes for lookups by these plugins:
 Indexes on fields a table doesn't have, such as the Stripe fields when Stripe
 isn't used, are skipped.
 
-Schema generation now keeps the field order of compound indexes. It used to
-sort them alphabetically, which put range fields such as `expiresAt` before the
+Schema generation now keeps the field order of compound indexes. It used to sort
+them alphabetically, which put range fields such as `expiresAt` before the
 equality fields and made the index unusable. If you add your own indexes, list
 the fields compared with equality first, then the field compared with a range
 (`lt`, `gt`...), then the field you sort by.
@@ -522,11 +521,11 @@ run that increments a counter, such as each rate limited request.
 
 ### Account keys
 
-Creating or updating an account with the `providerId` and `accountId` of
-another account now fails. Better Auth already refuses to sign in with a
-provider account that two accounts share, so this only stops new duplicates.
-If an app ran into `Multiple accounts match the same accountId`, delete the
-extra account rows.
+Creating or updating an account with the `providerId` and `accountId` of another
+account now fails. Better Auth already refuses to sign in with a provider
+account that two accounts share, so this only stops new duplicates. If an app
+ran into `Multiple accounts match the same accountId`, delete the extra account
+rows.
 
 ### Request origin
 
@@ -535,9 +534,9 @@ not only `x-forwarded-*`: to your app's origin when it's listed exactly in your
 trusted origins, and otherwise to `CONVEX_SITE_URL`. On Convex's cloud nothing
 changes. A dynamic `baseURL` now gets your app's origin from the Next.js and
 TanStack Start handlers without `advanced.trustedProxyHeaders`. Hosts that only
-match a wildcard in `allowedHosts` are replaced with `CONVEX_SITE_URL`, so Better
-Auth uses the `fallback` of your `baseURL`; list them exactly.
-See [Self-hosted Convex](/security#self-hosted-convex).
+match a wildcard in `allowedHosts` are replaced with `CONVEX_SITE_URL`, so
+Better Auth uses the `fallback` of your `baseURL`; list them exactly. See
+[Self-hosted Convex](/security#self-hosted-convex).
 
 ### Adapter debug logs
 
@@ -568,13 +567,14 @@ also affect Convex apps:
   earlier sign-in without it, so the session is refreshed again. With the cross
   domain plugin the client drops that cookie too.
 - Two factor accepts API key sessions when verifying TOTP enrollment, and honors
-  trusted devices when your own hook runs the two factor step on another
-  sign-in path, such as email OTP.
-- Denying a device authorization request rejects a revoked session that is
-  still in the cookie cache.
+  trusted devices when your own hook runs the two factor step on another sign-in
+  path, such as email OTP.
+- Denying a device authorization request rejects a revoked session that is still
+  in the cookie cache.
 - The phone number plugin no longer stores an empty `phoneNumber`.
-- A `passkey()` plugin shared between auth instances keeps the `baseURL` mode
-  of each instance.
+- A `passkey()` plugin shared between auth instances keeps the `baseURL` mode of
+  each instance.
 
-See [Calling `auth.api` from Convex functions](/security#calling-authapi-from-convex-functions)
+See
+[Calling `auth.api` from Convex functions](/security#calling-authapi-from-convex-functions)
 for the URLs to validate when a function passes them to `auth.api`.

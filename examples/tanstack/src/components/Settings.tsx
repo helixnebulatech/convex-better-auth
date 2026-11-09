@@ -1,5 +1,5 @@
-import EnableTwoFactor from '@/components/EnableTwoFactor'
-import { Button } from '@/components/ui/button'
+import EnableTwoFactor from "@/components/EnableTwoFactor";
+import { Button } from "@/components/ui/button";
 import {
   Card,
   CardContent,
@@ -7,48 +7,48 @@ import {
   CardFooter,
   CardHeader,
   CardTitle,
-} from '@/components/ui/card'
-import { authClient } from '@/lib/auth-client'
-import { Link, useNavigate } from '@tanstack/react-router'
-import { AlertTriangle, ArrowLeft } from 'lucide-react'
-import { useState } from 'react'
+} from "@/components/ui/card";
+import { authClient } from "@/lib/auth-client";
+import { Link, useNavigate } from "@tanstack/react-router";
+import { AlertTriangle, ArrowLeft } from "lucide-react";
+import { useState } from "react";
 
 export default function SettingsPage() {
-  const [showEnable2FA, setShowEnable2FA] = useState(false)
-  const [loading, setLoading] = useState(false)
-  const navigate = useNavigate()
+  const [showEnable2FA, setShowEnable2FA] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const navigate = useNavigate();
 
   const handleDisable2FA = async () => {
     try {
-      throw new Error('Not implemented')
-      setLoading(true)
+      throw new Error("Not implemented");
+      setLoading(true);
       await authClient.twoFactor.disable({
-        password: '',
-      })
+        password: "",
+      });
     } catch {
-      alert('Failed to disable 2FA. Please try again.')
+      alert("Failed to disable 2FA. Please try again.");
     } finally {
-      setLoading(false)
+      setLoading(false);
     }
-  }
+  };
 
   const handleDeleteAccount = async () => {
     if (
       window.confirm(
-        'Are you sure you want to delete your account? This action cannot be undone.',
+        "Are you sure you want to delete your account? This action cannot be undone."
       )
     ) {
       try {
-        await authClient.deleteUser()
-        void navigate({ to: '/' })
+        await authClient.deleteUser();
+        void navigate({ to: "/" });
       } catch {
-        alert('Failed to delete account. Please try again.')
+        alert("Failed to delete account. Please try again.");
       }
     }
-  }
+  };
 
   return (
-    <div className="min-h-screen w-full flex items-center justify-center p-4">
+    <div className="flex min-h-screen w-full items-center justify-center p-4">
       {showEnable2FA ? (
         <EnableTwoFactor onBack={() => setShowEnable2FA(false)} />
       ) : (
@@ -74,10 +74,10 @@ export default function SettingsPage() {
             <CardContent className="grid gap-6">
               <div className="grid gap-4">
                 <div>
-                  <h3 className="text-sm font-medium mb-1">
+                  <h3 className="mb-1 text-sm font-medium">
                     Two-Factor Authentication
                   </h3>
-                  <p className="text-sm text-muted-foreground">
+                  <p className="text-muted-foreground text-sm">
                     Add an extra layer of security to your account by requiring
                     a verification code in addition to your password.
                   </p>
@@ -101,11 +101,11 @@ export default function SettingsPage() {
 
               <div className="grid gap-4">
                 <div>
-                  <h3 className="text-sm font-medium mb-1 flex items-center gap-2">
+                  <h3 className="mb-1 flex items-center gap-2 text-sm font-medium">
                     Delete Account
                     <AlertTriangle size={14} className="text-destructive" />
                   </h3>
-                  <p className="text-sm text-muted-foreground">
+                  <p className="text-muted-foreground text-sm">
                     Permanently delete your account and all associated data.
                     This action cannot be undone.
                   </p>
@@ -118,13 +118,14 @@ export default function SettingsPage() {
               </div>
             </CardContent>
             <CardFooter>
-              <div className="flex justify-center w-full border-t py-4">
+              <div className="flex w-full justify-center border-t py-4">
                 <p className="text-center text-xs text-neutral-500">
-                  Powered by{' '}
+                  Powered by{" "}
                   <a
                     href="https://better-auth.com"
                     className="underline"
                     target="_blank"
+                    rel="noreferrer"
                   >
                     <span className="dark:text-orange-200/90">
                       better-auth.
@@ -137,5 +138,5 @@ export default function SettingsPage() {
         </div>
       )}
     </div>
-  )
+  );
 }

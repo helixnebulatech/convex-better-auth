@@ -1,7 +1,8 @@
 "use client";
 
 import { api } from "@/convex/_generated/api";
-import { Preloaded, useConvex, useMutation } from "convex/react";
+import type { Preloaded } from "convex/react";
+import { useConvex, useMutation } from "convex/react";
 import { usePreloadedAuthQuery } from "@convex-dev/better-auth/nextjs/client";
 import { useToggleCompleted, useRemoveTodo } from "./mutations";
 import { TodoItem } from "./todo-item";
@@ -22,7 +23,7 @@ export const TodoList = ({
 
   return (
     <main>
-      <div className="max-w-2xl mx-auto space-y-6">
+      <div className="mx-auto max-w-2xl space-y-6">
         <TodoForm />
 
         <ul className="space-y-3">
@@ -37,7 +38,7 @@ export const TodoList = ({
         </ul>
 
         {todos?.length === 0 && (
-          <p className="text-center text-neutral-500 py-8">
+          <p className="py-8 text-center text-neutral-500">
             No todos yet. Add one above!
           </p>
         )}

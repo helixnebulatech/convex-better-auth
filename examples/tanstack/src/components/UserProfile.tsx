@@ -1,7 +1,7 @@
 export const UserProfile = ({
   user,
 }: {
-  user: { name: string; image?: string | null; email: string } | null
+  user: { name: string; image?: string | null; email: string } | null;
 }) => {
   return (
     <div className="flex items-center space-x-2">
@@ -14,7 +14,7 @@ export const UserProfile = ({
           className="rounded-full"
         />
       ) : (
-        <div className="w-10 h-10 rounded-full bg-orange-100 dark:bg-orange-900 flex items-center justify-center text-orange-600 dark:text-orange-200 font-medium">
+        <div className="flex h-10 w-10 items-center justify-center rounded-full bg-orange-100 font-medium text-orange-600 dark:bg-orange-900 dark:text-orange-200">
           {user?.name?.[0]?.toUpperCase()}
         </div>
       )}
@@ -23,5 +23,5 @@ export const UserProfile = ({
         <p className="text-sm text-neutral-500">{user?.email}</p>
       </div>
     </div>
-  )
-}
+  );
+};

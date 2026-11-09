@@ -12,15 +12,15 @@
   },
   {
     "label": "install dependencies",
-    "command": "npm install && cd examples/react && npm install",
+    "command": "bun install",
     "hooks": ["create_worktree"],
     "reveal": "no_focus",
     "hide": "on_success"
   },
   {
     "label": "dev",
-    "command": "npm",
-    "args": ["run dev"],
+    "command": "bun",
+    "args": ["run", "--cwd", "examples/react", "dev"],
     "allow_concurrent_runs": false
   }
 ]

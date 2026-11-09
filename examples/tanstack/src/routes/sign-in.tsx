@@ -1,14 +1,14 @@
-'use client'
+"use client";
 
-import { createFileRoute, redirect } from '@tanstack/react-router'
-import { SignIn } from '@/components/SignIn'
+import { createFileRoute, redirect } from "@tanstack/react-router";
+import { SignIn } from "@/components/SignIn";
 
-export const Route = createFileRoute('/sign-in')({
+export const Route = createFileRoute("/sign-in")({
   component: SignIn,
   beforeLoad: ({ context }) => {
     if (context.isAuthenticated) {
-      console.log('redirecting to /')
-      throw redirect({ to: '/' })
+      console.log("redirecting to /");
+      throw redirect({ to: "/" });
     }
   },
-})
+});

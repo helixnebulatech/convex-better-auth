@@ -38,7 +38,7 @@ export default function SettingsPage() {
   const handleDeleteAccount = async () => {
     if (
       window.confirm(
-        "Are you sure you want to delete your account? This action cannot be undone.",
+        "Are you sure you want to delete your account? This action cannot be undone."
       )
     ) {
       try {
@@ -51,7 +51,7 @@ export default function SettingsPage() {
   };
 
   return (
-    <div className="min-h-screen w-full flex items-center justify-center p-4">
+    <div className="flex min-h-screen w-full items-center justify-center p-4">
       {showEnable2FA ? (
         <EnableTwoFactor />
       ) : (
@@ -77,10 +77,10 @@ export default function SettingsPage() {
             <CardContent className="grid gap-6">
               <div className="grid gap-4">
                 <div>
-                  <h3 className="text-sm font-medium mb-1">
+                  <h3 className="mb-1 text-sm font-medium">
                     Two-Factor Authentication
                   </h3>
-                  <p className="text-sm text-muted-foreground">
+                  <p className="text-muted-foreground text-sm">
                     Add an extra layer of security to your account by requiring
                     a verification code in addition to your password.
                   </p>
@@ -104,11 +104,11 @@ export default function SettingsPage() {
 
               <div className="grid gap-4">
                 <div>
-                  <h3 className="text-sm font-medium mb-1 flex items-center gap-2">
+                  <h3 className="mb-1 flex items-center gap-2 text-sm font-medium">
                     Delete Account
                     <AlertTriangle size={14} className="text-destructive" />
                   </h3>
-                  <p className="text-sm text-muted-foreground">
+                  <p className="text-muted-foreground text-sm">
                     Permanently delete your account and all associated data.
                     This action cannot be undone.
                   </p>
@@ -121,13 +121,14 @@ export default function SettingsPage() {
               </div>
             </CardContent>
             <CardFooter>
-              <div className="flex justify-center w-full border-t py-4">
+              <div className="flex w-full justify-center border-t py-4">
                 <p className="text-center text-xs text-neutral-500">
                   Powered by{" "}
                   <a
                     href="https://better-auth.com"
                     className="underline"
                     target="_blank"
+                    rel="noreferrer"
                   >
                     <span className="dark:text-orange-200/90">
                       better-auth.

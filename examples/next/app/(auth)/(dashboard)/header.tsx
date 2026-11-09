@@ -1,10 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { api } from "@/convex/_generated/api";
+import type { api } from "@/convex/_generated/api";
 import { Button } from "@/components/ui/button";
 import { LogOut, Settings } from "lucide-react";
-import { Preloaded } from "convex/react";
+import type { Preloaded } from "convex/react";
 import { authClient } from "@/lib/auth-client";
 import { usePreloadedAuthQuery } from "@convex-dev/better-auth/nextjs/client";
 
@@ -26,7 +26,7 @@ const UserProfile = ({
           className="rounded-full"
         />
       ) : (
-        <div className="w-10 h-10 rounded-full bg-orange-100 dark:bg-orange-900 flex items-center justify-center text-orange-600 dark:text-orange-200 font-medium">
+        <div className="flex h-10 w-10 items-center justify-center rounded-full bg-orange-100 font-medium text-orange-600 dark:bg-orange-900 dark:text-orange-200">
           {(user?.name || user?.email)?.[0]?.toUpperCase()}
         </div>
       )}
@@ -47,7 +47,7 @@ export const Header = ({
     await authClient.signOut();
   };
   return (
-    <header className="flex items-center justify-between max-w-2xl mx-auto">
+    <header className="mx-auto flex max-w-2xl items-center justify-between">
       <UserProfile preloadedUserQuery={preloadedUserQuery} />
       <div className="flex items-center gap-2">
         <Button variant="ghost" size="sm" asChild>

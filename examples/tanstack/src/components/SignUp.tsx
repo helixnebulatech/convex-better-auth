@@ -1,4 +1,4 @@
-import { Button } from '@/components/ui/button'
+import { Button } from "@/components/ui/button";
 import {
   Card,
   CardContent,
@@ -6,37 +6,37 @@ import {
   CardFooter,
   CardHeader,
   CardTitle,
-} from '@/components/ui/card'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
-import { useState } from 'react'
-import { Loader2, X } from 'lucide-react'
-import { authClient } from '@/lib/auth-client'
-import { toast } from 'sonner'
-import { Link, useNavigate } from '@tanstack/react-router'
+} from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { useState } from "react";
+import { Loader2, X } from "lucide-react";
+import { authClient } from "@/lib/auth-client";
+import { toast } from "sonner";
+import { Link, useNavigate } from "@tanstack/react-router";
 
 export default function SignUp() {
-  const [firstName, setFirstName] = useState('')
-  const [lastName, setLastName] = useState('')
-  const [email, setEmail] = useState('')
-  const [password, setPassword] = useState('')
-  const [passwordConfirmation, setPasswordConfirmation] = useState('')
-  const [image, setImage] = useState<File | null>(null)
-  const [imagePreview, setImagePreview] = useState<string | null>(null)
-  const [loading, setLoading] = useState(false)
-  const navigate = useNavigate()
+  const [firstName, setFirstName] = useState("");
+  const [lastName, setLastName] = useState("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [passwordConfirmation, setPasswordConfirmation] = useState("");
+  const [image, setImage] = useState<File | null>(null);
+  const [imagePreview, setImagePreview] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+  const navigate = useNavigate();
 
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
+    const file = e.target.files?.[0];
     if (file) {
-      setImage(file)
-      const reader = new FileReader()
+      setImage(file);
+      const reader = new FileReader();
       reader.onloadend = () => {
-        setImagePreview(reader.result as string)
-      }
-      reader.readAsDataURL(file)
+        setImagePreview(reader.result as string);
+      };
+      reader.readAsDataURL(file);
     }
-  }
+  };
 
   const handleSignUp = async () => {
     const { data, error } = await authClient.signUp.email(
@@ -44,29 +44,29 @@ export default function SignUp() {
         email,
         password,
         name: `${firstName} ${lastName}`,
-        image: image ? await convertImageToBase64(image) : '',
+        image: image ? await convertImageToBase64(image) : "",
       },
       {
         onRequest: () => {
-          setLoading(true)
+          setLoading(true);
         },
         onSuccess: async () => {
-          setLoading(false)
-          await navigate({ to: '/' })
+          setLoading(false);
+          await navigate({ to: "/" });
         },
         onError: async (ctx) => {
-          setLoading(false)
-          console.error(ctx.error)
-          console.error('response', ctx.response)
-          toast.error(ctx.error.message)
+          setLoading(false);
+          console.error(ctx.error);
+          console.error("response", ctx.response);
+          toast.error(ctx.error.message);
         },
-      },
-    )
-    console.log({ data, error })
-  }
+      }
+    );
+    console.log({ data, error });
+  };
 
   return (
-    <div className="min-h-screen w-full flex items-center justify-center p-4">
+    <div className="flex min-h-screen w-full items-center justify-center p-4">
       <div className="w-full max-w-md">
         <Card className="max-w-md">
           <CardHeader>
@@ -85,7 +85,7 @@ export default function SignUp() {
                     placeholder="Max"
                     required
                     onChange={(e) => {
-                      setFirstName(e.target.value)
+                      setFirstName(e.target.value);
                     }}
                     value={firstName}
                   />
@@ -97,7 +97,7 @@ export default function SignUp() {
                     placeholder="Robinson"
                     required
                     onChange={(e) => {
-                      setLastName(e.target.value)
+                      setLastName(e.target.value);
                     }}
                     value={lastName}
                   />
@@ -111,7 +111,7 @@ export default function SignUp() {
                   placeholder="m@example.com"
                   required
                   onChange={(e) => {
-                    setEmail(e.target.value)
+                    setEmail(e.target.value);
                   }}
                   value={email}
                 />
@@ -142,15 +142,15 @@ export default function SignUp() {
                 <Label htmlFor="image">Profile Image (optional)</Label>
                 <div className="flex items-end gap-4">
                   {imagePreview && (
-                    <div className="relative w-16 h-16 rounded-sm overflow-hidden">
+                    <div className="relative h-16 w-16 overflow-hidden rounded-sm">
                       <img
                         src={imagePreview}
                         alt="Profile preview"
-                        className="w-full h-full object-cover"
+                        className="h-full w-full object-cover"
                       />
                     </div>
                   )}
-                  <div className="flex items-center gap-2 w-full">
+                  <div className="flex w-full items-center gap-2">
                     <Input
                       id="image"
                       type="file"
@@ -162,8 +162,8 @@ export default function SignUp() {
                       <X
                         className="cursor-pointer"
                         onClick={() => {
-                          setImage(null)
-                          setImagePreview(null)
+                          setImage(null);
+                          setImagePreview(null);
                         }}
                       />
                     )}
@@ -179,13 +179,13 @@ export default function SignUp() {
                 {loading ? (
                   <Loader2 size={16} className="animate-spin" />
                 ) : (
-                  'Create an account'
+                  "Create an account"
                 )}
               </Button>
             </div>
           </CardContent>
           <CardFooter>
-            <div className="flex justify-center w-full border-t py-4">
+            <div className="flex w-full justify-center border-t py-4">
               <p className="text-center text-xs text-neutral-500">
                 Secured by <span className="text-orange-400">better-auth.</span>
               </p>
@@ -193,25 +193,25 @@ export default function SignUp() {
           </CardFooter>
         </Card>
 
-        <p className="text-center mt-4 text-sm text-neutral-600 dark:text-neutral-400">
-          Already have an account?{' '}
+        <p className="mt-4 text-center text-sm text-neutral-600 dark:text-neutral-400">
+          Already have an account?{" "}
           <Link
             to="/sign-in"
-            className="text-orange-400 hover:text-orange-500 dark:text-orange-300 dark:hover:text-orange-200 underline"
+            className="text-orange-400 underline hover:text-orange-500 dark:text-orange-300 dark:hover:text-orange-200"
           >
             Sign in
           </Link>
         </p>
       </div>
     </div>
-  )
+  );
 }
 
 async function convertImageToBase64(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
-    const reader = new FileReader()
-    reader.onloadend = () => resolve(reader.result as string)
-    reader.onerror = reject
-    reader.readAsDataURL(file)
-  })
+    const reader = new FileReader();
+    reader.onloadend = () => resolve(reader.result as string);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
 }

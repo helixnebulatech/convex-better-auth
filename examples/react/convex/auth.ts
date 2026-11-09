@@ -1,13 +1,15 @@
-import { createClient, type GenericCtx } from "@convex-dev/better-auth";
+import { createClient } from "@convex-dev/better-auth";
+import type { GenericCtx } from "@convex-dev/better-auth";
 import { convex, crossDomain } from "@convex-dev/better-auth/plugins";
 import { requireActionCtx } from "@convex-dev/better-auth/utils";
 import { components } from "./_generated/api";
 import { query } from "./_generated/server";
-import { betterAuth, type BetterAuthOptions } from "better-auth/minimal";
+import { betterAuth } from "better-auth/minimal";
+import type { BetterAuthOptions } from "better-auth/minimal";
 import { emailOTP } from "better-auth/plugins/email-otp";
 import { magicLink } from "better-auth/plugins/magic-link";
 import { genericOAuth } from "better-auth/plugins/generic-oauth";
-import { DataModel } from "./_generated/dataModel";
+import type { DataModel } from "./_generated/dataModel";
 import {
   sendEmailVerification,
   sendMagicLink,

@@ -1,7 +1,8 @@
 import { components } from "./_generated/api";
 import { internalAction, query } from "./_generated/server";
 import authSchema from "./betterAuth/schema";
-import { createClient, GenericCtx } from "@convex-dev/better-auth";
+import type { GenericCtx } from "@convex-dev/better-auth";
+import { createClient } from "@convex-dev/better-auth";
 import { convex } from "@convex-dev/better-auth/plugins";
 import { anonymous } from "better-auth/plugins/anonymous";
 import { emailOTP } from "better-auth/plugins/email-otp";
@@ -15,9 +16,10 @@ import {
 import { magicLink } from "better-auth/plugins/magic-link";
 import { twoFactor } from "better-auth/plugins/two-factor";
 import { username } from "better-auth/plugins/username";
-import { betterAuth, type BetterAuthOptions } from "better-auth/minimal";
+import { betterAuth } from "better-auth/minimal";
+import type { BetterAuthOptions } from "better-auth/minimal";
 import { requireActionCtx } from "@convex-dev/better-auth/utils";
-import { DataModel } from "./_generated/dataModel";
+import type { DataModel } from "./_generated/dataModel";
 import authConfig from "./auth.config";
 
 // This implementation uses Local Install as it would be in a new project.
@@ -31,7 +33,7 @@ export const authComponent = createClient<DataModel, typeof authSchema>(
       schema: authSchema,
     },
     verbose: false,
-  },
+  }
 );
 
 export const createAuthOptions = (ctx: GenericCtx<DataModel>) => {

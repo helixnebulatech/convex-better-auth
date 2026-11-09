@@ -32,7 +32,7 @@ const accessTokens = new Map();
 const log = (...args) => console.log("[mock-oauth]", ...args);
 
 const escapeHtml = (value) =>
-  value.replace(
+  value.replaceAll(
     /[&<>"']/g,
     (c) =>
       ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[

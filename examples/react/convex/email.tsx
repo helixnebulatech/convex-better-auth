@@ -6,7 +6,7 @@ import React from "react";
 import ResetPasswordEmail from "./emails/resetPassword";
 import { Resend } from "@convex-dev/resend";
 import { components } from "./_generated/api";
-import { ActionCtx, MutationCtx } from "./_generated/server";
+import type { ActionCtx } from "./_generated/server";
 
 const sendEmail = async (
   ctx: ActionCtx,

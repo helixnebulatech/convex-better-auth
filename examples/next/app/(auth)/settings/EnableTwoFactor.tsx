@@ -39,7 +39,7 @@ export default function EnableTwoFactor() {
       const accounts = await authClient.listAccounts();
       if ("data" in accounts && accounts.data) {
         const hasCredential = accounts.data.some(
-          (account) => account.providerId === "credential",
+          (account) => account.providerId === "credential"
         );
         setStep(hasCredential ? "password" : "need-password");
       }
@@ -112,13 +112,13 @@ export default function EnableTwoFactor() {
   };
 
   return (
-    <div className="min-h-screen w-full flex items-center justify-center p-4">
+    <div className="flex min-h-screen w-full items-center justify-center p-4">
       <div className="w-full max-w-md">
         {(step === "password" || step === "need-password") && (
           <Button
             variant="ghost"
             size="sm"
-            className="flex items-center gap-2 mb-4"
+            className="mb-4 flex items-center gap-2"
             onClick={() => window.location.reload()}
           >
             <ArrowLeft size={16} />
@@ -151,7 +151,7 @@ export default function EnableTwoFactor() {
 
             {step === "need-password" && (
               <div className="grid gap-4">
-                <p className="text-sm text-muted-foreground">
+                <p className="text-muted-foreground text-sm">
                   Two-factor authentication requires a password for additional
                   security. Since you signed up with a social account,
                   you&apos;ll need to set up a password first.
@@ -197,7 +197,7 @@ export default function EnableTwoFactor() {
 
             {step === "qr-verify" && totpUri && (
               <div className="grid gap-6">
-                <div className="flex justify-center p-4 bg-white rounded-lg">
+                <div className="flex justify-center rounded-lg bg-white p-4">
                   <QRCode value={totpUri} />
                 </div>
                 <form
@@ -235,8 +235,8 @@ export default function EnableTwoFactor() {
 
             {step === "backup" && backupCodes && (
               <div className="grid gap-4">
-                <div className="relative p-4 bg-muted rounded-lg">
-                  <pre className="text-sm font-mono whitespace-pre-line">
+                <div className="bg-muted relative rounded-lg p-4">
+                  <pre className="font-mono text-sm whitespace-pre-line">
                     {backupCodes.join("\n")}
                   </pre>
                   <Button

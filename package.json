@@ -1,162 +1,40 @@
 {
-  "name": "@helixnebulatech/convex-better-auth",
-  "description": "Fork of @convex-dev/better-auth that tracks the latest Better Auth release.",
-  "repository": "github:helixnebulatech/convex-better-auth",
-  "homepage": "https://github.com/helixnebulatech/convex-better-auth#readme",
-  "bugs": {
-    "url": "https://github.com/helixnebulatech/convex-better-auth/issues"
-  },
-  "version": "0.13.9",
-  "license": "Apache-2.0",
-  "publishConfig": {
-    "access": "public",
-    "provenance": true
-  },
-  "keywords": [
-    "convex",
-    "component",
-    "auth",
-    "authentication",
-    "better-auth",
-    "convex-auth"
+  "name": "convex-better-auth-monorepo",
+  "private": true,
+  "workspaces": [
+    "packages/*",
+    "examples/*",
+    "e2e",
+    "docs"
   ],
   "type": "module",
   "scripts": {
-    "dev": "pnpm run build && pnpm --dir examples/react run dev",
-    "build": "tsc --project tsconfig.build.json",
-    "build:codegen": "cd examples/react && pnpm exec convex codegen --component-dir ../../src/component && cd ../.. && pnpm run build",
-    "build:clean": "rm -rf dist *.tsbuildinfo && pnpm run build:codegen",
-    "typecheck": "tsc --noEmit && tsc -p examples/next && tsc -p examples/next/convex && tsc -p examples/react && tsc -p examples/react/convex && tsc -p examples/tanstack && tsc -p examples/tanstack/convex",
-    "lint": "eslint .",
-    "test": "vitest run --typecheck",
-    "test:watch": "vitest --typecheck --clearScreen false",
-    "test:debug": "vitest --inspect-brk --no-file-parallelism",
-    "test:e2e": "pnpm run build && pnpm --dir e2e run test",
-    "test:coverage": "vitest run --coverage --coverage.reporter=text",
+    "dev": "bun run build && bun run --cwd examples/react dev",
+    "build": "turbo run build --filter=@helixnebulatech/convex-better-auth",
+    "check-types": "turbo run check-types",
+    "test": "turbo run test --filter=@helixnebulatech/convex-better-auth",
+    "test:e2e": "bun run build && cd e2e && bun run test",
+    "publint": "turbo run publint --filter=@helixnebulatech/convex-better-auth",
+    "check": "ultracite check",
+    "fix": "ultracite fix",
     "changeset": "changeset",
-    "ci:version": "changeset version && node scripts/sync-version.mjs && prettier -w CHANGELOG.md",
-    "ci:release": "rm -rf dist *.tsbuildinfo && pnpm run build && changeset publish"
-  },
-  "files": [
-    "dist",
-    "src",
-    "!src/**/*.test.ts",
-    "!src/**/*.test.tsx"
-  ],
-  "exports": {
-    "./package.json": "./package.json",
-    ".": {
-      "types": "./dist/client/index.d.ts",
-      "default": "./dist/client/index.js"
-    },
-    "./_generated/component.js": {
-      "types": "./dist/component/_generated/component.d.ts"
-    },
-    "./convex.config": {
-      "types": "./dist/component/convex.config.d.ts",
-      "default": "./dist/component/convex.config.js"
-    },
-    "./convex.config.js": {
-      "types": "./dist/component/convex.config.d.ts",
-      "default": "./dist/component/convex.config.js"
-    },
-    "./adapter": {
-      "types": "./dist/component/adapter.d.ts",
-      "default": "./dist/component/adapter.js"
-    },
-    "./auth-config": {
-      "types": "./dist/auth-config.d.ts",
-      "default": "./dist/auth-config.js"
-    },
-    "./client/plugins": {
-      "types": "./dist/client/plugins/index.d.ts",
-      "default": "./dist/client/plugins/index.js"
-    },
-    "./nextjs": {
-      "types": "./dist/nextjs/index.d.ts",
-      "default": "./dist/nextjs/index.js"
-    },
-    "./nextjs/client": {
-      "types": "./dist/nextjs/client.d.ts",
-      "default": "./dist/nextjs/client.js"
-    },
-    "./plugins": {
-      "types": "./dist/plugins/index.d.ts",
-      "default": "./dist/plugins/index.js"
-    },
-    "./react": {
-      "types": "./dist/react/index.d.ts",
-      "default": "./dist/react/index.js"
-    },
-    "./react-start": {
-      "types": "./dist/react-start/index.d.ts",
-      "default": "./dist/react-start/index.js"
-    },
-    "./test": "./src/test.ts",
-    "./utils": {
-      "types": "./dist/utils/index.d.ts",
-      "default": "./dist/utils/index.js"
-    }
-  },
-  "typesVersions": {
-    "*": {
-      "next-js": [
-        "./dist/nextjs/index.d.ts"
-      ]
-    }
-  },
-  "peerDependencies": {
-    "better-auth": ">=1.7.18 <1.8.0",
-    "convex": "^1.25.0",
-    "react": "^18.3.1 || ^19.0.0"
+    "ci:version": "changeset version && bun run --cwd packages/convex-better-auth sync-version && bun install"
   },
   "devDependencies": {
-    "@better-auth/core": "1.7.18",
-    "@better-auth/test-utils": "1.7.18",
+    "@changesets/changelog-github": "1.0.1",
     "@changesets/cli": "3.0.3",
     "@convex-dev/eslint-plugin": "5.0.1",
-    "@edge-runtime/vm": "5.0.0",
-    "@eslint/eslintrc": "3.3.7",
-    "@eslint/js": "10.0.1",
-    "@tanstack/react-start": "1.169.4",
-    "@testing-library/dom": "10.4.2",
-    "@testing-library/react": "16.3.3",
-    "@types/common-tags": "1.8.4",
     "@types/node": "24.19.2",
-    "@types/react": "19.3.0",
-    "@types/react-dom": "19.3.0",
-    "@types/semver": "7.8.0",
-    "better-auth": "1.7.18",
-    "chokidar-cli": "3.0.0",
-    "concurrently": "10.0.6",
-    "convex": "1.49.0",
-    "convex-test": "0.0.67",
-    "eslint": "10.14.0",
-    "eslint-plugin-import-x": "4.17.1",
-    "eslint-plugin-react-hooks": "7.1.1",
-    "eslint-plugin-react-refresh": "0.5.7",
-    "globals": "17.14.0",
-    "happy-dom": "21.0.4",
-    "next": "16.4.5",
-    "pkg-pr-new": "0.0.93",
-    "prettier": "3.9.10",
-    "react": "19.3.1",
-    "react-dom": "19.3.1",
-    "typescript": "6.0.3",
-    "typescript-eslint": "8.72.1",
-    "vite": "8.3.6",
-    "vitest": "5.1.0"
+    "oxfmt": "0.77.0",
+    "oxlint": "1.92.0",
+    "oxlint-tsgolint": "7.0.2006",
+    "turbo": "2.11.10",
+    "typescript": "7.0.2",
+    "ultracite": "8.1.1"
   },
-  "types": "./dist/client/index.d.ts",
-  "module": "./dist/client/index.js",
-  "dependencies": {
-    "@better-fetch/fetch": "^1.3.3",
-    "common-tags": "^1.8.2",
-    "convex-helpers": "^0.1.134",
-    "jose": "^6.2.15",
-    "semver": "^7.8.6",
-    "type-fest": "^5.10.0",
-    "zod": "^4.6.7"
-  },
-  "packageManager": "pnpm@12.10.1"
+  "packageManager": "bun@1.4.4",
+  "trustedDependencies": [
+    "esbuild",
+    "unrs-resolver"
+  ]
 }

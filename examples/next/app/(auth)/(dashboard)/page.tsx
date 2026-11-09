@@ -11,7 +11,7 @@ const Page = async () => {
   ]);
 
   return (
-    <div className="min-h-screen w-full p-4 space-y-8">
+    <div className="min-h-screen w-full space-y-8 p-4">
       <Header preloadedUserQuery={preloadedUserQuery} />
       <TodoList preloadedTodosQuery={preloadedTodosQuery} />
     </div>

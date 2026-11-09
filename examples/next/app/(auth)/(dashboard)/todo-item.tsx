@@ -2,7 +2,7 @@
 
 import { Button } from "@/components/ui/button";
 import { Check, Trash2, X } from "lucide-react";
-import { Doc, Id } from "@/convex/_generated/dataModel";
+import type { Doc, Id } from "@/convex/_generated/dataModel";
 import { isPlaceholder } from "./mutations";
 
 export const TodoItem = ({
@@ -16,13 +16,13 @@ export const TodoItem = ({
 }) => {
   return (
     <li
-      className="flex items-center gap-3 p-3 bg-neutral-900/50 border border-neutral-800 rounded-lg group hover:bg-neutral-900 transition-colors"
+      className="group flex items-center gap-3 rounded-lg border border-neutral-800 bg-neutral-900/50 p-3 transition-colors hover:bg-neutral-900"
       key={todo._id}
     >
       <Button
         variant="ghost"
         size="icon"
-        className="text-neutral-400 hover:text-neutral-100 hover:bg-neutral-800 cursor-pointer"
+        className="cursor-pointer text-neutral-400 hover:bg-neutral-800 hover:text-neutral-100"
         disabled={isPlaceholder(todo._id)}
         onClick={() => onToggleCompleted({ id: todo._id })}
       >
@@ -36,7 +36,7 @@ export const TodoItem = ({
       <span
         className={
           todo.completed
-            ? "flex-1 line-through text-neutral-500"
+            ? "flex-1 text-neutral-500 line-through"
             : "flex-1 text-neutral-100"
         }
       >
@@ -47,7 +47,7 @@ export const TodoItem = ({
         size="icon"
         disabled={isPlaceholder(todo._id)}
         onClick={() => onRemove({ id: todo._id })}
-        className="text-neutral-500 hover:text-red-400 hover:bg-neutral-800 opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer"
+        className="cursor-pointer text-neutral-500 opacity-0 transition-opacity group-hover:opacity-100 hover:bg-neutral-800 hover:text-red-400"
       >
         <Trash2 size={16} />
       </Button>

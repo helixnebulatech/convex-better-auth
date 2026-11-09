@@ -25,7 +25,7 @@ export default function SignIn() {
   const [otpLoading, setOtpLoading] = useState(false);
   const [forgotLoading, setForgotLoading] = useState(false);
   const [signInMethod, setSignInMethod] = useState<"password" | "passwordless">(
-    "passwordless",
+    "passwordless"
   );
   const [otpSent, setOtpSent] = useState(false);
   const [anonymousLoading, setAnonymousLoading] = useState(false);
@@ -52,7 +52,7 @@ export default function SignIn() {
           setOtpLoading(false);
           alert(ctx.error.message);
         },
-      },
+      }
     );
   };
 
@@ -86,7 +86,7 @@ export default function SignIn() {
           setAnonymousLoading(false);
           alert(ctx.error.message);
         },
-      },
+      }
     );
   };
 
@@ -107,7 +107,7 @@ export default function SignIn() {
           setMagicLinkLoading(false);
           alert(ctx.error.message);
         },
-      },
+      }
     );
   };
 
@@ -127,7 +127,7 @@ export default function SignIn() {
         onError: (ctx) => {
           alert(ctx.error.message);
         },
-      },
+      }
     );
   };
 
@@ -147,7 +147,7 @@ export default function SignIn() {
           setOtpLoading(false);
           alert(ctx.error.message);
         },
-      },
+      }
     );
   };
 
@@ -167,7 +167,7 @@ export default function SignIn() {
           setOtpLoading(false);
           alert(ctx.error.message);
         },
-      },
+      }
     );
   };
 
@@ -190,7 +190,7 @@ export default function SignIn() {
             setOtpLoading(false);
             alert(ctx.error.message);
           },
-        },
+        }
       );
     } else {
       await authClient.signIn.emailOtp(
@@ -210,7 +210,7 @@ export default function SignIn() {
             setOtpLoading(false);
             alert(ctx.error.message);
           },
-        },
+        }
       );
     }
   };
@@ -262,7 +262,7 @@ export default function SignIn() {
                   disabled={forgotLoading || !email}
                 >
                   {forgotLoading ? (
-                    <Loader2 size={14} className="animate-spin mr-1" />
+                    <Loader2 size={14} className="mr-1 animate-spin" />
                   ) : null}
                   Forgot your password?
                 </Button>
@@ -355,7 +355,7 @@ export default function SignIn() {
               className="text-sm"
               onClick={() => {
                 setSignInMethod(
-                  signInMethod === "password" ? "passwordless" : "password",
+                  signInMethod === "password" ? "passwordless" : "password"
                 );
                 setPassword("");
                 setOtp("");
@@ -444,13 +444,14 @@ export default function SignIn() {
         </form>
       </CardContent>
       <CardFooter>
-        <div className="flex justify-center w-full border-t py-4">
+        <div className="flex w-full justify-center border-t py-4">
           <p className="text-center text-xs text-neutral-500">
             Powered by{" "}
             <a
               href="https://better-auth.com"
               className="underline"
               target="_blank"
+              rel="noreferrer"
             >
               <span className="dark:text-orange-200/90">better-auth.</span>
             </a>

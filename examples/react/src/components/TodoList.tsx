@@ -4,7 +4,7 @@ import { Button } from "./ui/button";
 import { Input } from "./ui/input";
 import { useState } from "react";
 import { Check, Trash2, X } from "lucide-react";
-import { Id } from "../../convex/_generated/dataModel";
+import type { Id } from "../../convex/_generated/dataModel";
 
 // Optimistic todos get a placeholder id until the server assigns a real one.
 // Buttons on a placeholder are disabled, since the server can't act on it.
@@ -78,7 +78,7 @@ export function TodoList() {
   }
 
   return (
-    <div className="max-w-2xl mx-auto space-y-6">
+    <div className="mx-auto max-w-2xl space-y-6">
       <form
         className="flex gap-2"
         onSubmit={async (e) => {
@@ -92,7 +92,7 @@ export function TodoList() {
           value={newTodo}
           onChange={(e) => setNewTodo(e.target.value)}
           placeholder="Add a new todo..."
-          className="bg-neutral-900 border-neutral-800 text-neutral-100 placeholder:text-neutral-500"
+          className="border-neutral-800 bg-neutral-900 text-neutral-100 placeholder:text-neutral-500"
         />
         <Button type="submit" variant="secondary">
           Add
@@ -103,14 +103,14 @@ export function TodoList() {
         {todos.map((todo) => (
           <li
             key={todo._id}
-            className="flex items-center gap-3 p-3 bg-neutral-900/50 border border-neutral-800 rounded-lg group hover:bg-neutral-900 transition-colors"
+            className="group flex items-center gap-3 rounded-lg border border-neutral-800 bg-neutral-900/50 p-3 transition-colors hover:bg-neutral-900"
           >
             <Button
               variant="ghost"
               size="icon"
               disabled={isPlaceholder(todo._id)}
               onClick={() => toggle({ id: todo._id })}
-              className="text-neutral-400 hover:text-neutral-100 hover:bg-neutral-800"
+              className="text-neutral-400 hover:bg-neutral-800 hover:text-neutral-100"
             >
               {todo.completed ? (
                 <Check size={16} className="text-green-500" />
@@ -121,7 +121,7 @@ export function TodoList() {
             <span
               className={
                 todo.completed
-                  ? "flex-1 line-through text-neutral-500"
+                  ? "flex-1 text-neutral-500 line-through"
                   : "flex-1 text-neutral-100"
               }
             >
@@ -132,7 +132,7 @@ export function TodoList() {
               size="icon"
               disabled={isPlaceholder(todo._id)}
               onClick={() => remove({ id: todo._id })}
-              className="text-neutral-500 hover:text-red-400 hover:bg-neutral-800 opacity-0 group-hover:opacity-100 transition-opacity"
+              className="text-neutral-500 opacity-0 transition-opacity group-hover:opacity-100 hover:bg-neutral-800 hover:text-red-400"
             >
               <Trash2 size={16} />
             </Button>
@@ -141,7 +141,7 @@ export function TodoList() {
       </ul>
 
       {todos.length === 0 && (
-        <p className="text-center text-neutral-500 py-8">
+        <p className="py-8 text-center text-neutral-500">
           No todos yet. Add one above!
         </p>
       )}

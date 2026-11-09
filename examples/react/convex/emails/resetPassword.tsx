@@ -26,6 +26,7 @@ export default function ResetPasswordEmail({
       <Link
         href={url}
         target="_blank"
+        rel="noreferrer"
         style={{
           ...styles.link,
           display: "block",

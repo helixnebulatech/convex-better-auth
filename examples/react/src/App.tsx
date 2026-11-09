@@ -30,7 +30,7 @@ function SignInForm() {
   // The page the password reset email links to, see SignIn.tsx
   if (window.location.pathname === "/reset-password") {
     return (
-      <div className="min-h-screen w-full flex items-center justify-center p-4">
+      <div className="flex min-h-screen w-full items-center justify-center p-4">
         <div className="w-full max-w-md">
           <ResetPassword />
         </div>
@@ -38,16 +38,15 @@ function SignInForm() {
     );
   }
   return (
-    <div className="min-h-screen w-full flex items-center justify-center p-4">
+    <div className="flex min-h-screen w-full items-center justify-center p-4">
       <div className="w-full max-w-md">
         {showSignIn ? <SignIn /> : <SignUp />}
-        <p className="text-center mt-4 text-sm text-neutral-600 dark:text-neutral-400">
-          {showSignIn
-            ? "Don't have an account? "
-            : "Already have an account? "}
+        <p className="mt-4 text-center text-sm text-neutral-600 dark:text-neutral-400">
+          {showSignIn ? "Don't have an account? " : "Already have an account? "}
           <button
+            type="button"
             onClick={() => setShowSignIn(!showSignIn)}
-            className="text-orange-400 hover:text-orange-500 dark:text-orange-300 dark:hover:text-orange-200 underline"
+            className="text-orange-400 underline hover:text-orange-500 dark:text-orange-300 dark:hover:text-orange-200"
           >
             {showSignIn ? "Sign up" : "Sign in"}
           </button>

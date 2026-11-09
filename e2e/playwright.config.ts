@@ -1,6 +1,6 @@
 import { defineConfig, devices } from "@playwright/test";
 import dotenv from "dotenv";
-import path from "path";
+import path from "node:path";
 
 dotenv.config({ path: path.resolve(import.meta.dirname, ".env.test") });
 
@@ -27,6 +27,8 @@ export default defineConfig({
         // page.route, which Chromium's local network access checks treat as an
         // unknown origin and then block requests to the backend on 127.0.0.1.
         launchOptions: {
+          // Playwright turns the Chromium sandbox off by default on Linux.
+          chromiumSandbox: true,
           args: ["--disable-features=LocalNetworkAccessChecks"],
         },
       },
@@ -36,7 +38,7 @@ export default defineConfig({
       use: { ...devices["Desktop Firefox"] },
     },
     // WebKit needs system libraries (`playwright install-deps webkit`, root),
-    // so it's opt-in: E2E_WEBKIT=1 pnpm run test:e2e
+    // so it's opt-in: E2E_WEBKIT=1 bun run test:e2e
     ...(process.env.E2E_WEBKIT
       ? [{ name: "webkit", use: { ...devices["Desktop Safari"] } }]
       : []),
@@ -55,7 +57,7 @@ export default defineConfig({
       },
     },
     {
-      command: "pnpm exec vite --port 5176 --clearScreen false",
+      command: "bun x vite --port 5176 --clearScreen false",
       cwd: path.resolve(import.meta.dirname, "../examples/react"),
       url: "http://localhost:5176",
       reuseExistingServer: false,

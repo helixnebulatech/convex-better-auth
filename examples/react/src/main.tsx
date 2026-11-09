@@ -8,7 +8,7 @@ import { authClient } from "@/lib/auth-client";
 
 const convex = new ConvexReactClient(import.meta.env.VITE_CONVEX_URL as string);
 
-ReactDOM.createRoot(document.getElementById("root")!).render(
+ReactDOM.createRoot(document.querySelector("#root")!).render(
   <React.StrictMode>
     <ConvexBetterAuthProvider client={convex} authClient={authClient}>
       <App />
