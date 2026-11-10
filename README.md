@@ -1,5 +1,9 @@
 # Convex + Better Auth
 
+[![npm](https://img.shields.io/npm/v/@helixnebulatech/convex-better-auth)](https://www.npmjs.com/package/@helixnebulatech/convex-better-auth)
+[![CI](https://github.com/helixnebulatech/convex-better-auth/actions/workflows/ci.yml/badge.svg)](https://github.com/helixnebulatech/convex-better-auth/actions/workflows/ci.yml)
+[![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](./LICENSE)
+
 > [!NOTE]
 >
 > **This is a community fork maintained by
