@@ -16,6 +16,7 @@ the latest Better Auth without waiting for upstream releases.
 | 0.13.8  | `>=1.7.5 <1.8.0`  | 0.13.7 + fixes from a security audit: `clientApi` output, adapter `in` clauses |
 | 0.13.9  | `>=1.7.16 <1.8.0` | 0.13.8 + fixes backported and audited from upstream `0.12.7` and `0.13.0`      |
 | 0.13.10 | `>=1.7.18 <1.8.0` | 0.13.9 + Better Auth 1.7.18, security notes on direct `auth.api` calls         |
+| 0.14.0  | `>=1.7.25 <1.8.0` | 0.13.10 + Better Auth 1.7.25, CORS keeps the headers Better Auth exposes       |
 
 ## Use it in an app
 
@@ -23,13 +24,13 @@ Install it under the upstream name with a package alias, so no imports change:
 
 ```sh
 # npm
-npm install @convex-dev/better-auth@npm:@helixnebulatech/convex-better-auth@^0.13.10 better-auth@~1.7.18
+npm install @convex-dev/better-auth@npm:@helixnebulatech/convex-better-auth@^0.14.0 better-auth@~1.7.25
 # pnpm
-pnpm add @convex-dev/better-auth@npm:@helixnebulatech/convex-better-auth@^0.13.10 better-auth@~1.7.18
+pnpm add @convex-dev/better-auth@npm:@helixnebulatech/convex-better-auth@^0.14.0 better-auth@~1.7.25
 ```
 
-Then follow the
-[0.13 migration guide](./docs/content/docs/migrations/migrate-to-0-13.mdx).
+Then follow the [0.13](./docs/content/docs/migrations/migrate-to-0-13.mdx) and
+[0.14](./docs/content/docs/migrations/migrate-to-0-14.mdx) migration guides.
 
 ## How we decide
 
@@ -113,6 +114,10 @@ web origin.
   - The Convex JWT cookie is also cleared when a response expires the session
     cookie, as when `twoFactor` holds a sign-in back, so the previous user's JWT
     doesn't stay behind.
+  - With `cors`, the routes add their exposed headers to the
+    `Access-Control-Expose-Headers` Better Auth set, as its plugins do, instead
+    of replacing it, so cross-origin clients can read `WWW-Authenticate`,
+    `set-auth-token`, `set-auth-jwt` and `set-ott`.
   - Where the component behaves as Better Auth does on purpose (magic links
     aren't tied to a browser, adapter calls without a `where` clause), the
     [security notes](./docs/content/docs/security.mdx) document it. See

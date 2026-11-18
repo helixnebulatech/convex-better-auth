@@ -6,6 +6,7 @@ import {
 import type {
   DataModelFromSchemaDefinition,
   FunctionReference,
+  GenericActionCtx,
   GenericDataModel,
   GenericMutationCtx,
   GenericSchema,
@@ -272,6 +273,36 @@ const withOrigin = (
           duplex: "half",
         }
       : {}),
+  });
+};
+
+// The response with `exposed` added to the Access-Control-Expose-Headers that
+// Better Auth set, such as WWW-Authenticate on oauthProvider challenges or
+// set-auth-token from bearer. Better Auth's plugins merge the header the same
+// way, adding to what is there. The CORS router would replace the header, so
+// it gets no exposed headers of its own.
+const withExposedHeaders = (response: Response, exposed: string[]) => {
+  const names = new Map<string, string>();
+  for (const name of [
+    ...(response.headers.get("access-control-expose-headers") ?? "").split(","),
+    ...exposed,
+  ]) {
+    const trimmed = name.trim();
+    if (trimmed && !names.has(trimmed.toLowerCase())) {
+      names.set(trimmed.toLowerCase(), trimmed);
+    }
+  }
+  const headers = new Headers(response.headers);
+  if (names.size > 0) {
+    headers.set(
+      "Access-Control-Expose-Headers",
+      Array.from(names.values()).join(", ")
+    );
+  }
+  return new Response(response.body, {
+    status: response.status,
+    statusText: response.statusText,
+    headers,
   });
 };
 
@@ -590,7 +621,10 @@ export const createClient = <
     ) => {
       const staticAuth = createAuth({} as any);
       const path = staticAuth.options.basePath ?? "/api/auth";
-      const authRequestHandler = httpActionGeneric(async (ctx, request) => {
+      const handleAuthRequest = async (
+        ctx: GenericActionCtx<GenericDataModel>,
+        request: Request
+      ) => {
         if (config?.verbose) {
           // eslint-disable-next-line no-console
           console.log("options.baseURL", staticAuth.options.baseURL);
@@ -605,7 +639,8 @@ export const createClient = <
           console.log("response headers", redactHeaders(response.headers));
         }
         return response;
-      });
+      };
+      const authRequestHandler = httpActionGeneric(handleAuthRequest);
       const wellKnown = http.lookup("/.well-known/openid-configuration", "GET");
 
       // If registerRoutes is used multiple times, this may already be defined
@@ -676,25 +711,35 @@ export const createClient = <
           "Better-Auth-Cookie",
           "Authorization",
         ].concat(corsOpts.allowedHeaders ?? []),
-        exposedHeaders: ["Set-Better-Auth-Cookie"].concat(
-          corsOpts.exposedHeaders ?? []
-        ),
+        // Set on the response by corsAuthRequestHandler, merged with Better
+        // Auth's. The router would replace the header with its own list.
+        exposedHeaders: [],
         // The CORS router logs raw request and response headers, which carry
         // credentials. Our own verbose logs print them redacted.
         debug: false,
         enforceAllowOrigins: false,
       });
 
+      const exposedHeaders = ["Set-Better-Auth-Cookie"].concat(
+        corsOpts.exposedHeaders ?? []
+      );
+      const corsAuthRequestHandler = httpActionGeneric(async (ctx, request) =>
+        withExposedHeaders(
+          await handleAuthRequest(ctx, request),
+          exposedHeaders
+        )
+      );
+
       cors.route({
         pathPrefix: `${path}/`,
         method: "GET",
-        handler: authRequestHandler,
+        handler: corsAuthRequestHandler,
       });
 
       cors.route({
         pathPrefix: `${path}/`,
         method: "POST",
-        handler: authRequestHandler,
+        handler: corsAuthRequestHandler,
       });
     },
 
@@ -712,7 +757,10 @@ export const createClient = <
 
       const path = opts.basePath ?? "/api/auth";
       let trustedOriginsOption = opts.trustedOrigins;
-      const authRequestHandler = httpActionGeneric(async (ctx, request) => {
+      const handleAuthRequest = async (
+        ctx: GenericActionCtx<GenericDataModel>,
+        request: Request
+      ) => {
         if (config?.verbose) {
           // eslint-disable-next-line no-console
           console.log("options.baseURL", getRegistrationAuth().options.baseURL);
@@ -727,7 +775,8 @@ export const createClient = <
           console.log("response headers", redactHeaders(response.headers));
         }
         return response;
-      });
+      };
+      const authRequestHandler = httpActionGeneric(handleAuthRequest);
       const wellKnown = http.lookup("/.well-known/openid-configuration", "GET");
 
       // If registerRoutes is used multiple times, this may already be defined
@@ -791,25 +840,35 @@ export const createClient = <
           "Better-Auth-Cookie",
           "Authorization",
         ].concat(corsOpts.allowedHeaders ?? []),
-        exposedHeaders: ["Set-Better-Auth-Cookie"].concat(
-          corsOpts.exposedHeaders ?? []
-        ),
+        // Set on the response by corsAuthRequestHandler, merged with Better
+        // Auth's. The router would replace the header with its own list.
+        exposedHeaders: [],
         // The CORS router logs raw request and response headers, which carry
         // credentials. Our own verbose logs print them redacted.
         debug: false,
         enforceAllowOrigins: false,
       });
 
+      const exposedHeaders = ["Set-Better-Auth-Cookie"].concat(
+        corsOpts.exposedHeaders ?? []
+      );
+      const corsAuthRequestHandler = httpActionGeneric(async (ctx, request) =>
+        withExposedHeaders(
+          await handleAuthRequest(ctx, request),
+          exposedHeaders
+        )
+      );
+
       cors.route({
         pathPrefix: `${path}/`,
         method: "GET",
-        handler: authRequestHandler,
+        handler: corsAuthRequestHandler,
       });
 
       cors.route({
         pathPrefix: `${path}/`,
         method: "POST",
-        handler: authRequestHandler,
+        handler: corsAuthRequestHandler,
       });
     },
   };

@@ -585,6 +585,31 @@ describe("convex plugin JWT cookie", () => {
     expect((await token.json()).token).toMatch(/^ey/);
   });
 
+  // Since Better Auth 1.7.22, revoking the current session expires the
+  // session cookie, so the JWT derived from it goes too
+  for (const [path, body] of [
+    ["/revoke-sessions", {}],
+    ["/revoke-session", "own-token"],
+  ] as const) {
+    it(`drops the JWT when ${path} revokes the current session`, async () => {
+      const { auth, db } = build("twoFactor,convex");
+      const signUp = await call(auth, "/sign-up/email", {
+        body: { ...credentials, name: "JWT" },
+      });
+      const cookie = `${cookiesOf(signUp)}; better-auth.convex_jwt=current-jwt`;
+      const revoke = await call(auth, path, {
+        body: body === "own-token" ? { token: db.session[0]!.token } : body,
+        cookie,
+      });
+      expect(revoke.status).toBe(200);
+      const expired = revoke.headers
+        .getSetCookie()
+        .filter((c) => c.includes("better-auth.convex_jwt="));
+      expect(expired).toHaveLength(1);
+      expect(expired[0]).toMatch(/better-auth\.convex_jwt=;.*Max-Age=0/i);
+    });
+  }
+
   it("signs no JWT for an expired session", async () => {
     const { auth, db } = build("twoFactor,convex");
     const signUp = await call(auth, "/sign-up/email", {

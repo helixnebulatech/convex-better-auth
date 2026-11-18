@@ -123,6 +123,12 @@ If your Better Auth config uses the default `/api/auth` path, you can omit
 If you use CORS, pass `trustedOrigins` so the `OPTIONS` handler can respond
 without loading Better Auth.
 
+With `cors`, responses expose `Set-Better-Auth-Cookie`, the headers in
+`cors.exposedHeaders`, and the headers Better Auth and its plugins expose
+themselves, such as `WWW-Authenticate` on `oauthProvider` challenges or
+`set-auth-token` from `bearer`. See
+[CORS exposed headers](/security#cors-exposed-headers).
+
 ## Forwarded host headers
 
 The framework handlers (`@convex-dev/better-auth/nextjs`,

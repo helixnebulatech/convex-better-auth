@@ -1,5 +1,8 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { httpRouter } from "convex/server";
+import { betterAuth } from "better-auth";
+import { memoryAdapter } from "better-auth/adapters/memory";
+import { bearer } from "better-auth/plugins/bearer";
 import { createClient } from "./create-client.js";
 import type { TrustedOriginsOption } from "../utils/index.js";
 
@@ -436,6 +439,144 @@ describe("createClient route registration", () => {
       "https://fallback.example.com"
     );
     expect(createAuth).toHaveBeenCalledTimes(1);
+  });
+
+  // Better Auth exposes headers such as WWW-Authenticate (oauthProvider, since
+  // 1.7.23) and set-auth-token (bearer) by adding to
+  // Access-Control-Expose-Headers. The CORS router replaced the header, so
+  // cross-origin clients couldn't read them.
+  describe("Access-Control-Expose-Headers", () => {
+    const exposedOf = (response: Response) =>
+      response.headers
+        .get("access-control-expose-headers")
+        ?.split(",")
+        .map((name) => name.trim());
+    const makeAuth = (headers: Record<string, string>) => () => ({
+      handler: async () =>
+        new Response("challenge", {
+          status: 401,
+          headers: {
+            "www-authenticate": 'Bearer error="invalid_token"',
+            ...headers,
+          },
+        }),
+      options: { trustedOrigins: ["https://app.example.com"] },
+      $context: Promise.resolve({
+        options: { trustedOrigins: ["https://app.example.com"] },
+      }),
+    });
+    const request = () =>
+      new Request("https://example.convex.site/api/auth/oauth2/userinfo", {
+        headers: { origin: "https://app.example.com" },
+      });
+
+    for (const register of ["registerRoutes", "registerRoutesLazy"] as const) {
+      it(`${register} keeps the headers Better Auth exposes and adds its own`, async () => {
+        const client = createClient(component);
+        const http = httpRouter();
+        client[register](
+          http,
+          makeAuth({
+            "access-control-expose-headers": "WWW-Authenticate, set-auth-token",
+          }),
+          { cors: { exposedHeaders: ["X-Custom", "www-authenticate"] } }
+        );
+        const response = await getRouteHandler(
+          http,
+          "/api/auth/oauth2/userinfo",
+          "GET"
+        )!._handler({}, request());
+        expect(response.status).toBe(401);
+        expect(await response.text()).toBe("challenge");
+        expect(response.headers.get("www-authenticate")).toBe(
+          'Bearer error="invalid_token"'
+        );
+        expect(response.headers.get("access-control-allow-origin")).toBe(
+          "https://app.example.com"
+        );
+        expect(exposedOf(response)).toEqual([
+          "WWW-Authenticate",
+          "set-auth-token",
+          "Set-Better-Auth-Cookie",
+          "X-Custom",
+        ]);
+      });
+
+      it(`${register} exposes its own headers when Better Auth exposes none`, async () => {
+        const client = createClient(component);
+        const http = httpRouter();
+        client[register](http, makeAuth({}), { cors: true });
+        const response = await getRouteHandler(
+          http,
+          "/api/auth/oauth2/userinfo",
+          "GET"
+        )!._handler({}, request());
+        expect(exposedOf(response)).toEqual(["Set-Better-Auth-Cookie"]);
+      });
+
+      it(`${register} leaves the header alone without cors`, async () => {
+        const client = createClient(component);
+        const http = httpRouter();
+        client[register](
+          http,
+          makeAuth({ "access-control-expose-headers": "WWW-Authenticate" }),
+          {}
+        );
+        const response = await getRouteHandler(
+          http,
+          "/api/auth/oauth2/userinfo",
+          "GET"
+        )!._handler({}, request());
+        expect(exposedOf(response)).toEqual(["WWW-Authenticate"]);
+      });
+    }
+
+    it("exposes bearer's set-auth-token from a real Better Auth instance", async () => {
+      const db: Record<string, unknown[]> = {
+        user: [],
+        session: [],
+        account: [],
+        verification: [],
+      };
+      const createAuth = () =>
+        betterAuth({
+          baseURL: "https://example.convex.site",
+          secret: "test-secret-at-least-thirty-two-characters-long",
+          trustedOrigins: ["https://app.example.com"],
+          emailAndPassword: { enabled: true },
+          logger: { disabled: true },
+          database: memoryAdapter(db),
+          plugins: [bearer()],
+        });
+      const client = createClient(component);
+      const http = httpRouter();
+      client.registerRoutes(http, createAuth as any, { cors: true });
+      const response = await getRouteHandler(
+        http,
+        "/api/auth/sign-up/email",
+        "POST"
+      )!._handler(
+        {},
+        new Request("https://example.convex.site/api/auth/sign-up/email", {
+          method: "POST",
+          headers: {
+            origin: "https://app.example.com",
+            "content-type": "application/json",
+          },
+          body: JSON.stringify({
+            email: "bearer@example.com",
+            password: "testpassword123",
+            name: "Bearer",
+          }),
+        })
+      );
+      expect(response.status).toBe(200);
+      expect(response.headers.get("set-auth-token")).toBeTruthy();
+      expect(exposedOf(response)).toEqual([
+        "set-auth-token",
+        "Set-Better-Auth-Cookie",
+      ]);
+    });
   });
 });
 

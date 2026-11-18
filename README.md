@@ -42,13 +42,13 @@ imports keep working:
 
 ```sh
 # npm
-npm install @convex-dev/better-auth@npm:@helixnebulatech/convex-better-auth@^0.13.10 better-auth@~1.7.18
+npm install @convex-dev/better-auth@npm:@helixnebulatech/convex-better-auth@^0.14.0 better-auth@~1.7.25
 # pnpm
-pnpm add @convex-dev/better-auth@npm:@helixnebulatech/convex-better-auth@^0.13.10 better-auth@~1.7.18
+pnpm add @convex-dev/better-auth@npm:@helixnebulatech/convex-better-auth@^0.14.0 better-auth@~1.7.25
 ```
 
-Then follow the
-[0.13 migration guide](./docs/content/docs/migrations/migrate-to-0-13.mdx).
+Then follow the [0.13](./docs/content/docs/migrations/migrate-to-0-13.mdx) and
+[0.14](./docs/content/docs/migrations/migrate-to-0-14.mdx) migration guides.
 Everything else in this README and in the
 [official docs](https://labs.convex.dev/better-auth) still applies.
 

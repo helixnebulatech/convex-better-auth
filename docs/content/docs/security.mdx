@@ -272,6 +272,33 @@ stricter and only returns the core Better Auth user fields and the Convex
 document fields. `getAuthUser` and `safeGetAuthUser` return the whole document,
 as they're meant for server code.
 
+## CORS exposed headers
+
+With `registerRoutes(http, createAuth, { cors })` or `registerRoutesLazy`, the
+`Access-Control-Expose-Headers` of a response is the list Better Auth set, plus
+`Set-Better-Auth-Cookie` and `cors.exposedHeaders`. Better Auth adds to this
+header rather than replace it: `bearer`, `jwt` and `oneTimeToken` add
+`set-auth-token`, `set-auth-jwt` and `set-ott` to what is there, the endpoint
+dispatcher keeps the names set before an error (1.7.25), and since 1.7.23
+`oauthProvider` endpoints expose `WWW-Authenticate` on their 401 challenges,
+which Better Auth asks CORS layers to keep. The component merges the same way,
+comparing names without regard to case, as the dispatcher and `oauthProvider`
+do. Before 0.14.0 the CORS router replaced the list with its own, and those
+headers were hidden from cross-origin clients. Exposing a header doesn't change
+which origins are allowed: only trusted origins get
+`Access-Control-Allow-Origin`, and without it the browser exposes nothing.
+
+The component only adds headers Better Auth already exposes. The `convex` plugin
+uses `bearer` to read the `Authorization` header but doesn't send
+`set-auth-token`, so the session token is only exposed if you add `bearer`
+yourself.
+
+Routes you register yourself aren't covered. If you serve Better Auth through
+your own CORS layer, such as Hono's `cors` middleware, which also replaces the
+header, add the headers your clients read to its exposed list. The same goes for
+HTTP actions that use `@better-auth/mcp` or `oauthProviderResourceClient`
+challenges: expose `WWW-Authenticate` there.
+
 ## Verbose logs
 
 `verbose: true` logs request and response headers with cookies, tokens and API
