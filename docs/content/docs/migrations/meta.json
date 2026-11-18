@@ -1,7 +1,6 @@
 {
   "title": "Migrations",
   "pages": [
-    "migrate-to-0-14",
     "migrate-to-0-13",
     "migrate-to-0-12",
     "migrate-to-0-11",

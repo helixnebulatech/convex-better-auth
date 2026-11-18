@@ -1,15 +1,14 @@
 ---
-"@helixnebulatech/convex-better-auth": minor
+"@helixnebulatech/convex-better-auth": patch
 ---
 
 The `better-auth` peer range is now `>=1.7.25 <1.8.0`, up from `>=1.7.18`.
 Install `better-auth@~1.7.25`, and the same version of any `@better-auth/*`
 package. Better Auth versions below 1.7.25 aren't supported, and package
 managers that enforce peer ranges (npm without `legacy-peer-deps`, pnpm with
-strict peer dependencies) reject the install with them. This is a minor release
-because of that floor and the CORS change below; the component functions, the
-schema and the options don't change. See the
-[0.14 migration guide](https://github.com/helixnebulatech/convex-better-auth/blob/main/docs/content/docs/migrations/migrate-to-0-14.mdx).
+strict peer dependencies) reject the install with them. The component functions,
+the schema and the options don't change. See
+[Upgrading to 0.13.11](https://github.com/helixnebulatech/convex-better-auth/blob/main/docs/content/docs/migrations/migrate-to-0-13.mdx#upgrading-to-01311).
 
 **CORS keeps the headers Better Auth exposes.** With `cors`, `registerRoutes`
 and `registerRoutesLazy` replaced `Access-Control-Expose-Headers` with their own

@@ -16,7 +16,7 @@ the latest Better Auth without waiting for upstream releases.
 | 0.13.8  | `>=1.7.5 <1.8.0`  | 0.13.7 + fixes from a security audit: `clientApi` output, adapter `in` clauses |
 | 0.13.9  | `>=1.7.16 <1.8.0` | 0.13.8 + fixes backported and audited from upstream `0.12.7` and `0.13.0`      |
 | 0.13.10 | `>=1.7.18 <1.8.0` | 0.13.9 + Better Auth 1.7.18, security notes on direct `auth.api` calls         |
-| 0.14.0  | `>=1.7.25 <1.8.0` | 0.13.10 + Better Auth 1.7.25, CORS keeps the headers Better Auth exposes       |
+| 0.13.11 | `>=1.7.25 <1.8.0` | 0.13.10 + Better Auth 1.7.25, CORS keeps the headers Better Auth exposes       |
 
 ## Use it in an app
 
@@ -24,13 +24,13 @@ Install it under the upstream name with a package alias, so no imports change:
 
 ```sh
 # npm
-npm install @convex-dev/better-auth@npm:@helixnebulatech/convex-better-auth@^0.14.0 better-auth@~1.7.25
+npm install @convex-dev/better-auth@npm:@helixnebulatech/convex-better-auth@^0.13.11 better-auth@~1.7.25
 # pnpm
-pnpm add @convex-dev/better-auth@npm:@helixnebulatech/convex-better-auth@^0.14.0 better-auth@~1.7.25
+pnpm add @convex-dev/better-auth@npm:@helixnebulatech/convex-better-auth@^0.13.11 better-auth@~1.7.25
 ```
 
-Then follow the [0.13](./docs/content/docs/migrations/migrate-to-0-13.mdx) and
-[0.14](./docs/content/docs/migrations/migrate-to-0-14.mdx) migration guides.
+Then follow the
+[0.13 migration guide](./docs/content/docs/migrations/migrate-to-0-13.mdx).
 
 ## How we decide
 

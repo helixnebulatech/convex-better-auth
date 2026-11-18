@@ -283,7 +283,7 @@ dispatcher keeps the names set before an error (1.7.25), and since 1.7.23
 `oauthProvider` endpoints expose `WWW-Authenticate` on their 401 challenges,
 which Better Auth asks CORS layers to keep. The component merges the same way,
 comparing names without regard to case, as the dispatcher and `oauthProvider`
-do. Before 0.14.0 the CORS router replaced the list with its own, and those
+do. Before 0.13.11 the CORS router replaced the list with its own, and those
 headers were hidden from cross-origin clients. Exposing a header doesn't change
 which origins are allowed: only the origins in Better Auth's `trustedOrigins`
 and in `cors.allowedOrigins` get `Access-Control-Allow-Origin`, and without it

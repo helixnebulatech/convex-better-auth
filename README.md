@@ -45,16 +45,14 @@ imports keep working:
 
 ```sh
 # npm
-npm install @convex-dev/better-auth@npm:@helixnebulatech/convex-better-auth@^0.14.0 better-auth@~1.7.25
+npm install @convex-dev/better-auth@npm:@helixnebulatech/convex-better-auth@^0.13.11 better-auth@~1.7.25
 # pnpm
-pnpm add @convex-dev/better-auth@npm:@helixnebulatech/convex-better-auth@^0.14.0 better-auth@~1.7.25
+pnpm add @convex-dev/better-auth@npm:@helixnebulatech/convex-better-auth@^0.13.11 better-auth@~1.7.25
 ```
 
 Then follow the
-[0.13](https://github.com/helixnebulatech/convex-better-auth/blob/main/docs/content/docs/migrations/migrate-to-0-13.mdx)
-and
-[0.14](https://github.com/helixnebulatech/convex-better-auth/blob/main/docs/content/docs/migrations/migrate-to-0-14.mdx)
-migration guides. Everything else in this README and in the
+[0.13 migration guide](https://github.com/helixnebulatech/convex-better-auth/blob/main/docs/content/docs/migrations/migrate-to-0-13.mdx).
+Everything else in this README and in the
 [official docs](https://labs.convex.dev/better-auth) still applies.
 
 ### Maintenance and contributing
