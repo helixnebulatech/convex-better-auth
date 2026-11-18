@@ -26,8 +26,11 @@ It starts from upstream `0.12.5` and the Better Auth 1.7 work in
 with fixes for issues we found while testing against Better Auth 1.7.7. It also
 includes the bug fixes from the open upstream pull requests, each verified with
 a reproduction test before it was taken, and security fixes from our own audit.
-See [FORK.md](./FORK.md) for the full list of differences from upstream, and
-[SECURITY.md](./SECURITY.md) to report a vulnerability.
+See
+[FORK.md](https://github.com/helixnebulatech/convex-better-auth/blob/main/FORK.md)
+for the full list of differences from upstream, and
+[SECURITY.md](https://github.com/helixnebulatech/convex-better-auth/blob/main/SECURITY.md)
+to report a vulnerability.
 
 ### Who we are
 
@@ -42,13 +45,13 @@ imports keep working:
 
 ```sh
 # npm
-npm install @convex-dev/better-auth@npm:@helixnebulatech/convex-better-auth@^0.13.10 better-auth@~1.7.18
+npm install @convex-dev/better-auth@npm:@helixnebulatech/convex-better-auth@^0.13.11 better-auth@~1.7.25
 # pnpm
-pnpm add @convex-dev/better-auth@npm:@helixnebulatech/convex-better-auth@^0.13.10 better-auth@~1.7.18
+pnpm add @convex-dev/better-auth@npm:@helixnebulatech/convex-better-auth@^0.13.11 better-auth@~1.7.25
 ```
 
 Then follow the
-[0.13 migration guide](./docs/content/docs/migrations/migrate-to-0-13.mdx).
+[0.13 migration guide](https://github.com/helixnebulatech/convex-better-auth/blob/main/docs/content/docs/migrations/migrate-to-0-13.mdx).
 Everything else in this README and in the
 [official docs](https://labs.convex.dev/better-auth) still applies.
 

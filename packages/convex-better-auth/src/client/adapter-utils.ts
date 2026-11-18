@@ -212,12 +212,15 @@ const findIndex = (
   const indexes = table[" indexes"]();
   const sortField = args.sortBy?.field;
 
-  // We internally use _creationTime in place of Better Auth's createdAt
+  // A range on createdAt is applied to the stored value, after the index
+  // (see generateQuery), so it's never an index field. Sorting by createdAt
+  // follows the stored value too, like Better Auth's adapters, so it needs
+  // an index ending in createdAt like any other sort field.
   const indexFields = indexEqFields
     .map(([field]) => field)
     .concat(boundField && boundField !== "createdAt" ? boundField : "")
     .concat(
-      sortField && sortField !== "createdAt" && boundField !== sortField
+      sortField && (boundField !== sortField || boundField === "createdAt")
         ? sortField
         : ""
     )
@@ -225,8 +228,8 @@ const findIndex = (
   if (!indexFields.length && !boundField && !sortField) {
     return;
   }
-  // Use the built in _creationTime index if bounding or sorting by createdAt
-  // with no other fields
+  // Use the built in _creationTime index if bounding by createdAt with no
+  // other fields
   const index = !indexFields.length
     ? {
         indexDescriptor: "by_creation_time",
@@ -236,10 +239,11 @@ const findIndex = (
         const fieldsMatch = indexFields.every(
           (field, idx) => field === fields[idx]
         );
-        // If sorting by createdAt, no intermediate fields can be on the index
-        // as they may override the createdAt sort order.
+        // With a range on createdAt, only an index on exactly the other fields
+        // is used. This dates from when the range was an index range on
+        // _creationTime; it's kept so that change only affects sorting.
         const boundFieldMatch =
-          boundField === "createdAt" || sortField === "createdAt"
+          boundField === "createdAt"
             ? indexFields.length === fields.length
             : true;
         return fieldsMatch && boundFieldMatch;
@@ -697,9 +701,10 @@ export const incrementedFields = (
   return update;
 };
 
-// Sorting by createdAt or the creation order uses _creationTime
-const isCreationSort = (field: string) =>
-  field === "createdAt" || field === "_creationTime";
+// Sorting by the creation order uses _creationTime. createdAt sorts by its
+// stored value, which can differ: Better Auth sets it before the write, and
+// imported rows keep their own dates.
+const isCreationSort = (field: string) => field === "_creationTime";
 
 export const paginate = async <
   Doc extends DocumentByName<GenericDataModel, T>,
@@ -804,6 +809,7 @@ export const paginate = async <
     args.where?.some(
       (w) =>
         ["lt", "lte", "gt", "gte"].includes(w.operator ?? "") &&
+        w.field !== "createdAt" &&
         !isCreationSort(w.field) &&
         w.field !== args.sortBy!.field
     )
@@ -852,7 +858,8 @@ export const paginate = async <
       cursor = result.continueCursor;
     }
     const direction = sortBy.direction === "desc" ? -1 : 1;
-    // createdAt sorts by _creationTime, as the index paths do
+    // By the field, then by creation order, as a Convex index ending in the
+    // field does
     const sorted = docs.sort(
       (a, b) =>
         (isCreationSort(sortBy.field)

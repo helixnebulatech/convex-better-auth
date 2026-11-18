@@ -24,12 +24,12 @@
     "@changesets/changelog-github": "1.0.1",
     "@changesets/cli": "3.0.3",
     "@convex-dev/eslint-plugin": "5.0.1",
-    "@types/node": "24.19.2",
-    "oxfmt": "0.77.0",
-    "oxlint": "1.92.0",
-    "oxlint-tsgolint": "7.0.2006",
+    "@types/node": "26.6.6",
+    "oxfmt": "0.78.0",
+    "oxlint": "1.93.0",
+    "oxlint-tsgolint": "7.0.2007",
     "typescript": "7.0.2",
-    "ultracite": "8.1.1"
+    "ultracite": "8.2.1"
   },
   "packageManager": "bun@1.4.4",
   "trustedDependencies": [

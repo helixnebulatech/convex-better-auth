@@ -178,6 +178,18 @@ database:
   returning the wrong rows. Add an index ending in the sort field for lists you
   sort often. A range (`lt`, `gt`...) on another field also sorts this way, as
   an index scan with a range returns rows in the order of the ranged field.
+  `createdAt` sorts by its stored value too, as `ORDER BY createdAt` does in
+  Better Auth's SQL adapters, and not by Convex's `_creationTime`: Better Auth
+  sets `createdAt` before the write, so two concurrent writes can commit in the
+  other order, and imported rows keep their own dates. Better Auth declares no
+  index on `createdAt`, so these sorts read the matching rows and sort them. The
+  ones Better Auth and its plugins make are filtered by an indexed field, such
+  as a verification's `identifier`, and read few rows. A sort of a whole table
+  by `createdAt`, such as the admin plugin's `listUsers` with
+  `sortBy: "createdAt"`, reads the whole table. If that goes over Convex's read
+  limit the query fails, and the admin plugin, which catches the error, returns
+  an empty list. Add an index on `createdAt` to the table in a Local Install
+  schema if you sort a large table that way.
 - **Updating many rows.** `updateMany` updates every row that matches when it
   runs once, as SQL's `UPDATE ... WHERE`. The component collects the matching
   ids first and updates them in chunks of 200, applying the `where` again in
@@ -271,6 +283,37 @@ which leaves out fields marked `returned: false`. The public query from
 stricter and only returns the core Better Auth user fields and the Convex
 document fields. `getAuthUser` and `safeGetAuthUser` return the whole document,
 as they're meant for server code.
+
+## CORS exposed headers
+
+With `registerRoutes(http, createAuth, { cors })` or `registerRoutesLazy`, the
+`Access-Control-Expose-Headers` of a response is the list Better Auth set, plus
+`Set-Better-Auth-Cookie` and `cors.exposedHeaders`. Better Auth adds to this
+header rather than replace it: `bearer`, `jwt` and `oneTimeToken` add
+`set-auth-token`, `set-auth-jwt` and `set-ott` to what is there, the endpoint
+dispatcher keeps the names set before an error (1.7.25), and since 1.7.23
+`oauthProvider` endpoints expose `WWW-Authenticate` on their 401 challenges,
+which Better Auth asks CORS layers to keep. The component merges the same way,
+comparing names without regard to case, as the dispatcher and `oauthProvider`
+do. Before 0.13.11 the CORS router replaced the list with its own, and those
+headers were hidden from cross-origin clients. Exposing a header doesn't change
+which origins are allowed: only the origins in Better Auth's `trustedOrigins`
+(or in the `trustedOrigins` option of `registerRoutesLazy`, which replaces it
+for CORS) and in `cors.allowedOrigins` get `Access-Control-Allow-Origin`, and
+without it the browser exposes nothing. Only list origins you trust in those
+options: they can read every exposed header, including `Set-Better-Auth-Cookie`
+with the cross domain plugin.
+
+The component only adds headers Better Auth already exposes. The `convex` plugin
+uses `bearer` to read the `Authorization` header but doesn't send
+`set-auth-token`, so the session token is only exposed if you add `bearer`
+yourself.
+
+Routes you register yourself aren't covered. If you serve Better Auth through
+your own CORS layer, such as Hono's `cors` middleware, which replaces the header
+when its `exposeHeaders` isn't empty, add the headers your clients read to its
+exposed list. The same goes for HTTP actions that use `@better-auth/mcp` or
+`oauthProviderResourceClient` challenges: expose `WWW-Authenticate` there.
 
 ## Verbose logs
 
