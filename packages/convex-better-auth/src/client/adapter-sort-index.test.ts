@@ -161,3 +161,52 @@ describe("sortBy ties follow creation order", () => {
     expect(rows.map((row) => row.userId)).toEqual(["z", "y", "x"]);
   });
 });
+
+describe("sortBy scanning the sort index across pages", () => {
+  // A page reads at most 200 rows, so a sparse filter returns empty pages in
+  // between matches. Following the cursors must reach every match once.
+  it("continues past pages with no matching rows", async () => {
+    const t = convexTest(schema, import.meta.glob("../component/**/*.*s"));
+    const now = Date.now();
+    const matches = new Set([0, 250, 499]);
+    await t.run(async (ctx) => {
+      for (let i = 0; i < 500; i++) {
+        await ctx.db.insert("user", {
+          name: `u${String(i).padStart(3, "0")}`,
+          email: `u${i}@example.com`,
+          emailVerified: matches.has(i),
+          createdAt: now - i,
+          updatedAt: now,
+        });
+      }
+    });
+    const names = await t.run(async (ctx) => {
+      const found: string[] = [];
+      let cursor: string | null = null;
+      let pages = 0;
+      for (;;) {
+        const result: { page: any[]; isDone: boolean; continueCursor: string } =
+          await paginate(ctx as any, schema, getAuthTables({}), {
+            model: "user",
+            where: [{ field: "emailVerified", value: true }],
+            sortBy: createdAtDesc,
+            paginationOpts: { numItems: 1, cursor },
+          } as any);
+        found.push(...result.page.map((doc: any) => doc.name));
+        pages++;
+        if (result.isDone) {
+          break;
+        }
+        cursor = result.continueCursor;
+        if (pages > 50) {
+          throw new Error("pagination didn't finish");
+        }
+      }
+      return { found, pages };
+    });
+    expect(names.found).toEqual(["u000", "u250", "u499"]);
+    // More pages than matches: some pages came back empty, and the rows
+    // weren't all read in one query
+    expect(names.pages).toBeGreaterThan(names.found.length);
+  });
+});
