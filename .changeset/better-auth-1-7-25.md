@@ -24,12 +24,12 @@ without regard to case. That's what Better Auth does: its endpoint dispatcher
 and `oneTimeToken` add to it, while no official package replaces it. Merging was
 chosen over adding `WWW-Authenticate` to the default list, which would fix one
 header and hide the next one a plugin exposes. Only the origins in
-`trustedOrigins` and `cors.allowedOrigins` get `Access-Control-Allow-Origin`, so
-no other origin can read more than before. The `convex` plugin only uses
-`bearer` to read the `Authorization` header, so the session token is exposed
-only when an app adds `bearer` itself. The security notes and the Hono guide,
-whose `cors` middleware also replaces the header, explain what to expose in your
-own CORS layer.
+`trustedOrigins` (or the `trustedOrigins` option of `registerRoutesLazy`) and
+`cors.allowedOrigins` get `Access-Control-Allow-Origin`, so no other origin can
+read more than before. The `convex` plugin only uses `bearer` to read the
+`Authorization` header, so the session token is exposed only when an app adds
+`bearer` itself. The security notes and the Hono guide, whose `cors` middleware
+also replaces the header, explain what to expose in your own CORS layer.
 
 **`createdAt` sorts by its stored value.** The adapter sorted `createdAt` by
 Convex's `_creationTime`, inherited from upstream. The two differ when writes

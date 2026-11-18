@@ -298,10 +298,11 @@ comparing names without regard to case, as the dispatcher and `oauthProvider`
 do. Before 0.13.11 the CORS router replaced the list with its own, and those
 headers were hidden from cross-origin clients. Exposing a header doesn't change
 which origins are allowed: only the origins in Better Auth's `trustedOrigins`
-and in `cors.allowedOrigins` get `Access-Control-Allow-Origin`, and without it
-the browser exposes nothing. Only list origins you trust in
-`cors.allowedOrigins`: they can read every exposed header, including
-`Set-Better-Auth-Cookie` with the cross domain plugin.
+(or in the `trustedOrigins` option of `registerRoutesLazy`, which replaces it
+for CORS) and in `cors.allowedOrigins` get `Access-Control-Allow-Origin`, and
+without it the browser exposes nothing. Only list origins you trust in those
+options: they can read every exposed header, including `Set-Better-Auth-Cookie`
+with the cross domain plugin.
 
 The component only adds headers Better Auth already exposes. The `convex` plugin
 uses `bearer` to read the `Authorization` header but doesn't send
