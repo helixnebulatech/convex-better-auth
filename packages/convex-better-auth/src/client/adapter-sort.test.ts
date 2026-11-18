@@ -294,3 +294,116 @@ describe("sortBy on an id in lookup", () => {
   });
 });
 const names = (rows: { name: string }[]) => rows.map((row) => row.name);
+
+// Better Auth's adapters order createdAt by the stored value (ORDER BY
+// createdAt in SQL, a $sort in Mongo, an in-memory sort in the memory
+// adapter). It can differ from Convex's _creationTime: Better Auth sets
+// createdAt before the write, so concurrent writes can commit out of order,
+// and imported rows keep their own dates. Since Better Auth 1.7.22,
+// consuming a verification value picks the row with the latest createdAt and
+// deletes the ones before it, so the two orders must not be mixed.
+describe("sortBy createdAt follows the stored value", () => {
+  const setup = async () => {
+    const t = convexTest(schema, import.meta.glob("../component/**/*.*s"));
+    const now = Date.now();
+    // Created a, b, c, d; createdAt order b, d, a, c
+    const rows = [
+      { token: "a", userId: "u1", createdAt: now + 30, expiresAt: now + 4000 },
+      { token: "b", userId: "u1", createdAt: now + 10, expiresAt: now + 3000 },
+      { token: "c", userId: "u2", createdAt: now + 40, expiresAt: now + 2000 },
+      { token: "d", userId: "u1", createdAt: now + 20, expiresAt: now + 1000 },
+    ];
+    await t.run(async (ctx) => {
+      for (const row of rows) {
+        await ctx.db.insert("session", { ...row, updatedAt: now });
+      }
+    });
+    const ctx = {
+      runQuery: t.query.bind(t),
+      runMutation: t.mutation.bind(t),
+    } as any;
+    const adapter = createClient<DataModel>({ adapter: api.adapter } as any, {
+      verbose: false,
+    }).adapter(ctx)({});
+    const find = async (
+      where: Parameters<typeof adapter.findMany>[0]["where"],
+      direction: "asc" | "desc",
+      limit?: number
+    ) =>
+      (
+        await adapter.findMany<{ token: string }>({
+          model: "session",
+          where,
+          sortBy: { field: "createdAt", direction },
+          limit,
+        })
+      ).map((row) => row.token);
+    return { find, now };
+  };
+
+  it("without a where clause", async () => {
+    const { find } = await setup();
+    expect(await find(undefined, "asc")).toEqual(["b", "d", "a", "c"]);
+    expect(await find(undefined, "desc", 2)).toEqual(["c", "a"]);
+  });
+
+  it("with an eq on an indexed field", async () => {
+    const { find } = await setup();
+    const where = [{ field: "userId", value: "u1" }];
+    expect(await find(where, "desc")).toEqual(["a", "d", "b"]);
+    expect(await find(where, "desc", 1)).toEqual(["a"]);
+  });
+
+  it("with a range on another field", async () => {
+    const { find, now } = await setup();
+    const where = [
+      {
+        field: "expiresAt",
+        operator: "gt" as const,
+        value: new Date(now + 1500),
+      },
+    ];
+    expect(await find(where, "asc")).toEqual(["b", "a", "c"]);
+  });
+
+  it("with a range on createdAt", async () => {
+    const { find, now } = await setup();
+    const where = [
+      {
+        field: "createdAt",
+        operator: "lte" as const,
+        value: new Date(now + 30),
+      },
+    ];
+    expect(await find(where, "desc")).toEqual(["a", "d", "b"]);
+  });
+
+  it("with an in lookup", async () => {
+    const { find } = await setup();
+    const where = [
+      { field: "userId", operator: "in" as const, value: ["u1", "u2"] },
+    ];
+    expect(await find(where, "desc")).toEqual(["c", "a", "d", "b"]);
+  });
+
+  it("with an in lookup on a unique field", async () => {
+    const { find } = await setup();
+    const where = [
+      {
+        field: "token",
+        operator: "in" as const,
+        value: ["a", "b", "c", "d"],
+      },
+    ];
+    expect(await find(where, "asc")).toEqual(["b", "d", "a", "c"]);
+  });
+
+  it("with an OR query", async () => {
+    const { find } = await setup();
+    const where = [
+      { field: "token", value: "a", connector: "OR" as const },
+      { field: "token", value: "d", connector: "OR" as const },
+    ];
+    expect(await find(where, "asc")).toEqual(["d", "a"]);
+  });
+});

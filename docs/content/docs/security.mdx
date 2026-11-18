@@ -178,6 +178,15 @@ database:
   returning the wrong rows. Add an index ending in the sort field for lists you
   sort often. A range (`lt`, `gt`...) on another field also sorts this way, as
   an index scan with a range returns rows in the order of the ranged field.
+  `createdAt` sorts by its stored value too, as `ORDER BY createdAt` does in
+  Better Auth's SQL adapters, and not by Convex's `_creationTime`: Better Auth
+  sets `createdAt` before the write, so two concurrent writes can commit in the
+  other order, and imported rows keep their own dates. Better Auth declares no
+  index on `createdAt`, so these sorts read the matching rows and sort them. The
+  ones Better Auth and its plugins make are filtered by an indexed field, such
+  as a verification's `identifier`, and read few rows. A sort of a whole table
+  by `createdAt`, such as the admin plugin's `listUsers` with
+  `sortBy: "createdAt"`, reads the whole table.
 - **Updating many rows.** `updateMany` updates every row that matches when it
   runs once, as SQL's `UPDATE ... WHERE`. The component collects the matching
   ids first and updates them in chunks of 200, applying the `where` again in

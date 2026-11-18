@@ -160,7 +160,8 @@ web origin.
     disappeared, and without the Convex ones Convex can't validate its JWT.
 - Database adapter behaviour matching Better Auth's SQL adapters: null unique
   fields don't conflict, `sortBy` is honoured without an index and with a range
-  on another field, renamed fields work in `sortBy` and `select`, and ids chosen
+  on another field, `createdAt` sorts by its stored value rather than
+  `_creationTime`, renamed fields work in `sortBy` and `select`, and ids chosen
   by Better Auth are kept with `generateId: "uuid"`. A comparison with
   `undefined` matches no row, as Kysely binds it as `NULL`.
 - Upstream `0.12.7` and `0.13.0`: both release Better Auth 1.7 support in

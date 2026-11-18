@@ -614,6 +614,22 @@ remove them. If you serve Better Auth through your own CORS layer, such as
 Hono's `cors` middleware, add them to its exposed list. See
 [CORS exposed headers](/security#cors-exposed-headers).
 
+### Sorting by `createdAt`
+
+`sortBy: { field: "createdAt" }` now follows the stored `createdAt`, as in
+Better Auth's adapters. It used to follow Convex's `_creationTime`, which
+differs for rows written concurrently or imported with their own dates. Since
+Better Auth 1.7.22 this matters for verification values: when two requests for
+the same identifier commit out of order, consuming one used to leave the newer
+one valid until it expired.
+
+Better Auth declares no index on `createdAt`, so these sorts read every row that
+matches the query and sort them, as for any field without an index. The sorts
+Better Auth and its plugins make are filtered by an indexed field and read few
+rows. If you sort a whole large table by `createdAt`, such as the admin plugin's
+`listUsers`, add an index on `createdAt` to that table in a Local Install
+schema. See [Sorting](/security#database-adapter).
+
 ### Changes in Better Auth 1.7.19 to 1.7.25
 
 These Better Auth changes can affect Convex apps. Read the

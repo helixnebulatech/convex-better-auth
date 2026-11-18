@@ -31,8 +31,27 @@ only when an app adds `bearer` itself. The security notes and the Hono guide,
 whose `cors` middleware also replaces the header, explain what to expose in your
 own CORS layer.
 
+**`createdAt` sorts by its stored value.** The adapter sorted `createdAt` by
+Convex's `_creationTime`, inherited from upstream. The two differ when writes
+commit out of order (Better Auth sets `createdAt` before the write) or rows are
+imported with their own dates. Better Auth's adapters order by the stored value
+(`ORDER BY createdAt` in SQL, `$sort` in Mongo, an in-memory sort in the memory
+adapter), and since 1.7.22 it consumes a verification value by picking the row
+with the latest `createdAt` and deleting the ones up to it. With the old order,
+two OTPs for the same identifier committed out of order left the newer one valid
+after the older one was consumed. `createdAt` is now a sort field like any
+other: an index ending in it is used if there is one, and otherwise the matching
+rows are read and sorted, as for any field without an index. Better Auth
+declares no index on `createdAt` and every plugin's `createdAt` sort is filtered
+by an indexed field (a verification's `identifier`, an API key's `referenceId`,
+an organization's members), so no index was added and the schema doesn't change.
+Sorting a whole large table by `createdAt`, such as the admin plugin's
+`listUsers`, now reads the whole table, and can fail on Convex's read limit
+instead of returning rows in the wrong order. Reported by CodeRabbit on the
+release pull request.
+
 **Tested with Better Auth 1.7.19 to 1.7.25.** The release notes were checked
-against the component, and nothing else needed a change:
+against the component, and nothing else needed a change in the component:
 
 - Verification values (password reset, email OTP, magic link, phone and two
   factor OTP) are consumed by deleting the identifier's older rows with `id ne`

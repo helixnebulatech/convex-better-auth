@@ -94,9 +94,7 @@ describe("verification consume, as in Better Auth 1.7.22+", () => {
     expect(await remaining()).toEqual(["latest", "newer", "other"]);
   });
 
-  // Rows created in createdAt order, as Better Auth creates them. The
-  // adapter sorts createdAt by _creationTime, so out of order rows would pick
-  // the last one created instead.
+  // Rows created in createdAt order, as Better Auth creates them
   it("consumeVerificationValue consumes the latest row and drops the older ones", async () => {
     const { context, remaining } = await setup();
     // Rows of other identifiers that match the other delete conditions
@@ -114,6 +112,35 @@ describe("verification consume, as in Better Auth 1.7.22+", () => {
     expect(await remaining()).toEqual(others);
     expect(
       await context.internalAdapter.consumeVerificationValue("otp:c")
+    ).toBeNull();
+  });
+
+  // Two near-simultaneous requests can commit out of createdAt order. Better
+  // Auth consumes the row with the latest createdAt and deletes the older
+  // one, so no row of the identifier stays valid.
+  it("consumes the latest createdAt when rows commit out of order", async () => {
+    const { context } = await setup();
+    const at = Date.now();
+    for (const [value, offset] of [
+      ["newer", 2],
+      ["older", 1],
+    ] as const) {
+      await context.adapter.create({
+        model: "verification",
+        data: {
+          identifier: "otp:race",
+          value,
+          expiresAt: new Date(at + 60_000),
+          createdAt: new Date(at + offset),
+          updatedAt: new Date(at + offset),
+        },
+      });
+    }
+    const consumed =
+      await context.internalAdapter.consumeVerificationValue("otp:race");
+    expect(consumed?.value).toBe("newer");
+    expect(
+      await context.internalAdapter.consumeVerificationValue("otp:race")
     ).toBeNull();
   });
 });
