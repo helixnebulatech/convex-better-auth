@@ -581,8 +581,8 @@ for the URLs to validate when a function passes them to `auth.api`.
 
 ## Upgrading to 0.13.11
 
-0.13.11 needs Better Auth 1.7.25 or later. The component functions, the schema
-and the options don't change.
+0.13.11 needs Better Auth 1.7.25 or later. The component functions and the
+options don't change. The schema gets one index, `user.createdAt`.
 
 Upgrade the component, Better Auth and every `@better-auth/*` package you use,
 such as `@better-auth/expo` or `@better-auth/oauth-provider`, in one command, so
@@ -593,8 +593,8 @@ Auth:
 npm install @convex-dev/better-auth@npm:@helixnebulatech/convex-better-auth@^0.13.11 better-auth@~1.7.25
 ```
 
-With Local Install, the schema generated with Better Auth 1.7.25 is the same as
-with 1.7.18, so there's nothing to regenerate.
+With Local Install, regenerate the schema to add the `createdAt` index on
+`user`. See [Regenerate schema](#regenerate-schema).
 
 ### CORS exposed headers
 
@@ -623,14 +623,14 @@ Better Auth 1.7.22 this matters for verification values: when two requests for
 the same identifier commit out of order, consuming one used to leave the newer
 one valid until it expired.
 
-Better Auth declares no index on `createdAt`, so these sorts read every row that
-matches the query and sort them, as for any field without an index. The sorts
-Better Auth and its plugins make are filtered by an indexed field and read few
-rows. If you sort a whole large table by `createdAt`, such as the admin plugin's
-`listUsers` with `sortBy: "createdAt"`, add an index on `createdAt` to that
-table in a Local Install schema: without it the query reads the whole table, and
-past Convex's read limit the admin plugin returns an empty list, as it catches
-the error. See [Sorting](/security#database-adapter).
+The sorts Better Auth and its plugins make on `createdAt` are filtered by an
+indexed field and read few rows. The admin plugin's `listUsers` can sort the
+whole user table by `createdAt`, so the schema now indexes `user.createdAt`, and
+`listUsers` reads it a page at a time, also with a filter such as
+`filterField: "role"`: when no index covers both the filter and the sort, the
+component scans the sort field's index and checks the filter on each row,
+instead of reading every row and sorting them in one query. See
+[Sorting](/security#database-adapter).
 
 ### Changes in Better Auth 1.7.19 to 1.7.25
 

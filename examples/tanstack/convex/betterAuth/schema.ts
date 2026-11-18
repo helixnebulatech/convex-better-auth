@@ -3,7 +3,7 @@
  * To regenerate the schema, from your project root:
  *
  *   cd convex/betterAuth
- *   npx auth generate
+ *   npx auth generate --output schema.ts
  *
  * To customize the schema, generate to an alternate file and import
  * the table definitions to your schema file. See
@@ -28,7 +28,8 @@ export const tables = {
   })
     .index("email_name", ["email", "name"])
     .index("name", ["name"])
-    .index("userId", ["userId"]),
+    .index("userId", ["userId"])
+    .index("createdAt", ["createdAt"]),
   session: defineTable({
     expiresAt: v.number(),
     token: v.string(),
@@ -68,9 +69,11 @@ export const tables = {
     expiresAt: v.number(),
     createdAt: v.number(),
     updatedAt: v.number(),
+    customId: v.optional(v.string()),
   })
     .index("expiresAt", ["expiresAt"])
-    .index("identifier", ["identifier"]),
+    .index("identifier", ["identifier"])
+    .index("customId", ["customId"]),
   twoFactor: defineTable({
     secret: v.string(),
     backupCodes: v.string(),

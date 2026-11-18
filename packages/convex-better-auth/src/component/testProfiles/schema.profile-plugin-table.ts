@@ -28,6 +28,7 @@ const makeUserTable = () =>
     .index("email_address_name", ["email_address", "name"])
     .index("name", ["name"])
     .index("userId", ["userId"])
+    .index("createdAt", ["createdAt"])
     .index("username", ["username"])
     .index("phoneNumber", ["phoneNumber"])
     .index("customField", ["customField"])

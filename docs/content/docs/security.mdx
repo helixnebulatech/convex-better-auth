@@ -171,25 +171,28 @@ database:
   sign-in with it. The component rejects the second account in the same mutation
   as the write, on create and on update.
 - **Sorting.** Better Auth's adapters always honour `sortBy`. Convex reads rows
-  in index order, so when no index ends in the sort field, the component reads
-  every row that matches the query and sorts them, as SQL does with `ORDER BY`
-  and no index. Nulls and unset values come first, as in a Convex index. On a
-  large table this can hit Convex's read limit, which fails the query instead of
-  returning the wrong rows. Add an index ending in the sort field for lists you
-  sort often. A range (`lt`, `gt`...) on another field also sorts this way, as
-  an index scan with a range returns rows in the order of the ranged field.
-  `createdAt` sorts by its stored value too, as `ORDER BY createdAt` does in
-  Better Auth's SQL adapters, and not by Convex's `_creationTime`: Better Auth
-  sets `createdAt` before the write, so two concurrent writes can commit in the
-  other order, and imported rows keep their own dates. Better Auth declares no
-  index on `createdAt`, so these sorts read the matching rows and sort them. The
-  ones Better Auth and its plugins make are filtered by an indexed field, such
-  as a verification's `identifier`, and read few rows. A sort of a whole table
-  by `createdAt`, such as the admin plugin's `listUsers` with
-  `sortBy: "createdAt"`, reads the whole table. If that goes over Convex's read
-  limit the query fails, and the admin plugin, which catches the error, returns
-  an empty list. Add an index on `createdAt` to the table in a Local Install
-  schema if you sort a large table that way.
+  in index order. When an index starts with the query's equality fields and ends
+  in the sort field, the component reads it a page at a time. When an index only
+  starts with the sort field, it scans that index in sort order and checks the
+  `where` clauses on each row, a page at a time, as a database does for
+  `ORDER BY` on an indexed column with a filter on another one. Otherwise it
+  reads every row that matches the query and sorts them, as SQL does with
+  `ORDER BY` and no index. Nulls and unset values come first, as in a Convex
+  index. Reading every row happens in one query, so on a large table it can hit
+  Convex's read limit, which fails the query instead of returning the wrong
+  rows. Add an index on the sort field for lists you sort often. A range (`lt`,
+  `gt`...) on another field also sorts in memory, as an index scan with a range
+  returns rows in the order of the ranged field. `createdAt` sorts by its stored
+  value too, as `ORDER BY createdAt` does in Better Auth's SQL adapters, and not
+  by Convex's `_creationTime`: Better Auth sets `createdAt` before the write, so
+  two concurrent writes can commit in the other order, and imported rows keep
+  their own dates. The sorts Better Auth and its plugins make on `createdAt` are
+  filtered by an indexed field, such as a verification's `identifier`, and read
+  few rows. The admin plugin's `listUsers` can sort the whole user table by
+  `createdAt`, so the component indexes `user.createdAt`, which Better Auth
+  doesn't declare: without it, that sort would read every user in one query, and
+  past Convex's read limit the admin plugin, which catches the error, would
+  return an empty list.
 - **Updating many rows.** `updateMany` updates every row that matches when it
   runs once, as SQL's `UPDATE ... WHERE`. The component collects the matching
   ids first and updates them in chunks of 200, applying the `where` again in

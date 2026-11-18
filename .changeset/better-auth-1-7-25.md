@@ -6,8 +6,8 @@ The `better-auth` peer range is now `>=1.7.25 <1.8.0`, up from `>=1.7.18`.
 Install `better-auth@~1.7.25`, and the same version of any `@better-auth/*`
 package. Better Auth versions below 1.7.25 aren't supported, and package
 managers that enforce peer ranges (npm without `legacy-peer-deps`, pnpm with
-strict peer dependencies) reject the install with them. The component functions,
-the schema and the options don't change. See
+strict peer dependencies) reject the install with them. The component functions
+and the options don't change. See
 [Upgrading to 0.13.11](https://github.com/helixnebulatech/convex-better-auth/blob/main/docs/content/docs/migrations/migrate-to-0-13.mdx#upgrading-to-01311).
 
 **CORS keeps the headers Better Auth exposes.** With `cors`, `registerRoutes`
@@ -41,16 +41,10 @@ with the latest `createdAt` and deleting the ones up to it. With the old order,
 two OTPs for the same identifier committed out of order left the newer one valid
 after the older one was consumed. `createdAt` is now a sort field like any
 other: an index ending in it is used if there is one, and otherwise the matching
-rows are read and sorted, as for any field without an index. Better Auth
-declares no index on `createdAt` and every plugin's `createdAt` sort is filtered
-by an indexed field (a verification's `identifier`, an API key's `referenceId`,
-an organization's members), so no index was added and the schema doesn't change.
-Sorting a whole large table by `createdAt`, such as the admin plugin's
-`listUsers`, now reads the whole table, and can fail on Convex's read limit
-instead of returning rows in the wrong order; the admin plugin catches that
-error and returns an empty list. An index on `createdAt`, added to a Local
-Install schema, is used for that sort. Reported by CodeRabbit on the release
-pull request.
+rows are read and sorted, as for any field without an index. Every plugin's
+`createdAt` sort is filtered by an indexed field (a verification's `identifier`,
+an API key's `referenceId`, an organization's members). Reported by CodeRabbit
+on the release pull request.
 
 **Tested with Better Auth 1.7.19 to 1.7.25.** The release notes were checked
 against the component, and nothing else needed a change in the component:
@@ -73,7 +67,8 @@ against the component, and nothing else needed a change in the component:
   stores `json` fields as strings and reads both forms back.
 - SCIM returns 501 on adapters without native transactions instead of failing at
   startup (1.7.21). It still can't be used on Convex.
-- The component schema generated with `auth@1.7.25` is the same as with 1.7.18.
+- The component schema generated with `auth@1.7.25` is the same as with 1.7.18,
+  apart from the `user.createdAt` index below.
 
 Every dependency is on its latest release that is at least 3 days old: Convex
 1.50, convex-helpers 0.1.135, jose 6.2.17, convex-test 0.0.71, Ultracite 8.2.1
