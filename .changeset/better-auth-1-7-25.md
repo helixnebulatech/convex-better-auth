@@ -33,6 +33,11 @@ explain what to expose in your own CORS layer.
 **Tested with Better Auth 1.7.19 to 1.7.25.** The release notes were checked
 against the component, and nothing else needed a change:
 
+- Verification values (password reset, email OTP, magic link, phone and two
+  factor OTP) are consumed by deleting the identifier's older rows with `id ne`
+  and `createdAt lte` (1.7.22). Upstream's adapter rejected that where clause
+  (get-convex/better-auth#481); the fork's already handled it, and new tests
+  cover `findMany`, `deleteMany` and `consumeVerificationValue` with it.
 - `update` changes one row and `updateMany` every match (1.7.21), as the adapter
   already did.
 - `ne null` doesn't match unset fields (1.7.20), as the adapter already did.
