@@ -285,8 +285,11 @@ which Better Auth asks CORS layers to keep. The component merges the same way,
 comparing names without regard to case, as the dispatcher and `oauthProvider`
 do. Before 0.14.0 the CORS router replaced the list with its own, and those
 headers were hidden from cross-origin clients. Exposing a header doesn't change
-which origins are allowed: only trusted origins get
-`Access-Control-Allow-Origin`, and without it the browser exposes nothing.
+which origins are allowed: only the origins in Better Auth's `trustedOrigins`
+and in `cors.allowedOrigins` get `Access-Control-Allow-Origin`, and without it
+the browser exposes nothing. Only list origins you trust in
+`cors.allowedOrigins`: they can read every exposed header, including
+`Set-Better-Auth-Cookie` with the cross domain plugin.
 
 The component only adds headers Better Auth already exposes. The `convex` plugin
 uses `bearer` to read the `Authorization` header but doesn't send
@@ -294,10 +297,10 @@ uses `bearer` to read the `Authorization` header but doesn't send
 yourself.
 
 Routes you register yourself aren't covered. If you serve Better Auth through
-your own CORS layer, such as Hono's `cors` middleware, which also replaces the
-header, add the headers your clients read to its exposed list. The same goes for
-HTTP actions that use `@better-auth/mcp` or `oauthProviderResourceClient`
-challenges: expose `WWW-Authenticate` there.
+your own CORS layer, such as Hono's `cors` middleware, which replaces the header
+when its `exposeHeaders` isn't empty, add the headers your clients read to its
+exposed list. The same goes for HTTP actions that use `@better-auth/mcp` or
+`oauthProviderResourceClient` challenges: expose `WWW-Authenticate` there.
 
 ## Verbose logs
 

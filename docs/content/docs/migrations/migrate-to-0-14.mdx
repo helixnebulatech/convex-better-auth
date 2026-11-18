@@ -10,13 +10,14 @@ with `cors` now expose more headers.
 
 ## Upgrade
 
-```npm
-npm install @convex-dev/better-auth@npm:@helixnebulatech/convex-better-auth@^0.14.0
-npm install better-auth@~1.7.25
-```
+Upgrade the component, Better Auth and every `@better-auth/*` package you use,
+such as `@better-auth/expo` or `@better-auth/oauth-provider`, in one command, so
+the package manager doesn't reject the new peer range against the old Better
+Auth:
 
-Update every `@better-auth/*` package you use, such as `@better-auth/expo` or
-`@better-auth/oauth-provider`, to the same version.
+```npm
+npm install @convex-dev/better-auth@npm:@helixnebulatech/convex-better-auth@^0.14.0 better-auth@~1.7.25
+```
 
 With Local Install, the schema generated with Better Auth 1.7.25 is the same as
 with 1.7.18, so there's nothing to regenerate.

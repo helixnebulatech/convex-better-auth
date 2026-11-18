@@ -602,11 +602,14 @@ describe("convex plugin JWT cookie", () => {
         cookie,
       });
       expect(revoke.status).toBe(200);
+      // The https base URL gives the cookie the __Secure- prefix
       const expired = revoke.headers
         .getSetCookie()
-        .filter((c) => c.includes("better-auth.convex_jwt="));
+        .filter((c) => c.startsWith("__Secure-better-auth.convex_jwt="));
       expect(expired).toHaveLength(1);
-      expect(expired[0]).toMatch(/better-auth\.convex_jwt=;.*Max-Age=0/i);
+      expect(expired[0]).toMatch(
+        /^__Secure-better-auth\.convex_jwt=;.*Max-Age=0/i
+      );
     });
   }
 

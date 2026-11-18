@@ -69,7 +69,8 @@ app.use(
 // ...
 ```
 
-Hono's `cors` replaces the `Access-Control-Expose-Headers` Better Auth sets, so
-add the headers your clients read, such as `WWW-Authenticate` with
-`oauthProvider` or `set-auth-token` with `bearer`, to `exposeHeaders`. See
+With a non-empty `exposeHeaders`, as here, Hono's `cors` replaces the
+`Access-Control-Expose-Headers` Better Auth sets, so add the headers your
+clients read, such as `WWW-Authenticate` with `oauthProvider` or
+`set-auth-token` with `bearer`, to `exposeHeaders`. See
 [CORS exposed headers](/security#cors-exposed-headers).

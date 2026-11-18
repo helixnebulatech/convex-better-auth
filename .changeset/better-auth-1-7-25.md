@@ -4,10 +4,11 @@
 
 The `better-auth` peer range is now `>=1.7.25 <1.8.0`, up from `>=1.7.18`.
 Install `better-auth@~1.7.25`, and the same version of any `@better-auth/*`
-package. npm (and pnpm with strict peer dependencies) refuses the install with
-an older Better Auth. This is a minor release because of that floor and the CORS
-change below; the component functions, the schema and the options don't change.
-See the
+package. Better Auth versions below 1.7.25 aren't supported, and package
+managers that enforce peer ranges (npm without `legacy-peer-deps`, pnpm with
+strict peer dependencies) reject the install with them. This is a minor release
+because of that floor and the CORS change below; the component functions, the
+schema and the options don't change. See the
 [0.14 migration guide](https://github.com/helixnebulatech/convex-better-auth/blob/main/docs/content/docs/migrations/migrate-to-0-14.mdx).
 
 **CORS keeps the headers Better Auth exposes.** With `cors`, `registerRoutes`
@@ -23,12 +24,13 @@ without regard to case. That's what Better Auth does: its endpoint dispatcher
 (1.7.25) and `oauthProvider` merge the list the same way, and `bearer`, `jwt`
 and `oneTimeToken` add to it, while no official package replaces it. Merging was
 chosen over adding `WWW-Authenticate` to the default list, which would fix one
-header and hide the next one a plugin exposes. Only trusted origins get
-`Access-Control-Allow-Origin`, so no other origin can read more than before. The
-`convex` plugin only uses `bearer` to read the `Authorization` header, so the
-session token is exposed only when an app adds `bearer` itself. The security
-notes and the Hono guide, whose `cors` middleware also replaces the header,
-explain what to expose in your own CORS layer.
+header and hide the next one a plugin exposes. Only the origins in
+`trustedOrigins` and `cors.allowedOrigins` get `Access-Control-Allow-Origin`, so
+no other origin can read more than before. The `convex` plugin only uses
+`bearer` to read the `Authorization` header, so the session token is exposed
+only when an app adds `bearer` itself. The security notes and the Hono guide,
+whose `cors` middleware also replaces the header, explain what to expose in your
+own CORS layer.
 
 **Tested with Better Auth 1.7.19 to 1.7.25.** The release notes were checked
 against the component, and nothing else needed a change:

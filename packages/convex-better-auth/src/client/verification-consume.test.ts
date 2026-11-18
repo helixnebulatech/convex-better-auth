@@ -99,6 +99,8 @@ describe("verification consume, as in Better Auth 1.7.22+", () => {
   // the last one created instead.
   it("consumeVerificationValue consumes the latest row and drops the older ones", async () => {
     const { context, remaining } = await setup();
+    // Rows of other identifiers that match the other delete conditions
+    const others = await remaining();
     for (const value of ["first", "second", "third"]) {
       await context.internalAdapter.createVerificationValue({
         identifier: "otp:c",
@@ -109,9 +111,7 @@ describe("verification consume, as in Better Auth 1.7.22+", () => {
     const consumed =
       await context.internalAdapter.consumeVerificationValue("otp:c");
     expect(consumed?.value).toBe("third");
-    expect(await remaining()).not.toContain("first");
-    expect(await remaining()).not.toContain("second");
-    expect(await remaining()).not.toContain("third");
+    expect(await remaining()).toEqual(others);
     expect(
       await context.internalAdapter.consumeVerificationValue("otp:c")
     ).toBeNull();
