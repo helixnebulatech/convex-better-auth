@@ -47,8 +47,10 @@ by an indexed field (a verification's `identifier`, an API key's `referenceId`,
 an organization's members), so no index was added and the schema doesn't change.
 Sorting a whole large table by `createdAt`, such as the admin plugin's
 `listUsers`, now reads the whole table, and can fail on Convex's read limit
-instead of returning rows in the wrong order. Reported by CodeRabbit on the
-release pull request.
+instead of returning rows in the wrong order; the admin plugin catches that
+error and returns an empty list. An index on `createdAt`, added to a Local
+Install schema, is used for that sort. Reported by CodeRabbit on the release
+pull request.
 
 **Tested with Better Auth 1.7.19 to 1.7.25.** The release notes were checked
 against the component, and nothing else needed a change in the component:

@@ -186,7 +186,10 @@ database:
   ones Better Auth and its plugins make are filtered by an indexed field, such
   as a verification's `identifier`, and read few rows. A sort of a whole table
   by `createdAt`, such as the admin plugin's `listUsers` with
-  `sortBy: "createdAt"`, reads the whole table.
+  `sortBy: "createdAt"`, reads the whole table. If that goes over Convex's read
+  limit the query fails, and the admin plugin, which catches the error, returns
+  an empty list. Add an index on `createdAt` to the table in a Local Install
+  schema if you sort a large table that way.
 - **Updating many rows.** `updateMany` updates every row that matches when it
   runs once, as SQL's `UPDATE ... WHERE`. The component collects the matching
   ids first and updates them in chunks of 200, applying the `where` again in
