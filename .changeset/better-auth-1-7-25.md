@@ -53,7 +53,8 @@ against the component, and nothing else needed a change:
   startup (1.7.21). It still can't be used on Convex.
 - The component schema generated with `auth@1.7.25` is the same as with 1.7.18.
 
-Every dependency is on its latest release that is at least 3 days old, except
-`@types/node`, which stays on 24.x because CI runs Node 24: Convex 1.50,
-convex-helpers 0.1.135, jose 6.2.17, convex-test 0.0.71, Ultracite 8.2.1 and
-oxlint 1.93, among others.
+Every dependency is on its latest release that is at least 3 days old: Convex
+1.50, convex-helpers 0.1.135, jose 6.2.17, convex-test 0.0.71, Ultracite 8.2.1
+and oxlint 1.93, among others. CI and the release workflow move to Node 26, the
+current LTS, with `@types/node` 26. npm 11.20, bundled with Node 26, still meets
+Trusted Publishing's npm 11.5.1 minimum.
