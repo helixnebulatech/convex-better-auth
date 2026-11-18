@@ -12,11 +12,14 @@ needs it. With Local Install, regenerate the schema.
 
 A filter with the sort, such as `listUsers` with `filterField: "role"`, needed
 an index on both fields and otherwise sorted in memory, reading the whole table
-too. When no index covers the filter and the sort, but one starts with the sort
-field, the component now scans it in sort order and checks the `where` clauses
-on each row, a page at a time, as a database does for `ORDER BY` on an indexed
-column with a filter on another one. This applies to any sort field with an
-index, such as `name`. A range on another field still sorts in memory, since a
-range scan returns rows in the ranged field's order. The `next` and `tanstack`
-examples' Local Install schemas are regenerated, which also adds the
+too. When no index serves the filter, but the sort field has an index of its
+own, the component now scans it in sort order and checks the `where` clauses on
+each row, a page at a time, as a database does for `ORDER BY` on an indexed
+column with a filter on an unindexed one. This applies to any sort field with a
+single field index, such as `name`. A filter with its own index still reads the
+matching rows through it and sorts them, as before, and a compound index isn't
+scanned this way, since it would order ties by its next field rather than by
+creation. A range on another field still sorts in memory, since a range scan
+returns rows in the ranged field's order. The `next` and `tanstack` examples'
+Local Install schemas are regenerated, which also adds the
 `verification.customId` field and index they lacked since 0.13.6.

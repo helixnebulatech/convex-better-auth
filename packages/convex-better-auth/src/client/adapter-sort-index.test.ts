@@ -112,3 +112,52 @@ describe("sortBy with an index on the sort field", () => {
     expect(await find(where, nameAsc)).toEqual(["b", "e"]);
   });
 });
+
+describe("sortBy when the filter has its own index", () => {
+  // The filter's index reads only the matching rows, which are then sorted.
+  // Scanning the sort field's index instead would read the whole table, a
+  // page at a time, to find them.
+  it("reads the matching rows through the filter's index", async () => {
+    const { page, find } = await setup();
+    const where = [{ field: "name", value: "d" }];
+    expect(await page({ where, sortBy: createdAtDesc, numItems: 1 })).toEqual({
+      names: ["d"],
+      isDone: true,
+    });
+    expect(await find(where, createdAtDesc)).toEqual(["d"]);
+  });
+});
+
+describe("sortBy ties follow creation order", () => {
+  // Only an index on the sort field alone is scanned with a filter: a
+  // compound one, such as providerId_userId, would order ties by its second
+  // field instead of by creation, unlike every other path.
+  it("doesn't scan a compound index starting with the sort field", async () => {
+    const t = convexTest(schema, import.meta.glob("../component/**/*.*s"));
+    const now = Date.now();
+    await t.run(async (ctx) => {
+      for (const userId of ["z", "y", "x"]) {
+        await ctx.db.insert("account", {
+          accountId: `acc-${userId}`,
+          providerId: "google",
+          userId,
+          scope: "s",
+          createdAt: now,
+          updatedAt: now,
+        });
+      }
+    });
+    const adapter = createClient<DataModel>({ adapter: api.adapter } as any, {
+      verbose: false,
+    }).adapter({
+      runQuery: t.query.bind(t),
+      runMutation: t.mutation.bind(t),
+    } as any)({});
+    const rows = await adapter.findMany<{ userId: string }>({
+      model: "account",
+      where: [{ field: "scope", value: "s" }],
+      sortBy: { field: "providerId", direction: "asc" },
+    });
+    expect(rows.map((row) => row.userId)).toEqual(["z", "y", "x"]);
+  });
+});

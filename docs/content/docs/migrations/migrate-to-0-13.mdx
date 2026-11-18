@@ -627,10 +627,9 @@ The sorts Better Auth and its plugins make on `createdAt` are filtered by an
 indexed field and read few rows. The admin plugin's `listUsers` can sort the
 whole user table by `createdAt`, so the schema now indexes `user.createdAt`, and
 `listUsers` reads it a page at a time, also with a filter such as
-`filterField: "role"`: when no index covers both the filter and the sort, the
-component scans the sort field's index and checks the filter on each row,
-instead of reading every row and sorting them in one query. See
-[Sorting](/security#database-adapter).
+`filterField: "role"`: when the filter has no index, the component scans the
+sort field's index and checks the filter on each row, instead of reading every
+row and sorting them in one query. See [Sorting](/security#database-adapter).
 
 ### Changes in Better Auth 1.7.19 to 1.7.25
 

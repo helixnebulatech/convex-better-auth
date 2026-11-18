@@ -134,9 +134,9 @@ web origin.
   - Single row lookups without an index read the whole table instead of stopping
     after 200 rows and reporting the row as missing.
   - `user.createdAt`, so the admin plugin's `listUsers` sorted by `createdAt`
-    reads a page at a time, and a sort with a filter no index covers scans the
-    sort field's index, checking the filter on each row, instead of sorting the
-    whole table in one query.
+    reads a page at a time, and a sort with an unindexed filter scans the sort
+    field's index, checking the filter on each row, instead of sorting the whole
+    table in one query.
 - Upstream `0.12.6` merged, with its two security fixes adapted:
   - Forwarded host (GHSA-pgx2-m66h-x29f): taken, but the component matches the
     full origin (protocol and host) against the exact trusted origins, not only

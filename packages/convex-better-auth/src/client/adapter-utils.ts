@@ -249,18 +249,31 @@ const findIndex = (
         return fieldsMatch && boundFieldMatch;
       });
   if (!index) {
-    // No index covers the where clauses and the sort, but one starting with
-    // the sort field still returns rows in sort order. Scan it and apply every
+    // No index covers the where clauses and the sort. When no index serves
+    // the equality clauses either, sorting in memory would read the whole
+    // table in one query, which fails past Convex's read limit. An index on
+    // the sort field still returns rows in sort order: scan it and apply every
     // where clause to each row, a page at a time, as a database does for
-    // ORDER BY on an indexed column with a filter on another one. Sorting in
-    // memory instead would read every matching row in one query, which fails
-    // past Convex's read limit. A range on another field is sorted in memory
-    // (see rangeOnOtherField in paginate), so it doesn't take this path.
+    // ORDER BY on an indexed column with a filter on an unindexed one.
+    // - When an index serves the equality clauses, sorting the rows it returns
+    //   in memory reads only those, so that's kept.
+    // - Only an index on the sort field alone: a compound one would order ties
+    //   by its next field, where every other path orders them by creation.
+    // - A range on another field is sorted in memory (see rangeOnOtherField in
+    //   paginate), so it doesn't take this path.
+    const eqFields = indexEqFields.map(([field]) => field);
+    const eqIndexed =
+      eqFields.length > 0 &&
+      indexes.some(({ fields }: { fields: string[] }) =>
+        eqFields.every((field, idx) => field === fields[idx])
+      );
     const sortIndex =
       sortField &&
+      !eqIndexed &&
       (!boundField || boundField === "createdAt" || boundField === sortField)
         ? indexes.find(
-            ({ fields }: { fields: string[] }) => fields[0] === sortField
+            ({ fields }: { fields: string[] }) =>
+              fields.length === 1 && fields[0] === sortField
           )
         : undefined;
     if (!sortIndex) {
