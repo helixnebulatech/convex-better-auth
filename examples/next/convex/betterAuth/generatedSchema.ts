@@ -31,6 +31,7 @@ export const tables = {
     .index("email_name", ["email", "name"])
     .index("name", ["name"])
     .index("userId", ["userId"])
+    .index("createdAt", ["createdAt"])
     .index("username", ["username"]),
   session: defineTable({
     expiresAt: v.number(),
@@ -71,9 +72,11 @@ export const tables = {
     expiresAt: v.number(),
     createdAt: v.number(),
     updatedAt: v.number(),
+    customId: v.optional(v.string()),
   })
     .index("expiresAt", ["expiresAt"])
-    .index("identifier", ["identifier"]),
+    .index("identifier", ["identifier"])
+    .index("customId", ["customId"]),
   twoFactor: defineTable({
     secret: v.string(),
     backupCodes: v.string(),

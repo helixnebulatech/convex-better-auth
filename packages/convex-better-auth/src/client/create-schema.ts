@@ -43,6 +43,9 @@ export const indexFields = {
     "userId",
     // Stripe plugin
     "stripeCustomerId",
+    // Admin plugin listUsers sorted by createdAt. Without it, the sort reads
+    // the whole table in one query, which fails past Convex's read limit.
+    "createdAt",
   ],
   oauthConsent: [
     ["clientId", "userId"],

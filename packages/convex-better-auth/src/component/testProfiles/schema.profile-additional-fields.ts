@@ -25,6 +25,7 @@ const userTableWithAdditionalFields = defineTable({
   .index("email_name", ["email", "name"])
   .index("name", ["name"])
   .index("userId", ["userId"])
+  .index("createdAt", ["createdAt"])
   .index("username", ["username"])
   .index("phoneNumber", ["phoneNumber"])
   .index("customField", ["customField"])

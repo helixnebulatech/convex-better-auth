@@ -249,7 +249,48 @@ const findIndex = (
         return fieldsMatch && boundFieldMatch;
       });
   if (!index) {
-    return { indexFields };
+    // No index covers the where clauses and the sort. When no index serves
+    // the equality clauses either, sorting in memory would read the whole
+    // table in one query, which fails past Convex's read limit. An index on
+    // the sort field still returns rows in sort order: scan it and apply every
+    // where clause to each row, a page at a time, as a database does for
+    // ORDER BY on an indexed column with a filter on an unindexed one.
+    // - When an index serves the equality clauses, sorting the rows it returns
+    //   in memory reads only those, so that's kept.
+    // - Only an index on the sort field alone: a compound one would order ties
+    //   by its next field, where every other path orders them by creation.
+    // - A range on another field is sorted in memory (see rangeOnOtherField in
+    //   paginate), so it doesn't take this path.
+    const eqFields = indexEqFields.map(([field]) => field);
+    const eqIndexed =
+      eqFields.length > 0 &&
+      indexes.some(({ fields }: { fields: string[] }) =>
+        eqFields.every((field, idx) => field === fields[idx])
+      );
+    const sortIndex =
+      sortField &&
+      !eqIndexed &&
+      (!boundField || boundField === "createdAt" || boundField === sortField)
+        ? indexes.find(
+            ({ fields }: { fields: string[] }) =>
+              fields.length === 1 && fields[0] === sortField
+          )
+        : undefined;
+    if (!sortIndex) {
+      return { indexFields };
+    }
+    return {
+      index: {
+        indexDescriptor: sortIndex.indexDescriptor,
+        fields: [...sortIndex.fields, "_creationTime"],
+      },
+      // Every where clause is applied to the rows, none to the index
+      sortOnly: true,
+      indexFields,
+      boundField,
+      sortField,
+      values: { eq: [] },
+    };
   }
   return {
     index: {
@@ -500,7 +541,7 @@ const generateQuery = (
   schema: SchemaDefinition<any, any>,
   args: Infer<typeof adapterArgsValidator>
 ) => {
-  const { index, values, boundField, indexFields } =
+  const { index, values, boundField, indexFields, sortOnly } =
     findIndex(schema, {
       ...args,
       where: args.where?.filter((w) => !isEqNull(w)),
@@ -554,7 +595,17 @@ const generateQuery = (
   const orderedQuery = args.sortBy
     ? indexedQuery.order(args.sortBy.direction === "desc" ? "desc" : "asc")
     : indexedQuery;
-  if (!usableIndex && indexFields?.length) {
+  if (sortOnly && indexFields?.length) {
+    // eslint-disable-next-line no-console
+    console.warn(
+      stripIndent`
+        Filtering table "${args.model}" while scanning the index "${usableIndex?.indexDescriptor}" in sort order.
+        Each page can read many rows that don't match.
+        To fix, add an index that begins with the following fields in order:
+        [${indexFields.join(", ")}]
+      `
+    );
+  } else if (!usableIndex && indexFields?.length) {
     // eslint-disable-next-line no-console
     console.warn(
       stripIndent`
@@ -566,8 +617,8 @@ const generateQuery = (
     );
   }
   const filteredQuery = orderedQuery.filterWith(async (doc) => {
-    if (!usableIndex) {
-      // No usable index, handle all where clauses statically.
+    if (!usableIndex || sortOnly) {
+      // No index for the where clauses, handle them all statically.
       return filterByWhere(doc, args.where);
     }
     return filterByWhere(
